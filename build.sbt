@@ -20,13 +20,8 @@ sonatypeRepository                 := "https://s01.oss.sonatype.org/service/loca
 sonatypeProfileName                := "in.rcard"
 
 name := "yaes"
-//version := "0.0.1-SNAPSHOT"
 val scala3Version = "3.6.2"
 scalaVersion := scala3Version
-
-libraryDependencies ++= Seq(
-  "org.scalatest" %% "scalatest" % "3.2.19" % Test
-)
 
 lazy val `yaes-core` = project
   .settings(
