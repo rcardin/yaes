@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
 import java.util.concurrent.{ExecutorService, Executors}
+import scala.concurrent.ExecutionException
 import scala.util.Using
 
 class SideEffect(val es: ExecutorService)
@@ -14,9 +15,15 @@ object IO {
     Using(Executors.newVirtualThreadPerTaskExecutor()) { executor =>
       given se: Effect[SideEffect] = new Effect(new SideEffect(executor))
 
-      block(using se)
+      val futureResult = executor.submit(() =>
+        block(using se)
+      )
+      futureResult.get()
     }.fold(
-      throwable => throwable,
+      {
+        case exex: ExecutionException => exex.getCause
+        case throwable => throwable
+      },
       result => result
     )
   }
