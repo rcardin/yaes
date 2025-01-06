@@ -44,4 +44,17 @@ class ThrowSpec extends AnyFlatSpec with Matchers {
       }
     }
   }
+
+  it should "compose with other effects" in {
+
+    val actualResult: (Effect[SideEffect], Effect[Ex[RuntimeException]]) ?=> Int = for {
+      io <- IO { 42 }
+      result <- Throw[RuntimeException, Int] {
+          if (io != 42) io
+          else throw new RuntimeException("Boom!")
+      }
+    } yield result
+
+    IO.run { Throw.run { actualResult } } shouldBe a[RuntimeException]
+  }
 }
