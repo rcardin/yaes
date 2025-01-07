@@ -8,13 +8,13 @@ trait Ex[-E <: Throwable]
 
 private[yaes] class DefaultEx[-E <: Throwable] extends Ex[E] {}
 
-type Throw[E <: Throwable, A] = Effect[Ex[E]] ?=> A
+type Throw[E <: Throwable] = Effect[Ex[E]]
 
 object Throw {
-  def apply[E <: Throwable, A](block: => A): Throw[E, A] = block
+  def apply[E <: Throwable, A](block: => A): Throw[E] ?=> A = block
 
   // FIXME This control should be check at compile time
-  def run[E <: Throwable, A](block: Throw[E, A])(using E: ClassTag[E]): A | E = {
+  def run[E <: Throwable, A](block: Throw[E] ?=> A)(using E: ClassTag[E]): A | E = {
     given eff: Effect[Ex[E]] = new Effect(new DefaultEx[E])
 
     try {

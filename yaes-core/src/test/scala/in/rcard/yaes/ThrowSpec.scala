@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers
 class ThrowSpec extends AnyFlatSpec with Matchers {
 
   "The Throw effect" should "be able to intercept a given exception" in {
-    val failingBlock: Throw[RuntimeException, Int] = Throw[RuntimeException, Int] {
+    val failingBlock: Throw[RuntimeException] ?=> Int = Throw {
       throw new RuntimeException("Boom!")
     }
 
@@ -17,7 +17,7 @@ class ThrowSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "be able to run a block that does not throw an exception" in {
-    val successfulBlock: Throw[RuntimeException, Int] = Throw[RuntimeException, Int] {
+    val successfulBlock: Throw[RuntimeException] ?=> Int = Throw {
       42
     }
 
@@ -35,7 +35,7 @@ class ThrowSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "not catch exceptions that are not declared in the type parameter" in {
-    val failingBlock: Throw[RuntimeException, Int] = Throw[RuntimeException, Int] {
+    val failingBlock: Throw[RuntimeException] ?=> Int = Throw {
       throw Exception("Boom!")
     }
     assertThrows[Exception] {
@@ -47,7 +47,7 @@ class ThrowSpec extends AnyFlatSpec with Matchers {
 
   it should "compose with other effects" in {
 
-    val actualResult: (Effect[SideEffect], Effect[Ex[RuntimeException]]) ?=> Int = for {
+    val actualResult: (IO, Throw[RuntimeException]) ?=> Int = for {
       io <- IO { 42 }
       result <- Throw[RuntimeException, Int] {
           if (io != 42) io

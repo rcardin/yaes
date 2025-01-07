@@ -34,7 +34,7 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "compose with other effects" in {
-    val actualResult: (Effect[SideEffect], Raise[String]) ?=> Int = for {
+    val actualResult: (IO, Raise[String]) ?=> Int = for {
       io <- IO { 42 }
       result <- Raise {
         if (io != 42) io
