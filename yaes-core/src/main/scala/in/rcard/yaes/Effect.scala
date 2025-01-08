@@ -7,7 +7,7 @@ package in.rcard.yaes
  */
 class Effect[F](val sf: F)
 
-extension [F, A](eff: Effect[F] ?=> A) {
+extension [F, A](inline eff: Effect[F] ?=> A) {
   inline def map[B](inline f: A => B): Effect[F] ?=> B = eff.flatMap(a => f(a))
   inline def flatMap[B](inline f: A => Effect[F] ?=> B): Effect[F] ?=> B = f(eff)
 }
