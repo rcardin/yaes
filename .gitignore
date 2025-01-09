@@ -87,19 +87,9 @@ project/plugins/project/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 
 
-.bloop/bloop.settings.json
-.bloop/yaes-core-test.json
-.bloop/yaes-core.json
-.bloop/yaes-test.json
-.bloop/yaes.json
-.metals/metals.lock.db
-.metals/metals.mv.db
-.metals/.reports/metals-full/2025-01-09/r_failed-idex-java_10-37-05-646.md
-.vscode/settings.json
-project/.bloop/bloop.settings.json
-project/.bloop/yaes-build.json
-project/project/metals.sbt
-project/project/.bloop/bloop.settings.json
-project/project/.bloop/yaes-build-build.json
-project/project/project/metals.sbt
+.bloop/*
+.metals/*
+.vscode/*
+project/.bloop/*
+project/project/*
 project/metals.sbt
