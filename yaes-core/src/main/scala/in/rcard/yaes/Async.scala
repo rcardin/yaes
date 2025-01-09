@@ -4,6 +4,9 @@ import java.util.concurrent.StructuredTaskScope
 import java.util.concurrent.StructuredTaskScope.{ShutdownOnFailure, Subtask}
 import scala.concurrent.duration.Duration
 import java.util.concurrent.ExecutionException
+import scala.concurrent.Promise
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Future
 
 trait StructuredScope {
   def delay(duration: Duration): Unit
@@ -16,10 +19,10 @@ trait Fiber[A] {
   def join(): Unit
 }
 
-class JvmFiber[A](private val subtask: Subtask[A]) extends Fiber[A] {
-  override def value: A = subtask.get()
+class JvmFiber[A](private val promise: Future[A]) extends Fiber[A] {
+  override def value: A = promise.get()
 
-  override def join(): Unit = subtask.get()
+  override def join(): Unit = promise.get()
 }
 
 class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends StructuredScope {
@@ -28,6 +31,7 @@ class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends St
   }
 
   override def fork[A](block: => A): Fiber[A] = {
+    val promise = CompletableFuture[A]()
     val task = scope.fork(() => {
       val innerScope = new ShutdownOnFailure()
       try {
@@ -36,16 +40,17 @@ class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends St
           .join()
           .throwIfFailed((trowable: Throwable) => {
             trowable match {
+              // FIXME Should we complete the promise with the cause?
               case exex: ExecutionException => exex.getCause
               case _                        => throw trowable
             }
           })
-        innerTask.get()
+        promise.complete(innerTask.get())
       } finally {
         innerScope.close()
       }
     })
-    new JvmFiber[A](task)
+    new JvmFiber[A](promise)
   }
 }
 
