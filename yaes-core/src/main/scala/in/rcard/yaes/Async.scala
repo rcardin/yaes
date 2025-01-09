@@ -17,12 +17,20 @@ trait StructuredScope {
 trait Fiber[A] {
   def value: A
   def join(): Unit
+  def cancel(): Unit
 }
 
-class JvmFiber[A](private val promise: Future[A]) extends Fiber[A] {
+class JvmFiber[A](private val promise: Future[A], private val forkedThread: Future[Thread])
+    extends Fiber[A] {
+
   override def value: A = promise.get()
 
   override def join(): Unit = promise.get()
+
+  override def cancel(): Unit = {
+    // We'll wait until the thread is forked
+    forkedThread.get().interrupt()
+  }
 }
 
 class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends StructuredScope {
@@ -31,26 +39,31 @@ class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends St
   }
 
   override def fork[A](block: => A): Fiber[A] = {
-    val promise = CompletableFuture[A]()
-    val task = scope.fork(() => {
+    val promise      = CompletableFuture[A]()
+    val forkedThread = CompletableFuture[Thread]()
+    scope.fork(() => {
       val innerScope = new ShutdownOnFailure()
       try {
-        val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => block)
-        innerScope
-          .join()
-          .throwIfFailed((trowable: Throwable) => {
-            trowable match {
-              // FIXME Should we complete the promise with the cause?
-              case exex: ExecutionException => exex.getCause
-              case _                        => throw trowable
-            }
-          })
-        promise.complete(innerTask.get())
+        val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
+          forkedThread.complete(Thread.currentThread())
+          block
+        })
+        innerScope.join()
+        if (innerTask.state() == Subtask.State.FAILED) {
+          println("---- FAILED ----")
+          innerTask.exception() match {
+            case ie: InterruptedException => promise.completeExceptionally(ie)
+            case exex: ExecutionException => throw exex.getCause
+            case throwable                => throw throwable
+          }
+        } else {
+          promise.complete(innerTask.get())
+        }
       } finally {
         innerScope.close()
       }
     })
-    new JvmFiber[A](promise)
+    new JvmFiber[A](promise, forkedThread)
   }
 }
 

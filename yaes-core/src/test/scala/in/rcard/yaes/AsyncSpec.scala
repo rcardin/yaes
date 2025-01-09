@@ -148,4 +148,21 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
     results.toArray should contain theSameElementsInOrderAs List("3", "2", "1")
   }
+
+  it should "cancel a fiber at the first suspending point" in {
+    val expectedQueue = Async.run {
+      val queue = new ConcurrentLinkedQueue[String]()
+      val cancellable = Async.fork {
+        Async.delay(2.seconds)
+        queue.add("cancellable")
+      }
+      val job = Async.fork {
+        Async.delay(500.millis)
+        cancellable.cancel()
+        queue.add("fb2")
+      }
+      queue
+    }
+    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
 }
