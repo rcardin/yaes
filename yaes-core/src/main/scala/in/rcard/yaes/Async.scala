@@ -3,6 +3,7 @@ package in.rcard.yaes
 import java.util.concurrent.StructuredTaskScope
 import java.util.concurrent.StructuredTaskScope.{ShutdownOnFailure, Subtask}
 import scala.concurrent.duration.Duration
+import java.util.concurrent.ExecutionException
 
 trait StructuredScope {
   def delay(duration: Duration): Unit
@@ -31,7 +32,14 @@ class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends St
       val innerScope = new ShutdownOnFailure()
       try {
         val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => block)
-        innerScope.join().throwIfFailed()
+        innerScope
+          .join()
+          .throwIfFailed((trowable: Throwable) => {
+            trowable match {
+              case exex: ExecutionException => exex.getCause
+              case _                        => throw trowable
+            }
+          })
         innerTask.get()
       } finally {
         innerScope.close()
