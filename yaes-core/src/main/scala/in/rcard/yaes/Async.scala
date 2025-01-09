@@ -7,6 +7,7 @@ import java.util.concurrent.ExecutionException
 import scala.concurrent.Promise
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
+import java.util.concurrent.CancellationException
 
 trait StructuredScope {
   def delay(duration: Duration): Unit
@@ -25,7 +26,12 @@ class JvmFiber[A](private val promise: Future[A], private val forkedThread: Futu
 
   override def value: A = promise.get()
 
-  override def join(): Unit = promise.get()
+  override def join(): Unit =
+    try {
+      promise.get()
+    } catch {
+      case cancellationEx: CancellationException => ()
+    }
 
   override def cancel(): Unit = {
     // We'll wait until the thread is forked
@@ -50,9 +56,8 @@ class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends St
         })
         innerScope.join()
         if (innerTask.state() == Subtask.State.FAILED) {
-          println("---- FAILED ----")
           innerTask.exception() match {
-            case ie: InterruptedException => promise.completeExceptionally(ie)
+            case ie: InterruptedException => promise.cancel(true)
             case exex: ExecutionException => throw exex.getCause
             case throwable                => throw throwable
           }
