@@ -185,4 +185,26 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     expectedQueue.toArray should contain theSameElementsInOrderAs List("job2")
   }
 
+  it should "not cancel parent fiber if a child fiber was cancelled" in {
+
+    val expectedQueue = Async.run {
+      val queue = new ConcurrentLinkedQueue[String]()
+      val job1 = Async.fork {
+        val innerCancellableJob = Async.fork {
+          Async.delay(2.seconds)
+          queue.add("cancellable")
+        }
+        Async.delay(1.second)
+        innerCancellableJob.cancel()
+        queue.add("job1")
+      }
+      val job = Async.fork {
+        Async.delay(500.millis)
+        queue.add("job2")
+      }
+      queue
+    }
+    expectedQueue.toArray should contain theSameElementsInOrderAs List("job2", "job1")
+  }
+
 }
