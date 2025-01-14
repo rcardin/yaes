@@ -15,20 +15,21 @@ trait StructuredScope {
 }
 
 trait Fiber[A] {
-  def value: Throw[Cancelled] ?=> A
+  def value: Raise[Cancelled] ?=> A
   def join(): Unit
   def cancel(): Unit
 }
 
-class Cancelled extends Exception
+object Cancelled
+type Cancelled = Cancelled.type
 
 class JvmFiber[A](private val promise: Future[A], private val forkedThread: Future[Thread])
     extends Fiber[A] {
 
-  override def value: Throw[Cancelled] ?=> A = try {
+  override def value: Raise[Cancelled] ?=> A = try {
     promise.get()
   } catch {
-    case cancellationEx: CancellationException => throw Cancelled()
+    case cancellationEx: CancellationException => Raise.raise(Cancelled)
   }
 
   override def join(): Unit =

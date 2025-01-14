@@ -113,7 +113,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "join the values of different fibers" in {
     val queue = new ConcurrentLinkedQueue[String]()
-    val result = Throw.run {
+    val result = Raise.run {
       Async.run {
         val fb1 = Async.fork {
           Async.delay(1.second)
@@ -267,7 +267,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "throw an exception when asking for the value of a cancelled fiber" in {
     // FIXME Abstract on the type of the exception
-    val actualResult: Unit | Cancelled = Throw.run {
+    val actualResult: Unit | Cancelled = Raise.run {
       Async.run {
         val cancellable = Async.fork {
           Async.delay(2.seconds)
