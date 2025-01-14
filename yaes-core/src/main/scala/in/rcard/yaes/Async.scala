@@ -11,7 +11,7 @@ import java.util.concurrent.CancellationException
 
 trait StructuredScope {
   def delay(duration: Duration): Unit
-  def fork[A](name: String)(block: Async ?=> A)(using async: Async): Fiber[A]
+  def fork[A](name: String)(block: => A): Fiber[A]
 }
 
 // FIXME Should we return an Async ?=> A instead of an A?
@@ -52,7 +52,7 @@ class JvmStructuredScope(
     Thread.sleep(duration.toMillis)
   }
 
-  override def fork[A](name: String)(block: Async ?=> A)(using async: Async): Fiber[A] = {
+  override def fork[A](name: String)(block: => A): Fiber[A] = {
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
     println(s"Parent scope: ${scopes.last}")
@@ -64,7 +64,7 @@ class JvmStructuredScope(
           val currentThread = Thread.currentThread()
           scopes.addOne(currentThread.threadId -> innerScope)
           forkedThread.complete(currentThread)
-          block(using Effect(JvmStructuredScope(scopes)))
+          block
         })
         innerScope.join()
         if (innerTask.state() != Subtask.State.SUCCESS) {
