@@ -22,4 +22,4 @@ It follows some quotations and links to valuable resources to understand the con
 5. [An Introduction to Algebraic Effects and Handlers](https://www.eff-lang.org/handlers-tutorial.pdf)
    > The idea behind it is that operation calls do not perform actual effects (e.g. printing to an output device), but behave as signals that propagate outwards until they reach a handler with a matching clause
 
-4. [CanThrow Capabilities](https://docs.scala-lang.org/scala3/reference/experimental/canthrow.html)
+6. [CanThrow Capabilities](https://docs.scala-lang.org/scala3/reference/experimental/canthrow.html)
