@@ -35,17 +35,18 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val results = new ConcurrentLinkedQueue[String]()
     val tryResult = Try {
       Async.run {
-        val fb1 = Async.fork {
+        val fb1 = Async.fork("fb1") {
           Async.delay(1.second)
           results.add("fb1")
         }
-        val fb2 = Async.fork {
+        val fb2 = Async.fork("fb2") {
           Async.delay(500.millis)
           results.add("fb2")
           throw new RuntimeException("Error")
         }
-        val fb3 = Async.fork {
+        val fb3 = Async.fork("fb3") {
           Async.delay(100.millis)
+          println("fb3")
           results.add("fb3")
         }
       }

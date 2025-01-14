@@ -40,7 +40,7 @@ class JvmFiber[A](private val promise: Future[A], private val forkedThread: Futu
 }
 
 class JvmStructuredScope(
-    private val scopes: scala.collection.mutable.Map[Thread, StructuredTaskScope[Any]]
+    private val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
 ) extends StructuredScope {
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
@@ -50,13 +50,13 @@ class JvmStructuredScope(
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
     println(s"Parent scope: ${scopes.last}")
-    scopes(Thread.currentThread()).fork(() => {
+    scopes(Thread.currentThread().threadId).fork(() => {
       val innerScope = new ShutdownOnFailure()
       try {
         val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
           println(s"Forking: '$name' using '$innerScope'")
           val currentThread = Thread.currentThread()
-          scopes.addOne(currentThread -> innerScope)
+          scopes.addOne(currentThread.threadId -> innerScope)
           forkedThread.complete(currentThread)
           block(using Effect(JvmStructuredScope(scopes)))
         })
@@ -75,6 +75,7 @@ class JvmStructuredScope(
         }
       } finally {
         println("Closing:" + name)
+        scopes.remove(Thread.currentThread().threadId)
         innerScope.close()
       }
     })
@@ -107,7 +108,7 @@ object Async {
       val mainTask = loomScope.fork(() => {
         block(using
           Effect(
-            JvmStructuredScope(scala.collection.mutable.Map(Thread.currentThread() -> loomScope))
+            JvmStructuredScope(scala.collection.mutable.Map(Thread.currentThread().threadId -> loomScope))
           )
         )
       })
