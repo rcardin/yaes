@@ -267,7 +267,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "throw an exception when asking for the value of a cancelled fiber" in {
     // FIXME Abstract on the type of the exception
-    val actualResult: Unit | FiberCancellationException = Throw.run {
+    val actualResult: Unit | Cancelled = Throw.run {
       Async.run {
         val cancellable = Async.fork {
           Async.delay(2.seconds)
@@ -278,6 +278,6 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualResult.isInstanceOf[FiberCancellationException] shouldBe true
+    actualResult.isInstanceOf[Cancelled] shouldBe true
   }
 }
