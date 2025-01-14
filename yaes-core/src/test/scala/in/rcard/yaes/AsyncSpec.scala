@@ -156,7 +156,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
         Async.delay(2.seconds)
         queue.add("cancellable")
       }
-      val job = Async.fork {
+      val fb = Async.fork {
         Async.delay(500.millis)
         cancellable.cancel()
         queue.add("fb2")
@@ -174,37 +174,68 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
         Async.delay(2.seconds)
         queue.add("cancellable")
       }
-      val job = Async.fork {
+      val fb = Async.fork {
         Async.delay(500.millis)
         cancellable.cancel()
-        queue.add("job2")
+        queue.add("fb2")
       }
       cancellable.join()
       queue
     }
-    expectedQueue.toArray should contain theSameElementsInOrderAs List("job2")
+    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
   it should "not cancel parent fiber if a child fiber was cancelled" in {
 
     val expectedQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      val job1 = Async.fork {
-        val innerCancellableJob = Async.fork {
+      val fb1 = Async.fork {
+        val innerCancellablefb = Async.fork {
           Async.delay(2.seconds)
           queue.add("cancellable")
         }
         Async.delay(1.second)
-        innerCancellableJob.cancel()
-        queue.add("job1")
+        innerCancellablefb.cancel()
+        queue.add("fb1")
       }
-      val job = Async.fork {
+      val fb = Async.fork {
         Async.delay(500.millis)
-        queue.add("job2")
+        queue.add("fb2")
       }
       queue
     }
-    expectedQueue.toArray should contain theSameElementsInOrderAs List("job2", "job1")
+    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
+  }
+
+  it should "cancel children fibers" in {
+    val expectedQueue = Async.run {
+      val queue = new ConcurrentLinkedQueue[String]()
+      // println(summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
+      val fb1 = Async.fork("fb1") {
+        // println("fb1" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
+        Async.fork("inner-fb") {
+          // println("inner-fb" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
+          Async.fork("inner-inner-fb") {
+            // println("inner-inner-fb" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
+            Async.delay(6.seconds)
+            queue.add("inner-inner-fb")
+          }
+
+          Async.delay(5.seconds)
+          queue.add("innerfb")
+        }
+        Async.delay(1.second)
+        queue.add("fb1")
+      }
+      Async.fork("fb2") {
+        // println("fb2" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
+        Async.delay(500.millis)
+        fb1.cancel()
+        queue.add("fb2")
+      }
+      queue
+    }
+    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
 }

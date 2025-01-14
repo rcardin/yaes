@@ -11,7 +11,7 @@ import java.util.concurrent.CancellationException
 
 trait StructuredScope {
   def delay(duration: Duration): Unit
-  def fork[A](block: => A): Fiber[A]
+  def fork[A](name: String)(block: Async ?=> A)(using async: Async): Fiber[A]
 }
 
 // FIXME Should we return an Async ?=> A instead of an A?
@@ -39,25 +39,34 @@ class JvmFiber[A](private val promise: Future[A], private val forkedThread: Futu
   }
 }
 
-class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends StructuredScope {
+class JvmStructuredScope(
+    private val scopes: scala.collection.mutable.Map[Thread, StructuredTaskScope[Any]]
+) extends StructuredScope {
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
   }
 
-  override def fork[A](block: => A): Fiber[A] = {
+  override def fork[A](name: String)(block: Async ?=> A)(using async: Async): Fiber[A] = {
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
-    scope.fork(() => {
+    println(s"Parent scope: ${scopes.last}")
+    scopes(Thread.currentThread()).fork(() => {
       val innerScope = new ShutdownOnFailure()
       try {
         val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-          forkedThread.complete(Thread.currentThread())
-          block
+          println(s"Forking: '$name' using '$innerScope'")
+          val currentThread = Thread.currentThread()
+          scopes.addOne(currentThread -> innerScope)
+          forkedThread.complete(currentThread)
+          block(using Effect(JvmStructuredScope(scopes)))
         })
         innerScope.join()
-        if (innerTask.state() == Subtask.State.FAILED) {
+        if (innerTask.state() != Subtask.State.SUCCESS) {
+          println("Task failed:" + name)
           innerTask.exception() match {
-            case ie: InterruptedException => promise.cancel(true)
+            case ie: InterruptedException =>
+              promise.cancel(true)
+              println("Task cancelled:" + name)
             case exex: ExecutionException => throw exex.getCause
             case throwable                => throw throwable
           }
@@ -65,6 +74,7 @@ class JvmStructuredScope(private val scope: StructuredTaskScope[Any]) extends St
           promise.complete(innerTask.get())
         }
       } finally {
+        println("Closing:" + name)
         innerScope.close()
       }
     })
@@ -81,17 +91,25 @@ object Async {
     async.sf.delay(duration)
   }
 
+  def fork[A](name: String)(block: => A)(using async: Async): Fiber[A] =
+    async.sf.fork(name)(block)
+
+  // FIXME Maybe we can think to a better default name for the fiber
   def fork[A](block: => A)(using async: Async): Fiber[A] =
-    async.sf.fork(block)
+    async.sf.fork("")(block)
 
   def run[A](block: Async ?=> A): A = {
     val loomScope = new ShutdownOnFailure()
 
-    given effect: Effect[StructuredScope] = Effect(JvmStructuredScope(loomScope))
+    // given effect: Effect[StructuredScope] = Effect(JvmStructuredScope(loomScope))
 
     try {
       val mainTask = loomScope.fork(() => {
-        block
+        block(using
+          Effect(
+            JvmStructuredScope(scala.collection.mutable.Map(Thread.currentThread() -> loomScope))
+          )
+        )
       })
       loomScope.join().throwIfFailed(identity)
       mainTask.get()
