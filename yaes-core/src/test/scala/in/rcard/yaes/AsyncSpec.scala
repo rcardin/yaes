@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import org.scalatest.TryValues.*
 
 import scala.util.Try
+import java.util.concurrent.CancellationException
 
 class AsyncSpec extends AnyFlatSpec with Matchers {
   "The Async effect" should "wait the completion of all the forked fibers" in {
@@ -211,13 +212,9 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "cancel children fibers" in {
     val expectedQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      // println(summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
       val fb1 = Async.fork("fb1") {
-        // println("fb1" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
         Async.fork("inner-fb") {
-          // println("inner-fb" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
           Async.fork("inner-inner-fb") {
-            // println("inner-inner-fb" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
             Async.delay(6.seconds)
             queue.add("inner-inner-fb")
           }
@@ -229,7 +226,6 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
         queue.add("fb1")
       }
       Async.fork("fb2") {
-        // println("fb2" + summon[Async].sf.asInstanceOf[JvmStructuredScope].scopes)
         Async.delay(500.millis)
         fb1.cancel()
         queue.add("fb2")
@@ -237,6 +233,48 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       queue
     }
     expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
+  it should "not throw any exception when joining a cancelled fiber" in {
+    val expected = Async.run {
+      val cancellable = Async.fork {
+        Async.delay(2.seconds)
+      }
+      Async.delay(500.millis)
+      cancellable.cancel()
+      cancellable.join()
+      42
+    }
+
+    expected shouldBe 42
+  }
+
+  it should "not throw any exception if a fiber is cancelled twice" in {
+    val expected = Async.run {
+      val cancellable = Async.fork {
+        Async.delay(2.seconds)
+      }
+      Async.delay(500.millis)
+      cancellable.cancel()
+      cancellable.cancel()
+      42
+    }
+
+    expected shouldBe 42
+  }
+
+  it should "throw an exception when asking for the value of a cancelled fiber" in {
+    // FIXME Abstract on the type of the exception
+    assertThrows[CancellationException] {
+      Async.run {
+        val cancellable = Async.fork {
+          Async.delay(2.seconds)
+        }
+        Async.delay(500.millis)
+        cancellable.cancel()
+        cancellable.value
+      }
+    }
   }
 
 }
