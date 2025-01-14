@@ -16,15 +16,21 @@ trait StructuredScope {
 
 // FIXME Should we return an Async ?=> A instead of an A?
 trait Fiber[A] {
-  def value: A
+  def value: Throw[FiberCancellationException] ?=> A
   def join(): Unit
   def cancel(): Unit
 }
 
+class FiberCancellationException extends Exception
+
 class JvmFiber[A](private val promise: Future[A], private val forkedThread: Future[Thread])
     extends Fiber[A] {
 
-  override def value: A = promise.get()
+  override def value: Throw[FiberCancellationException] ?=> A = try {
+    promise.get()
+  } catch {
+    case cancellationEx: CancellationException => throw FiberCancellationException()
+  }
 
   override def join(): Unit =
     try {
@@ -108,7 +114,9 @@ object Async {
       val mainTask = loomScope.fork(() => {
         block(using
           Effect(
-            JvmStructuredScope(scala.collection.mutable.Map(Thread.currentThread().threadId -> loomScope))
+            JvmStructuredScope(
+              scala.collection.mutable.Map(Thread.currentThread().threadId -> loomScope)
+            )
           )
         )
       })

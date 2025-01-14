@@ -113,18 +113,20 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "join the values of different fibers" in {
     val queue = new ConcurrentLinkedQueue[String]()
-    val result = Async.run {
-      val fb1 = Async.fork {
-        Async.delay(1.second)
-        queue.add("fb1")
-        42
+    val result = Throw.run {
+      Async.run {
+        val fb1 = Async.fork {
+          Async.delay(1.second)
+          queue.add("fb1")
+          42
+        }
+        val fb2 = Async.fork {
+          Async.delay(500.millis)
+          queue.add("fb2")
+          43
+        }
+        fb1.value + fb2.value
       }
-      val fb2 = Async.fork {
-        Async.delay(500.millis)
-        queue.add("fb2")
-        43
-      }
-      fb1.value + fb2.value
     }
 
     queue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
@@ -265,7 +267,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "throw an exception when asking for the value of a cancelled fiber" in {
     // FIXME Abstract on the type of the exception
-    assertThrows[CancellationException] {
+    val actualResult: Unit | FiberCancellationException = Throw.run {
       Async.run {
         val cancellable = Async.fork {
           Async.delay(2.seconds)
@@ -275,6 +277,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
         cancellable.value
       }
     }
-  }
 
+    actualResult.isInstanceOf[FiberCancellationException] shouldBe true
+  }
 }
