@@ -34,7 +34,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "stop the execution if one the fiber throws an exception" in {
     val results = new ConcurrentLinkedQueue[String]()
-    val tryResult = Try {
+    val raiseResult = Raise.run {
       Async.run {
         val fb1 = Async.fork("fb1") {
           Async.delay(1.second)
@@ -43,24 +43,22 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
         val fb2 = Async.fork("fb2") {
           Async.delay(500.millis)
           results.add("fb2")
-          throw new RuntimeException("Error")
+          Raise.raise("Error")
         }
         val fb3 = Async.fork("fb3") {
           Async.delay(100.millis)
-          println("fb3")
           results.add("fb3")
         }
       }
     }
 
-    tryResult.failure.exception shouldBe a[RuntimeException]
-    tryResult.failure.exception.getMessage shouldBe "Error"
+    raiseResult shouldBe "Error"
     results.toArray should contain theSameElementsInOrderAs List("fb3", "fb2")
   }
 
   it should "stop the execution if a child fiber throws an exception" in {
     val results = new ConcurrentLinkedQueue[String]()
-    val tryResult = Try {
+    val raiseResult = Raise.run {
       Async.run {
         val fb1 = Async.fork {
           Async.delay(1.second)
@@ -71,7 +69,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
           results.add("fb2")
           Async.fork {
             Async.delay(100.millis)
-            throw new RuntimeException("Error")
+            Raise.raise("Error")
           }
         }
         val fb3 = Async.fork {
@@ -81,14 +79,13 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    tryResult.failure.exception shouldBe a[RuntimeException]
-    tryResult.failure.exception.getMessage shouldBe "Error"
+    raiseResult shouldBe "Error"
     results.toArray should contain theSameElementsInOrderAs List("fb3", "fb2")
   }
 
   it should "stop the execution if the block throws an exception" in {
     val results = new ConcurrentLinkedQueue[String]()
-    val tryResult = Try {
+    val raiseResult = Raise.run {
       Async.run {
         val fb1 = Async.fork {
           Async.delay(1.second)
@@ -102,12 +99,11 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
           Async.delay(100.millis)
           results.add("fb3")
         }
-        throw new RuntimeException("Error")
+        Raise.raise("Error")
       }
     }
 
-    tryResult.failure.exception shouldBe a[RuntimeException]
-    tryResult.failure.exception.getMessage shouldBe "Error"
+    raiseResult shouldBe "Error"
     results.toArray shouldBe empty
   }
 
@@ -154,7 +150,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "cancel a fiber at the first suspending point" in {
-    val expectedQueue = Async.run {
+    val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
       val cancellable = Async.fork {
         Async.delay(2.seconds)
@@ -167,12 +163,12 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       }
       queue
     }
-    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
   it should "not throw an exception if a cancelled fiber is joined" in {
 
-    val expectedQueue = Async.run {
+    val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
       val cancellable = Async.fork {
         Async.delay(2.seconds)
@@ -186,12 +182,12 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       cancellable.join()
       queue
     }
-    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
   it should "not cancel parent fiber if a child fiber was cancelled" in {
 
-    val expectedQueue = Async.run {
+    val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
       val fb1 = Async.fork {
         val innerCancellablefb = Async.fork {
@@ -208,11 +204,11 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       }
       queue
     }
-    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
   }
 
   it should "cancel children fibers" in {
-    val expectedQueue = Async.run {
+    val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
       val fb1 = Async.fork("fb1") {
         Async.fork("inner-fb") {
@@ -234,11 +230,11 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       }
       queue
     }
-    expectedQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
   it should "not throw any exception when joining a cancelled fiber" in {
-    val expected = Async.run {
+    val actualResult = Async.run {
       val cancellable = Async.fork {
         Async.delay(2.seconds)
       }
@@ -248,11 +244,11 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       42
     }
 
-    expected shouldBe 42
+    actualResult shouldBe 42
   }
 
   it should "not throw any exception if a fiber is cancelled twice" in {
-    val expected = Async.run {
+    val actualResult = Async.run {
       val cancellable = Async.fork {
         Async.delay(2.seconds)
       }
@@ -262,7 +258,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
       42
     }
 
-    expected shouldBe 42
+    actualResult shouldBe 42
   }
 
   it should "throw an exception when asking for the value of a cancelled fiber" in {
