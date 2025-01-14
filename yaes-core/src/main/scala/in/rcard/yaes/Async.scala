@@ -14,7 +14,6 @@ trait StructuredScope {
   def fork[A](name: String)(block: => A): Fiber[A]
 }
 
-// FIXME Should we return an Async ?=> A instead of an A?
 trait Fiber[A] {
   def value: Throw[FiberCancellationException] ?=> A
   def join(): Unit
@@ -55,12 +54,10 @@ class JvmStructuredScope(
   override def fork[A](name: String)(block: => A): Fiber[A] = {
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
-    println(s"Parent scope: ${scopes.last}")
     scopes(Thread.currentThread().threadId).fork(() => {
       val innerScope = new ShutdownOnFailure()
       try {
         val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-          println(s"Forking: '$name' using '$innerScope'")
           val currentThread = Thread.currentThread()
           scopes.addOne(currentThread.threadId -> innerScope)
           forkedThread.complete(currentThread)
@@ -68,11 +65,9 @@ class JvmStructuredScope(
         })
         innerScope.join()
         if (innerTask.state() != Subtask.State.SUCCESS) {
-          println("Task failed:" + name)
           innerTask.exception() match {
             case ie: InterruptedException =>
               promise.cancel(true)
-              println("Task cancelled:" + name)
             case exex: ExecutionException => throw exex.getCause
             case throwable                => throw throwable
           }
@@ -80,7 +75,6 @@ class JvmStructuredScope(
           promise.complete(innerTask.get())
         }
       } finally {
-        println("Closing:" + name)
         scopes.remove(Thread.currentThread().threadId)
         innerScope.close()
       }
@@ -107,9 +101,6 @@ object Async {
 
   def run[A](block: Async ?=> A): A = {
     val loomScope = new ShutdownOnFailure()
-
-    // given effect: Effect[StructuredScope] = Effect(JvmStructuredScope(loomScope))
-
     try {
       val mainTask = loomScope.fork(() => {
         block(using
