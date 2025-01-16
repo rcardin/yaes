@@ -365,6 +365,66 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
+  it should "race two fibers and return the fastest result and cancel the other" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Async.run {
+      Async.race({
+        Async.delay(1.second)
+        actualQueue.add("fb1")
+        42
+      }, {
+        Async.delay(500.millis)
+        actualQueue.add("fb2")
+        43
+      })
+    }
+
+    actualResult shouldBe 43
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
+  it should "race two fibers and return the fastest result if the slowest fails" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        Async.race({
+          Async.delay(1.second)
+          Raise.raise("Error")
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          43
+        })
+      }
+    }
+
+    actualResult shouldBe 43
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
+  it should "race two fibers and return the error of the fastest one, cancelling the other" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        val raceResult = Async.race({
+          Async.delay(1.second)
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          Raise.raise("Error")
+          43
+        })
+      }
+    }
+
+    actualResult shouldBe "Error"
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
   // it should "run two computation in parallel and return the result" in {
   //   Async.run {
   //     val (result1, result2) = Async.par({

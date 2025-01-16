@@ -108,6 +108,17 @@ object Async {
   def fork[A](block: => A)(using async: Async): Fiber[A] =
     async.sf.fork("")(block)
 
+  def race[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = {
+    racePair(block1, block2) match {
+      case Left((result1, fiber2)) =>
+        fiber2.cancel()
+        result1
+      case Right((fiber1, result2)) =>
+        fiber1.cancel()
+        result2
+    }
+  }
+
   def racePair[R1, R2](block1: => R1, block2: => R2)(using
       async: Async
   ): Either[(R1, Fiber[R2]), (Fiber[R1], R2)] = {
@@ -126,8 +137,6 @@ object Async {
   }
 
   def par[R1, R2](block1: => R1, block2: => R2)(using async: Async): (R1, R2) = ???
-
-  def race[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = ???
 
   def raceAll[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = ???
 
