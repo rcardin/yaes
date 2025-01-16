@@ -425,33 +425,60 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
-  // it should "run two computation in parallel and return the result" in {
-  //   Async.run {
-  //     val (result1, result2) = Async.par({
-  //       Async.delay(1.second)
-  //       42
-  //     }, {
-  //       Async.delay(500.millis)
-  //       43
-  //     })
-  //     result1 + result2
-  //   } shouldBe 85
-  // }
+  it should "par two computation and return the result if both succeed" in {
+    Async.run {
+      val (result1, result2) = Async.par({
+        Async.delay(1.second)
+        42
+      }, {
+        Async.delay(500.millis)
+        43
+      })
+      result1 + result2
+    } shouldBe 85
+  }
 
-  // it should "return an error if one of the computation fails" in {
-  //   val actualResult = Raise.run {
-  //     Async.run {
-  //       val (result1, result2) = Async.par[Int, Int]({
-  //         Async.delay(1.second)
-  //         42
-  //       }, {
-  //         Async.delay(500.millis)
-  //         Raise.raise("Error")
-  //       })
-  //       result1 + result2
-  //     }
-  //   }
+  it should "par two computation and return the error of the failing one and cancel the other" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        val (result1, result2) = Async.par({
+          Async.delay(1.second)
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          Raise.raise("Error")
+          43
+        })
+        result1 + result2
+      }
+    }
 
-  //   actualResult shouldBe "Error"
-  // }
+    actualResult shouldBe "Error"
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
+  it should "par two computation and return the error of slowest" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        val (result1, result2) = Async.par({
+          Async.delay(1.second)
+          actualQueue.add("fb1")
+          Raise.raise("Error")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          43
+        })
+        result1 + result2
+      }
+    }
+
+    actualResult shouldBe "Error"
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
+  }
 }

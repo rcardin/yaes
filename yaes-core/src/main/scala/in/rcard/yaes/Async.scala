@@ -22,13 +22,19 @@ trait Fiber[A] {
   def join()(using async: Async): Unit
   def cancel()(using async: Async): Unit
   def onComplete(result: A => Unit)(using async: Async): Unit
+
+  private[yaes] def unsafeValue(using async: Async): A
 }
 
 object Cancelled
 type Cancelled = Cancelled.type
 
-class JvmFiber[A](private val promise: CompletableFuture[A], private val forkedThread: Future[Thread])
-    extends Fiber[A] {
+class JvmFiber[A](
+    private val promise: CompletableFuture[A],
+    private val forkedThread: Future[Thread]
+) extends Fiber[A] {
+
+  override def unsafeValue(using async: Async): A = promise.get()
 
   override def onComplete(fn: A => Unit)(using async: Async): Unit = {
     promise.thenAccept(result => fn(result))
@@ -119,26 +125,33 @@ object Async {
     }
   }
 
+  def par[R1, R2](block1: => R1, block2: => R2)(using async: Async): (R1, R2) = {
+    racePair(block1, block2) match {
+      case Left((result1, fiber2)) =>
+        fiber2.join()
+        (result1, fiber2.unsafeValue)
+      case Right((fiber1, result2)) =>
+        fiber1.join()
+        (fiber1.unsafeValue, result2)
+    }
+  }
+
   def racePair[R1, R2](block1: => R1, block2: => R2)(using
       async: Async
   ): Either[(R1, Fiber[R2]), (Fiber[R1], R2)] = {
     val promise = CompletableFuture[Either[(R1, Fiber[R2]), (Fiber[R1], R2)]]
-    val fiber1 = fork(block1)
-    val fiber2 = fork(block2)
-    
+    val fiber1  = fork(block1)
+    val fiber2  = fork(block2)
+
     fiber1.onComplete { result1 =>
       promise.complete(Left((result1, fiber2)))
     }
     fiber2.onComplete { result2 =>
       promise.complete(Right((fiber1, result2)))
     }
-    
+
     promise.get()
   }
-
-  def par[R1, R2](block1: => R1, block2: => R2)(using async: Async): (R1, R2) = ???
-
-  def raceAll[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = ???
 
   def run[A](block: Async ?=> A): A = {
     val loomScope = new ShutdownOnFailure()
