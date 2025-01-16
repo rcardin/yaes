@@ -8,6 +8,9 @@ import scala.concurrent.Promise
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.collection.immutable.Stream.Cons
+import java.util.function.Consumer
 
 trait StructuredScope {
   def delay(duration: Duration): Unit
@@ -15,31 +18,36 @@ trait StructuredScope {
 }
 
 trait Fiber[A] {
-  def value: Raise[Cancelled] ?=> A
-  def join(): Unit
-  def cancel(): Unit
+  def value(using async: Async): Raise[Cancelled] ?=> A
+  def join()(using async: Async): Unit
+  def cancel()(using async: Async): Unit
+  def onComplete(result: A => Unit)(using async: Async): Unit
 }
 
 object Cancelled
 type Cancelled = Cancelled.type
 
-class JvmFiber[A](private val promise: Future[A], private val forkedThread: Future[Thread])
+class JvmFiber[A](private val promise: CompletableFuture[A], private val forkedThread: Future[Thread])
     extends Fiber[A] {
 
-  override def value: Raise[Cancelled] ?=> A = try {
+  override def onComplete(fn: A => Unit)(using async: Async): Unit = {
+    promise.thenAccept(result => fn(result))
+  }
+
+  override def value(using async: Async): Raise[Cancelled] ?=> A = try {
     promise.get()
   } catch {
     case cancellationEx: CancellationException => Raise.raise(Cancelled)
   }
 
-  override def join(): Unit =
+  override def join()(using async: Async): Unit =
     try {
       promise.get()
     } catch {
       case cancellationEx: CancellationException => ()
     }
 
-  override def cancel(): Unit = {
+  override def cancel()(using async: Async): Unit = {
     // We'll wait until the thread is forked
     forkedThread.get().interrupt()
   }
@@ -99,6 +107,29 @@ object Async {
   // FIXME Maybe we can think to a better default name for the fiber
   def fork[A](block: => A)(using async: Async): Fiber[A] =
     async.sf.fork("")(block)
+
+  def racePair[R1, R2](block1: => R1, block2: => R2)(using
+      async: Async
+  ): Either[(R1, Fiber[R2]), (Fiber[R1], R2)] = {
+    val promise = CompletableFuture[Either[(R1, Fiber[R2]), (Fiber[R1], R2)]]
+    val fiber1 = fork(block1)
+    val fiber2 = fork(block2)
+    
+    fiber1.onComplete { result1 =>
+      promise.complete(Left((result1, fiber2)))
+    }
+    fiber2.onComplete { result2 =>
+      promise.complete(Right((fiber1, result2)))
+    }
+    
+    promise.get()
+  }
+
+  def par[R1, R2](block1: => R1, block2: => R2)(using async: Async): (R1, R2) = ???
+
+  def race[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = ???
+
+  def raceAll[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = ???
 
   def run[A](block: Async ?=> A): A = {
     val loomScope = new ShutdownOnFailure()

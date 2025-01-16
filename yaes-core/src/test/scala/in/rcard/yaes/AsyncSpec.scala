@@ -9,6 +9,7 @@ import org.scalatest.TryValues.*
 
 import scala.util.Try
 import java.util.concurrent.CancellationException
+import org.scalatest.EitherValues
 
 class AsyncSpec extends AnyFlatSpec with Matchers {
   "The Async effect" should "wait the completion of all the forked fibers" in {
@@ -276,4 +277,121 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
     actualResult.isInstanceOf[Cancelled] shouldBe true
   }
+
+  it should "racePair two fibers and return the fastest result if both succeed" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Async.run {
+      val raceResult = Async.racePair({
+        Async.delay(1.second)
+        actualQueue.add("fb1")
+        42
+      }, {
+        Async.delay(500.millis)
+        actualQueue.add("fb2")
+        43
+      })
+
+      raceResult match {
+        case Right((fb1, result2)) =>
+          fb1.join()
+          result2
+        case Left((result1, fb2)) =>
+          fb2.join()
+          result1 
+      }
+    }
+
+    actualResult shouldBe 43
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
+  }
+
+  it should "racePair two fibers and return the fastest result if the slowest fails" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        val raceResult = Async.racePair({
+          Async.delay(1.second)
+          Raise.raise("Error")
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          43
+        })
+
+        raceResult match {
+          case Right((fb1, result2)) =>
+            fb1.cancel()
+            result2
+          case Left((result1, fb2)) =>
+            fb2.join()
+            result1 
+        }
+      }
+    }
+
+    actualResult shouldBe 43
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
+  it should "racePair two fibers and return the error of the fastest one, cancelling the other" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        val raceResult = Async.racePair({
+          Async.delay(1.second)
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          Raise.raise("Error")
+          43
+        })
+
+        raceResult match {
+          case Right((fb1, result2)) =>
+            fb1.join()
+            result2
+          case Left((result1, fb2)) =>
+            fb2.join()
+            result1 
+        }
+      }
+    }
+
+    actualResult shouldBe "Error"
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  }
+
+  // it should "run two computation in parallel and return the result" in {
+  //   Async.run {
+  //     val (result1, result2) = Async.par({
+  //       Async.delay(1.second)
+  //       42
+  //     }, {
+  //       Async.delay(500.millis)
+  //       43
+  //     })
+  //     result1 + result2
+  //   } shouldBe 85
+  // }
+
+  // it should "return an error if one of the computation fails" in {
+  //   val actualResult = Raise.run {
+  //     Async.run {
+  //       val (result1, result2) = Async.par[Int, Int]({
+  //         Async.delay(1.second)
+  //         42
+  //       }, {
+  //         Async.delay(500.millis)
+  //         Raise.raise("Error")
+  //       })
+  //       result1 + result2
+  //     }
+  //   }
+
+  //   actualResult shouldBe "Error"
+  // }
 }
