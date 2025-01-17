@@ -113,6 +113,22 @@ object Async {
   def fork[A](block: => A)(using async: Async): Fiber[A] =
     async.sf.fork(s"fiberb-${scala.util.Random.nextString(10)}")(block)
 
+  object TimedOut
+  type TimedOut = TimedOut.type
+
+  def timeout[A](
+      timeout: Duration
+  )(block: => A)(using async: Async, raise: Raise[TimedOut]): A = {
+    race(
+      {
+        block
+      }, {
+        delay(timeout)
+        Raise.raise(TimedOut)
+      }
+    )
+  }
+
   def race[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = {
     racePair(block1, block2) match {
       case Left((result1, fiber2)) =>

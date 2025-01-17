@@ -10,6 +10,7 @@ import org.scalatest.TryValues.*
 import scala.util.Try
 import java.util.concurrent.CancellationException
 import org.scalatest.EitherValues
+import in.rcard.yaes.Async.TimedOut
 
 class AsyncSpec extends AnyFlatSpec with Matchers {
   "The Async effect" should "wait the completion of all the forked fibers" in {
@@ -281,15 +282,17 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "racePair two fibers and return the fastest result if both succeed" in {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
-      val raceResult = Async.racePair({
-        Async.delay(1.second)
-        actualQueue.add("fb1")
-        42
-      }, {
-        Async.delay(500.millis)
-        actualQueue.add("fb2")
-        43
-      })
+      val raceResult = Async.racePair(
+        {
+          Async.delay(1.second)
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          43
+        }
+      )
 
       raceResult match {
         case Right((fb1, result2)) =>
@@ -297,7 +300,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
           result2
         case Left((result1, fb2)) =>
           fb2.join()
-          result1 
+          result1
       }
     }
 
@@ -309,16 +312,18 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
-        val raceResult = Async.racePair({
-          Async.delay(1.second)
-          Raise.raise("Error")
-          actualQueue.add("fb1")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          43
-        })
+        val raceResult = Async.racePair(
+          {
+            Async.delay(1.second)
+            Raise.raise("Error")
+            actualQueue.add("fb1")
+            42
+          }, {
+            Async.delay(500.millis)
+            actualQueue.add("fb2")
+            43
+          }
+        )
 
         raceResult match {
           case Right((fb1, result2)) =>
@@ -326,7 +331,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
             result2
           case Left((result1, fb2)) =>
             fb2.join()
-            result1 
+            result1
         }
       }
     }
@@ -339,16 +344,18 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
-        val raceResult = Async.racePair({
-          Async.delay(1.second)
-          actualQueue.add("fb1")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          Raise.raise("Error")
-          43
-        })
+        val raceResult = Async.racePair(
+          {
+            Async.delay(1.second)
+            actualQueue.add("fb1")
+            42
+          }, {
+            Async.delay(500.millis)
+            actualQueue.add("fb2")
+            Raise.raise("Error")
+            43
+          }
+        )
 
         raceResult match {
           case Right((fb1, result2)) =>
@@ -356,7 +363,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
             result2
           case Left((result1, fb2)) =>
             fb2.join()
-            result1 
+            result1
         }
       }
     }
@@ -368,15 +375,17 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "race two fibers and return the fastest result and cancel the other" in {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
-      Async.race({
-        Async.delay(1.second)
-        actualQueue.add("fb1")
-        42
-      }, {
-        Async.delay(500.millis)
-        actualQueue.add("fb2")
-        43
-      })
+      Async.race(
+        {
+          Async.delay(1.second)
+          actualQueue.add("fb1")
+          42
+        }, {
+          Async.delay(500.millis)
+          actualQueue.add("fb2")
+          43
+        }
+      )
     }
 
     actualResult shouldBe 43
@@ -387,16 +396,18 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
-        Async.race({
-          Async.delay(1.second)
-          Raise.raise("Error")
-          actualQueue.add("fb1")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          43
-        })
+        Async.race(
+          {
+            Async.delay(1.second)
+            Raise.raise("Error")
+            actualQueue.add("fb1")
+            42
+          }, {
+            Async.delay(500.millis)
+            actualQueue.add("fb2")
+            43
+          }
+        )
       }
     }
 
@@ -408,16 +419,18 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
-        val raceResult = Async.race({
-          Async.delay(1.second)
-          actualQueue.add("fb1")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          Raise.raise("Error")
-          43
-        })
+        val raceResult = Async.race(
+          {
+            Async.delay(1.second)
+            actualQueue.add("fb1")
+            42
+          }, {
+            Async.delay(500.millis)
+            actualQueue.add("fb2")
+            Raise.raise("Error")
+            43
+          }
+        )
       }
     }
 
@@ -427,13 +440,15 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "par two computation and return the result if both succeed" in {
     Async.run {
-      val (result1, result2) = Async.par({
-        Async.delay(1.second)
-        42
-      }, {
-        Async.delay(500.millis)
-        43
-      })
+      val (result1, result2) = Async.par(
+        {
+          Async.delay(1.second)
+          42
+        }, {
+          Async.delay(500.millis)
+          43
+        }
+      )
       result1 + result2
     } shouldBe 85
   }
@@ -442,16 +457,18 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
-        val (result1, result2) = Async.par({
-          Async.delay(1.second)
-          actualQueue.add("fb1")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          Raise.raise("Error")
-          43
-        })
+        val (result1, result2) = Async.par(
+          {
+            Async.delay(1.second)
+            actualQueue.add("fb1")
+            42
+          }, {
+            Async.delay(500.millis)
+            actualQueue.add("fb2")
+            Raise.raise("Error")
+            43
+          }
+        )
         result1 + result2
       }
     }
@@ -464,21 +481,52 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
-        val (result1, result2) = Async.par({
-          Async.delay(1.second)
-          actualQueue.add("fb1")
-          Raise.raise("Error")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          43
-        })
+        val (result1, result2) = Async.par(
+          {
+            Async.delay(1.second)
+            actualQueue.add("fb1")
+            Raise.raise("Error")
+            42
+          }, {
+            Async.delay(500.millis)
+            actualQueue.add("fb2")
+            43
+          }
+        )
         result1 + result2
       }
     }
 
     actualResult shouldBe "Error"
     actualQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
+  }
+
+  it should "return the fiber value if completes before timeout" in {
+    val actualResult = Raise.run {
+      Async.run {
+        Async.timeout(1.seconds) {
+          Async.delay(500.millis)
+          42
+        }
+      }
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "raise a TimedOut error and cancel the computation if the timeout is reached" in {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualResult: Int | TimedOut = Raise.run {
+      Async.run {
+        Async.timeout(500.millis) {
+          Async.delay(1.seconds)
+          actualQueue.add("fb1")
+          42
+        }
+      }
+    }
+
+    actualQueue.toArray shouldBe empty
+    actualResult shouldBe TimedOut
   }
 }
