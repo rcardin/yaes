@@ -7,9 +7,9 @@ class OutputSpec extends AnyFlatSpec with Matchers {
   "Output" should "printLn the text" in {
     val actualResult = new java.io.ByteArrayOutputStream()
     Console.withOut(actualResult) {
-        Output.run {
-            Output.printLn("Hello, World!")
-        }
+      Output.run {
+        Output.printLn("Hello, World!")
+      }
     }
 
     actualResult.toString() should be("Hello, World!\n")
@@ -18,9 +18,9 @@ class OutputSpec extends AnyFlatSpec with Matchers {
   it should "print the text" in {
     val actualResult = new java.io.ByteArrayOutputStream()
     Console.withOut(actualResult) {
-        Output.run {
-            Output.print("Hello, World!")
-        }
+      Output.run {
+        Output.print("Hello, World!")
+      }
     }
 
     actualResult.toString() should be("Hello, World!")
@@ -29,11 +29,22 @@ class OutputSpec extends AnyFlatSpec with Matchers {
   it should "printLn the text on the error stream" in {
     val actualResult = new java.io.ByteArrayOutputStream()
     Console.withErr(actualResult) {
-        Output.run {
-            Output.printErrLn("Hello, World!")
-        }
+      Output.run {
+        Output.printErrLn("Hello, World!")
+      }
     }
 
     actualResult.toString() should be("Hello, World!\n")
+  }
+
+  it should "print the text on the error stream" in {
+    val actualResult = new java.io.ByteArrayOutputStream()
+    Console.withErr(actualResult) {
+      Output.run {
+        Output.printErr("Hello, World!")
+      }
+    }
+
+    actualResult.toString() should be("Hello, World!")
   }
 }
