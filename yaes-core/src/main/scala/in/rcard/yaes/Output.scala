@@ -1,11 +1,14 @@
 package in.rcard.yaes
 
 trait Print {
+  def print(text: String): Unit
   def printLn(text: String): Unit
   def printErrLn(text: String): Unit
 }
 
 class PrintToConsole extends Print {
+
+  override def print(text: String): Unit = scala.Console.print(text)
 
   override def printErrLn(text: String): Unit = scala.Console.err.println(text)
 
@@ -19,6 +22,8 @@ object Output {
   def apply[A](block: => A)(using out: Output): A = block
 
   def printLn(text: String)(using console: Output): Unit = console.sf.printLn(text)
+
+  def print(text: String)(using console: Output): Unit = console.sf.print(text)
 
   def printErrLn(text: String)(using console: Output): Unit = console.sf.printErrLn(text)
 

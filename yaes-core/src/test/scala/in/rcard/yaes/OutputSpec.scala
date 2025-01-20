@@ -15,6 +15,17 @@ class OutputSpec extends AnyFlatSpec with Matchers {
     actualResult.toString() should be("Hello, World!\n")
   }
 
+  it should "print the text" in {
+    val actualResult = new java.io.ByteArrayOutputStream()
+    Console.withOut(actualResult) {
+        Output.run {
+            Output.print("Hello, World!")
+        }
+    }
+
+    actualResult.toString() should be("Hello, World!")
+  }
+
   it should "printLn the text on the error stream" in {
     val actualResult = new java.io.ByteArrayOutputStream()
     Console.withErr(actualResult) {
