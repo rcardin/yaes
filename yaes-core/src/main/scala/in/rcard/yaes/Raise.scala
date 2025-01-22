@@ -8,9 +8,7 @@ trait TypedError[-E] {
 
 type Raise[E] = Effect[TypedError[E]]
 
-private[yaes] case class Raised[E](original: E)
-extends ControlThrowable
-  with NoStackTrace
+private[yaes] case class Raised[E](original: E) extends ControlThrowable with NoStackTrace
 
 private[yaes] class DefaultTypedError extends TypedError[Any]:
   def raise[A](e: => Any): Nothing = throw Raised(e)
@@ -30,9 +28,13 @@ object Raise {
     }
   }
 
-  def withDefault[E, A](default: => A)(block: Raise[E] ?=> A): A = {
-    block(using new Effect(new TypedError[E] {
-      override def raise[A1](e: => E): A1 = default.asInstanceOf[A1]
-    }))
+  def recover[E, A](block: Raise[E] ?=> A)(recoverWith: E => A): A = {
+    given eff: Effect[TypedError[E]] = new Effect(new TypedError[E] {
+      override def raise[A1](e: => E): A1 = recoverWith(e).asInstanceOf[A1]
+    })
+    block
   }
+
+  def withDefault[E, A](default: => A)(block: Raise[E] ?=> A): A =
+    recover(block)(_ => default)
 }

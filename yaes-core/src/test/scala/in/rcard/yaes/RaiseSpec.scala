@@ -45,10 +45,42 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     IO.run { Raise.run { actualResult } } shouldBe "Boom!"
   }
 
-  it should "be able to provide a default value" in {
+  it should "be able to provide a default value if an error is risen" in {
     val actualResult = Raise.withDefault(42) {
       Raise.raise("Error")
     }
+
+    actualResult shouldBe 42
+  }
+
+  it should "not provide any default value if no error is risen" in {
+    val actualResult = Raise.withDefault(42) {
+      24
+    }
+
+    actualResult shouldBe 24
+  }
+
+  it should "be able to recover from an error" in {
+    val actualResult = Raise.recover {
+      Raise.raise("Error")
+    } { case "Error" => 42 }
+
+    actualResult shouldBe 42
+  }
+
+  it should "not recover from an error if the error is not the expected one" in {
+    assertThrows[RuntimeException] {
+      Raise.recover {
+        Raise.raise("Error")
+      } { case "Boom!" => 42 }
+    }
+  }
+
+  it should "do not recover if no error is risen" in {
+    val actualResult = Raise.recover {
+      42
+    } { case "Error" => 24 }
 
     actualResult shouldBe 42
   }
