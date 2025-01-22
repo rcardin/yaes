@@ -44,4 +44,12 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
 
     IO.run { Raise.run { actualResult } } shouldBe "Boom!"
   }
+
+  it should "be able to provide a default value" in {
+    val actualResult = Raise.withDefault(42) {
+      Raise.raise("Error")
+    }
+
+    actualResult shouldBe 42
+  }
 }
