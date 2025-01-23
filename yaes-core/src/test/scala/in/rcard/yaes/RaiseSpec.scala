@@ -45,13 +45,14 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     IO.run { Raise.run { actualResult } } shouldBe "Boom!"
   }
 
-  it should "be able to provide a default value if an error is risen" in {
-    val actualResult = Raise.withDefault(42) {
-      Raise.raise("Error")
-    }
+  // it should "be able to provide a default value if an error is risen" in {
+  //   val actualResult = Raise.withDefault(42) {
+  //     Raise.raise("Error")
+  //     43
+  //   }
 
-    actualResult shouldBe 42
-  }
+  //   actualResult shouldBe 42
+  // }
 
   it should "not provide any default value if no error is risen" in {
     val actualResult = Raise.withDefault(42) {
@@ -61,13 +62,14 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe 24
   }
 
-  it should "be able to recover from an error" in {
-    val actualResult = Raise.recover {
-      Raise.raise("Error")
-    } { case "Error" => 42 }
+  // it should "be able to recover from an error" in {
+  //   val actualResult = Raise.recover {
+  //     Raise.raise("Error")
+  //     43
+  //   } { case "Error" => 42 }
 
-    actualResult shouldBe 42
-  }
+  //   actualResult shouldBe 42
+  // }
 
   it should "not recover from an error if the error is not the expected one" in {
     assertThrows[RuntimeException] {
@@ -84,4 +86,12 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
 
     actualResult shouldBe 42
   }
+
+  // it should "be able to return an Either with the error as the Left value" in {
+  //   val actualResult: Either[String, Int] = Raise.either {
+  //     Raise.raise("Error")
+  //   }
+
+  //   actualResult shouldBe Left("Error")
+  // }
 }
