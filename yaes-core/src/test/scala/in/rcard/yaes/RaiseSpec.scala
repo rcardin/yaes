@@ -2,6 +2,7 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.TryValues.*
 
 class RaiseSpec extends AnyFlatSpec with Matchers {
 
@@ -42,7 +43,7 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.run { Raise.run { actualResult } } shouldBe "Boom!"
+    IO.run { Raise.run { actualResult } }.success.value shouldBe "Boom!"
   }
 
   it should "be able to provide a default value if an error is risen" in {

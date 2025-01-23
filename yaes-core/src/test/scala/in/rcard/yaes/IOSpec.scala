@@ -2,6 +2,7 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.TryValues.*
 
 class IOSpec extends AnyFlatSpec with Matchers {
 
@@ -12,7 +13,7 @@ class IOSpec extends AnyFlatSpec with Matchers {
 
     val fortyThree: IO ?=> Int  = fortyTwo + 1
 
-    IO.run(fortyThree) shouldBe 43
+    IO.run(fortyThree).success.value shouldBe 43
   }
 
   it should "be able to run a side-effecting operation that throws an exception" in {
@@ -24,8 +25,7 @@ class IOSpec extends AnyFlatSpec with Matchers {
 
     val actualResult = IO.run(fortyThree)
 
-    actualResult shouldBe a[RuntimeException]
-    actualResult.asInstanceOf[RuntimeException].getMessage shouldBe "Boom!"
+    actualResult.failure.exception should have message "Boom!"
   }
 
   it should "be use map and flatMap from Effect type" in {
@@ -34,6 +34,6 @@ class IOSpec extends AnyFlatSpec with Matchers {
       b <- IO(1)
     } yield a + b
 
-    IO.run(fortyThree) shouldBe 43
+    IO.run(fortyThree).success.value shouldBe 43
   }
 }
