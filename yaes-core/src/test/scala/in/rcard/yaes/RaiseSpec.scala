@@ -45,14 +45,14 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     IO.run { Raise.run { actualResult } } shouldBe "Boom!"
   }
 
-  // it should "be able to provide a default value if an error is risen" in {
-  //   val actualResult = Raise.withDefault(42) {
-  //     Raise.raise("Error")
-  //     43
-  //   }
+  it should "be able to provide a default value if an error is risen" in {
+    val actualResult = Raise.withDefault(42) {
+      Raise.raise("Error")
+      43
+    }
 
-  //   actualResult shouldBe 42
-  // }
+    actualResult shouldBe 42
+  }
 
   it should "not provide any default value if no error is risen" in {
     val actualResult = Raise.withDefault(42) {
@@ -62,14 +62,14 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe 24
   }
 
-  // it should "be able to recover from an error" in {
-  //   val actualResult = Raise.recover {
-  //     Raise.raise("Error")
-  //     43
-  //   } { case "Error" => 42 }
+  it should "be able to recover from an error" in {
+    val actualResult = Raise.recover {
+      Raise.raise("Error")
+      43
+    } { case "Error" => 42 }
 
-  //   actualResult shouldBe 42
-  // }
+    actualResult shouldBe 42
+  }
 
   it should "not recover from an error if the error is not the expected one" in {
     assertThrows[RuntimeException] {
@@ -87,11 +87,54 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe 42
   }
 
-  // it should "be able to return an Either with the error as the Left value" in {
-  //   val actualResult: Either[String, Int] = Raise.either {
-  //     Raise.raise("Error")
-  //   }
+  it should "be able to return an Either with the error as the Left value" in {
+    val actualResult: Either[String, Int] = Raise.either {
+      Raise.raise("Error")
+      42
+    }
 
-  //   actualResult shouldBe Left("Error")
-  // }
+    actualResult shouldBe Left("Error")
+  }
+
+  it should "be able to return an Either with the result as the Right value" in {
+    val actualResult: Either[String, Int] = Raise.either {
+      42
+    }
+
+    actualResult shouldBe Right(42)
+  }
+
+  it should "be able to return an Option with the result as a Some" in {
+    val actualResult: Option[Int] = Raise.option {
+      42
+    }
+
+    actualResult shouldBe Some(42)
+  }
+
+  it should "be able to return an Option with None if an error is risen" in {
+    val actualResult: Option[Int] = Raise.option {
+      Raise.raise("Error")
+      42
+    }
+
+    actualResult shouldBe None
+  }
+
+  it should "be able to return a nullable value with the result" in {
+    val actualResult: Int | Null = Raise.nullable {
+      42
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "be able to return a nullable value with null if an error is risen" in {
+    val actualResult: Int | Null = Raise.nullable {
+      Raise.raise("Error")
+      42
+    }
+
+    actualResult shouldBe null.asInstanceOf[Int | Null]
+  }
 }

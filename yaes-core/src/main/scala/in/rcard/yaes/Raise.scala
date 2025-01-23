@@ -33,4 +33,13 @@ object Raise {
     fold(block)(onError = recoverWith)(onSuccess = identity)
 
   def withDefault[E, A](default: => A)(block: Raise[E] ?=> A): A = recover(block)(_ => default)
+
+  def either[E, A](block: Raise[E] ?=> A): Either[E, A] =
+    fold(block)(onError = Left(_))(onSuccess = Right(_))
+
+  def option[E, A](block: Raise[E] ?=> A): Option[A] =
+    fold(block)(onError_ => None)(onSuccess = Some(_))
+
+  def nullable[E, A](block: Raise[E] ?=> A): A | Null =
+    fold(block)(onError_ => null)(onSuccess = identity)
 }
