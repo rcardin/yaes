@@ -2,6 +2,7 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.TryValues.*
 
 class ThrowSpec extends AnyFlatSpec with Matchers {
 
@@ -55,6 +56,6 @@ class ThrowSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.run { Throw.run { actualResult } } shouldBe a[RuntimeException]
+    IO.run { Throw.run { actualResult } }.success.value shouldBe a[RuntimeException]
   }
 }

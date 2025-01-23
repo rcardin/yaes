@@ -2,6 +2,7 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.TryValues.*
 
 class RandomSpec extends AnyFlatSpec with Matchers {
 
@@ -64,6 +65,6 @@ class RandomSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.run { Random.run { actualResult } } shouldBe a[Int]
+    IO.run { Random.run { actualResult } }.success.value shouldBe a[Int]
   }
 }
