@@ -42,4 +42,7 @@ object Raise {
 
   def nullable[E, A](block: Raise[E] ?=> A): A | Null =
     fold(block)(onError_ => null)(onSuccess = identity)
+
+  def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
+    if !condition then Raise.raise(error)
 }

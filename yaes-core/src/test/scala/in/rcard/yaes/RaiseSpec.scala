@@ -138,4 +138,23 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
 
     actualResult shouldBe null.asInstanceOf[Int | Null]
   }
+
+  it should "raise an error if a condition is not met" in {
+    val meaningOfLife = 42
+    val actualResult = Raise.run {
+      Raise.ensure(meaningOfLife == 43)("Error")
+    }
+
+    actualResult shouldBe "Error"
+  }
+
+  it should "not raise an error if a condition is met" in {
+    val meaningOfLife = 42
+    val actualResult = Raise.run {
+      Raise.ensure(meaningOfLife == 42)("Error")
+      42
+    }
+
+    actualResult shouldBe 42
+  }
 }
