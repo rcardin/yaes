@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
-import scala.util.control.{ControlThrowable, NoStackTrace}
+import scala.util.control.{ControlThrowable, NoStackTrace, NonFatal}
+import scala.reflect.ClassTag
 
 trait TypedError[-E] {
   def raise(error: => E): Nothing
@@ -45,4 +46,12 @@ object Raise {
 
   def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
     if !condition then Raise.raise(error)
+
+  def catching[E, A](block: => A)(mapException: Throwable => E)(using r: Raise[E]): A =
+    try {
+      block
+    } catch {
+      case NonFatal(nfex) => Raise.raise(mapException(nfex))
+      case ex             => throw ex
+    }
 }

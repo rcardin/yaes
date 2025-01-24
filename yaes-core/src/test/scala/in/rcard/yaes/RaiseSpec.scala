@@ -3,6 +3,7 @@ package in.rcard.yaes
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.TryValues.*
+import java.io.IOException
 
 class RaiseSpec extends AnyFlatSpec with Matchers {
 
@@ -153,6 +154,36 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
     val actualResult = Raise.run {
       Raise.ensure(meaningOfLife == 42)("Error")
       42
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "be able to catch an exception and raise a typed error" in {
+    val actualResult = Raise.run {
+      Raise.catching {
+        throw new RuntimeException("Boom!")
+      } { case ex => ex.getMessage }
+    }
+
+    actualResult shouldBe "Boom!"
+  }
+
+  it should "not catch a fatal exception" in {
+    assertThrows[OutOfMemoryError] {
+      Raise.run {
+        Raise.catching {
+          throw new OutOfMemoryError("Boom!")
+        } { case ex => ex.getMessage }
+      }
+    }
+  }
+
+  it should "not raise any error if no exception is thrown" in {
+    val actualResult = Raise.run {
+      Raise.catching {
+        42
+      } { case ex => ex.getMessage }
     }
 
     actualResult shouldBe 42
