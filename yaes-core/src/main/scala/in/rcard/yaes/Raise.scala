@@ -54,4 +54,14 @@ object Raise {
       case NonFatal(nfex) => Raise.raise(mapException(nfex))
       case ex             => throw ex
     }
+
+  def catching[E <: Throwable, A](block: => A)(using r: Raise[E], E: ClassTag[E]): A =
+    try {
+      block
+    } catch {
+      case NonFatal(nfex) =>
+        if (nfex.getClass == E.runtimeClass) Raise.raise(nfex.asInstanceOf[E])
+        else throw nfex
+      case ex => throw ex
+    }
 }

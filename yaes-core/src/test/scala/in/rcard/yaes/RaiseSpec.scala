@@ -188,4 +188,35 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
 
     actualResult shouldBe 42
   }
+
+  it should "be able to catch an exception of a given type and raise it" in {
+    val actualResult = Raise.run {
+      Raise.catching[IOException, Int] {
+        throw new IOException("Boom!")
+      }
+    }
+
+    actualResult shouldBe a[IOException]
+    actualResult.asInstanceOf[IOException].getMessage shouldBe "Boom!"
+  }
+
+  it should "not catch an exception of a different type" in {
+    assertThrows[RuntimeException] {
+      Raise.run {
+        Raise.catching[IOException, Int] {
+          throw new RuntimeException("Boom!")
+        }
+      }
+    }
+  }
+
+  it should "not raise an fatal exception" in {
+    assertThrows[OutOfMemoryError] {
+      Raise.run {
+        Raise.catching[OutOfMemoryError, Int] {
+          throw new OutOfMemoryError("Boom!")
+        }
+      }
+    }
+  }
 }
