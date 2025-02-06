@@ -73,6 +73,33 @@ val result = IO.run {
 println(result) // Output: 43
 ```
 
+### Output
+
+The Output effect allows for printing output to the console.
+
+Example:
+```scala 3
+import in.rcard.yaes.Output
+
+Output.run {
+  Output.printLn("Hello, World!")
+}
+```
+
+### Random
+
+The Random effect allows for generating random numbers.
+
+Example:
+```scala 3
+import in.rcard.yaes.Random
+
+val result = Random.run {
+  Random.nextInt
+}
+
+println(result) // Output: (random integer)
+```
 
 ## References
 
