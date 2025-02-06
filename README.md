@@ -4,6 +4,76 @@
 
 An experimental effect system in Scala mixing monadic and direct-style
 
+## Introduction to Algebraic Effects
+
+Algebraic effects are a way to represent and handle side effects in a program in a modular and composable manner. Unlike traditional approaches such as über-monads, algebraic effects separate the definition of effects from their implementation. This allows for more flexible and reusable code.
+
+In essence, an algebraic effect system consists of:
+1. **Effect Signatures**: These define the operations that can be performed.
+2. **Effect Handlers**: These provide the implementation for the operations.
+
+By using algebraic effects, you can write code that is easier to reason about, test, and maintain. The effects are described declaratively, and their execution is deferred until they are handled.
+
+## Effects
+
+### Async
+
+The `Async` effect allows for asynchronous computations and fiber management.
+
+Example:
+```scala 3
+import in.rcard.yaes.Async
+import scala.concurrent.duration.*
+
+val result = Async.run {
+  val fiber = Async.fork {
+    Async.delay(1.second)
+    42
+  }
+  fiber.value
+}
+
+println(result) // Output: 42
+```
+
+### Input
+
+The Input effect allows for reading input from the console.
+
+Example:
+
+```scala 3
+import in.rcard.yaes.{Input, Raise}
+import java.io.IOException
+
+val result = Raise.run {
+  Input.run {
+    Input.readLn()
+  }
+}
+
+println(result) // Output: (depends on user input)
+```
+
+### IO
+
+The IO effect allows for running side-effecting operations.
+
+Example:
+```scala 3
+import in.rcard.yaes.IO
+
+val result = IO.run {
+  val fortyTwo: IO ?=> Int = IO {
+    42
+  }
+  fortyTwo + 1
+}
+
+println(result) // Output: 43
+```
+
+
 ## References
 
 It follows some quotations and links to valuable resources to understand the concepts behind the library:
