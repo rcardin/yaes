@@ -1,17 +1,12 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Effect.Handler
+
 trait NonDeterministic {
   def nextInt(): Int
   def nextBoolean(): Boolean
   def nextDouble(): Double
   def nextLong(): Long
-}
-
-class DefaultNonDeterministic extends NonDeterministic {
-  def nextInt(): Int         = scala.util.Random.nextInt()
-  def nextLong(): Long       = scala.util.Random.nextLong()
-  def nextBoolean(): Boolean = scala.util.Random.nextBoolean()
-  def nextDouble(): Double   = scala.util.Random.nextDouble()
 }
 
 type Random = Effect[NonDeterministic]
@@ -26,6 +21,15 @@ object Random {
   def nextLong(using r: Random): Long       = r.sf.nextLong()
 
   def run[A](block: Random ?=> A): A = {
-    block(using Effect(new DefaultNonDeterministic))
+    Effect.handle(block).`with`(Random.live)
+  }
+
+  val live: Handler[NonDeterministic] = new Handler[NonDeterministic] {
+    val unsafe: NonDeterministic = new NonDeterministic {
+      override def nextInt(): Int         = scala.util.Random.nextInt()
+      override def nextLong(): Long       = scala.util.Random.nextLong()
+      override def nextBoolean(): Boolean = scala.util.Random.nextBoolean()
+      override def nextDouble(): Double   = scala.util.Random.nextDouble()
+    }
   }
 }
