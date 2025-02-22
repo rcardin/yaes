@@ -1,5 +1,8 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Effect.Handler
+import in.rcard.yaes.Effect.handle
+
 trait Print {
   def print(text: String): Unit
   def printLn(text: String): Unit
@@ -32,7 +35,17 @@ object Output {
 
   def printErr(text: String)(using console: Output): Unit = console.sf.printErr(text)
 
-  def run[A](block: Output ?=> A): A = {
-    block(using Effect(new PrintToConsole))
+  def run[A](block: Output ?=> A): A = handle(block).`with`(default)
+
+  val default: Handler[Print] = new Handler[Print] {
+    val unsafe: Print = new Print {
+      override def printErr(text: String): Unit = scala.Console.err.print(text)
+
+      override def print(text: String): Unit = scala.Console.print(text)
+
+      override def printErrLn(text: String): Unit = scala.Console.err.println(text)
+
+      override def printLn(text: String): Unit = scala.Console.println(text)
+    }
   }
 }
