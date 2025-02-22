@@ -21,10 +21,10 @@ object Random {
   def nextLong(using r: Random): Long       = r.sf.nextLong()
 
   def run[A](block: Random ?=> A): A = {
-    Effect.handle(block).`with`(Random.live)
+    Effect.handle(block).`with`(Random.default)
   }
 
-  val live: Handler[NonDeterministic] = new Handler[NonDeterministic] {
+  val default: Handler[NonDeterministic] = new Handler[NonDeterministic] {
     val unsafe: NonDeterministic = new NonDeterministic {
       override def nextInt(): Int         = scala.util.Random.nextInt()
       override def nextLong(): Long       = scala.util.Random.nextLong()
