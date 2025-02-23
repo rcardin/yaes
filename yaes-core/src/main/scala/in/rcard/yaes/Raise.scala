@@ -2,6 +2,8 @@ package in.rcard.yaes
 
 import scala.util.control.{ControlThrowable, NoStackTrace, NonFatal}
 import scala.reflect.ClassTag
+import in.rcard.yaes.Effect.Handler
+import in.rcard.yaes.Effect.handle
 
 trait TypedError[-E] {
   def raise(error: => E): Nothing
@@ -20,11 +22,16 @@ object Raise {
   def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.sf.raise(error)
 
   def fold[E, A, B](block: Raise[E] ?=> A)(onError: E => B)(onSuccess: A => B): B = {
-    given eff: Effect[TypedError[E]] = new Effect(new DefaultTypedError)
     try {
-      onSuccess(block)
+      onSuccess(handle(block).`with`(Raise.default))
     } catch {
       case Raised(e) => onError(e.asInstanceOf[E])
+    }
+  }
+
+  def default[E]: Handler[TypedError[E]] = new Handler[TypedError[E]] {
+    val unsafe: TypedError[E] = new TypedError[E] {
+      override def raise(e: => E): Nothing = throw Raised(e)
     }
   }
 
