@@ -15,6 +15,7 @@ import java.util.function.Consumer
 trait StructuredScope {
   def delay(duration: Duration): Unit
   def fork[A](name: String)(block: => A): Fiber[A]
+  def structured[A](program: Async ?=> A): A
 }
 
 trait Fiber[A] {
@@ -62,6 +63,21 @@ class JvmFiber[A](
 class JvmStructuredScope(
     private val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
 ) extends StructuredScope {
+
+  override def structured[A](program: Async ?=> A): A = {
+    val loomScope = new ShutdownOnFailure()
+    try {
+      val mainTask = loomScope.fork(() => {
+        scopes.addOne(Thread.currentThread().threadId -> loomScope)
+        program(using Effect(this))
+      })
+      loomScope.join().throwIfFailed(identity)
+      mainTask.get()
+    } finally {
+      loomScope.close()
+    }
+  }
+
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
   }
@@ -169,21 +185,8 @@ object Async {
   }
 
   def run[A](block: Async ?=> A): A = {
-    val loomScope = new ShutdownOnFailure()
-    try {
-      val mainTask = loomScope.fork(() => {
-        block(using
-          Effect(
-            JvmStructuredScope(
-              scala.collection.mutable.Map(Thread.currentThread().threadId -> loomScope)
-            )
-          )
-        )
-      })
-      loomScope.join().throwIfFailed(identity)
-      mainTask.get()
-    } finally {
-      loomScope.close()
-    }
+    Async.unsafe.sf.structured(block)
   }
+
+  val unsafe = new Effect[StructuredScope](new JvmStructuredScope(scala.collection.mutable.Map()))
 }
