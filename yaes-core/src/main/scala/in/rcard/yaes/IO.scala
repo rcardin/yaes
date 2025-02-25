@@ -8,7 +8,9 @@ import scala.util.Success
 import scala.util.Try
 import scala.util.Using
 
-class SideEffect(val es: ExecutorService)
+trait SideEffect {
+  def submit[A](task: => A): Try[A] // FIXME Maybe we can change with a custom type
+}
 
 type IO = Effect[SideEffect]
 
@@ -16,18 +18,21 @@ object IO {
   def apply[A](block: => A): IO ?=> A = block
 
   def run[A](block: IO ?=> A): Try[A] = {
-    // FIXME For now, we can create it here, but we want to be share it across all the IO instances
-    Using(Executors.newVirtualThreadPerTaskExecutor()) { executor =>
-      given se: Effect[SideEffect] = new Effect(new SideEffect(executor))
+    IO.unsafe.sf.submit(block(using IO.unsafe))
+  }
 
-      val futureResult = executor.submit(() => block(using se))
-      futureResult.get()
-    }.fold(
-      {
+  val unsafe: IO = new Effect(new SideEffect {
+
+    val es: ExecutorService = Executors.newVirtualThreadPerTaskExecutor()
+
+    override def submit[A](task: => A): Try[A] = {
+      val futureResult = es.submit(() => task)
+      try {
+        Success(futureResult.get())
+      } catch {
         case exex: ExecutionException => Failure(exex.getCause)
         case throwable                => Failure(throwable)
-      },
-      result => Success(result)
-    )
-  }
+      }
+    }
+  })
 }
