@@ -1,8 +1,6 @@
 package in.rcard.yaes
 
 import java.io.IOException
-import in.rcard.yaes.Effect.Handler
-import in.rcard.yaes.Effect.handle
 
 trait Read {
   def readLn()(using t: Raise[IOException]): String
@@ -16,18 +14,16 @@ object Input {
 
   def readLn()(using input: Input)(using t: Raise[IOException]): String = input.sf.readLn()
 
-  def run[A](block: Input ?=> A): A = handle(block).`with`(default)
+  def run[A](block: Input ?=> A): A = block(using Input.unsafe)
 
-  val default: Handler[Read] = new Handler[Read] {
-    val unsafe: Read = new Read {
-      override def readLn()(using t: Raise[IOException]): String = Raise {
-        try {
-          scala.io.StdIn.readLine()
-        } catch {
-          case e: IOException =>
-            Raise.raise(e)
-        }
+  val unsafe = new Effect(new Read {
+    override def readLn()(using t: Raise[IOException]): String = Raise {
+      try {
+        scala.io.StdIn.readLine()
+      } catch {
+        case e: IOException =>
+          Raise.raise(e)
       }
     }
-  }
+  })
 }
