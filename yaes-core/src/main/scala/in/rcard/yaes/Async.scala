@@ -1,21 +1,23 @@
 package in.rcard.yaes
 
-import java.util.concurrent.StructuredTaskScope
-import java.util.concurrent.StructuredTaskScope.{ShutdownOnFailure, Subtask}
-import scala.concurrent.duration.Duration
-import java.util.concurrent.ExecutionException
-import scala.concurrent.Promise
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Future
+import in.rcard.yaes.Effect.Handler
+
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedQueue
-import scala.collection.immutable.Stream.Cons
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Future
+import java.util.concurrent.StructuredTaskScope
+import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
+import java.util.concurrent.StructuredTaskScope.Subtask
 import java.util.function.Consumer
+import scala.collection.immutable.Stream.Cons
+import scala.concurrent.Promise
+import scala.concurrent.duration.Duration
 
 trait Async extends Effect {
   def delay(duration: Duration): Unit
   def fork[A](name: String)(block: => A): Fiber[A]
-  def structured[A](program: Async ?=> A): A
 }
 
 trait Fiber[A] {
@@ -61,22 +63,8 @@ class JvmFiber[A](
 }
 
 class JvmStructuredScope(
-    private val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
+    val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
 ) extends Async {
-
-  override def structured[A](program: Async ?=> A): A = {
-    val loomScope = new ShutdownOnFailure()
-    try {
-      val mainTask = loomScope.fork(() => {
-        scopes.addOne(Thread.currentThread().threadId -> loomScope)
-        program(using this)
-      })
-      loomScope.join().throwIfFailed(identity)
-      mainTask.get()
-    } finally {
-      loomScope.close()
-    }
-  }
 
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
@@ -182,9 +170,28 @@ object Async {
     promise.get()
   }
 
-  def run[A](block: Async ?=> A): A = {
-    Async.unsafe.structured(block)
+  def run[A](block: Async ?=> A): A =
+    Effect.handle(block)(using handler) `with` unsafe
+
+  val handler: Handler[JvmStructuredScope] = new Handler[JvmStructuredScope] {
+
+    override def handle[A](
+        program: (JvmStructuredScope) ?=> A
+    )(using async: JvmStructuredScope): A = {
+      val loomScope = new ShutdownOnFailure()
+      try {
+        val mainTask = loomScope.fork(() => {
+          async.scopes.addOne(Thread.currentThread().threadId -> loomScope)
+          program(using async)
+        })
+        loomScope.join().throwIfFailed(identity)
+        mainTask.get()
+      } finally {
+        loomScope.close()
+      }
+    }
+
   }
 
-  val unsafe = new JvmStructuredScope(scala.collection.mutable.Map())
+  def unsafe = new JvmStructuredScope(scala.collection.mutable.Map())
 }
