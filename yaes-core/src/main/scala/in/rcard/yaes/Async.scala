@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.immutable.Stream.Cons
 import java.util.function.Consumer
 
-trait StructuredScope {
+trait Async extends Effect {
   def delay(duration: Duration): Unit
   def fork[A](name: String)(block: => A): Fiber[A]
   def structured[A](program: Async ?=> A): A
@@ -62,14 +62,14 @@ class JvmFiber[A](
 
 class JvmStructuredScope(
     private val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
-) extends StructuredScope {
+) extends Async {
 
   override def structured[A](program: Async ?=> A): A = {
     val loomScope = new ShutdownOnFailure()
     try {
       val mainTask = loomScope.fork(() => {
         scopes.addOne(Thread.currentThread().threadId -> loomScope)
-        program(using Effect(this))
+        program(using this)
       })
       loomScope.join().throwIfFailed(identity)
       mainTask.get()
@@ -114,20 +114,18 @@ class JvmStructuredScope(
   }
 }
 
-type Async = Effect[StructuredScope]
-
 object Async {
   def apply[A](block: => A): Async ?=> A = block
 
   def delay(duration: Duration)(using async: Async): Unit = {
-    async.sf.delay(duration)
+    async.delay(duration)
   }
 
   def fork[A](name: String)(block: => A)(using async: Async): Fiber[A] =
-    async.sf.fork(name)(block)
+    async.fork(name)(block)
 
   def fork[A](block: => A)(using async: Async): Fiber[A] =
-    async.sf.fork(s"fiberb-${scala.util.Random.nextString(10)}")(block)
+    async.fork(s"fiberb-${scala.util.Random.nextString(10)}")(block)
 
   object TimedOut
   type TimedOut = TimedOut.type
@@ -185,8 +183,8 @@ object Async {
   }
 
   def run[A](block: Async ?=> A): A = {
-    Async.unsafe.sf.structured(block)
+    Async.unsafe.structured(block)
   }
 
-  val unsafe = new Effect[StructuredScope](new JvmStructuredScope(scala.collection.mutable.Map()))
+  val unsafe = new JvmStructuredScope(scala.collection.mutable.Map())
 }

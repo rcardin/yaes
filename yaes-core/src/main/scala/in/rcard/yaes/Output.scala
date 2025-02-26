@@ -1,30 +1,28 @@
 package in.rcard.yaes
 
-trait Print {
+trait Output extends Effect {
   def print(text: String): Unit
   def printLn(text: String): Unit
   def printErr(text: String): Unit
   def printErrLn(text: String): Unit
 }
 
-type Output = Effect[Print]
-
 object Output {
 
   def apply[A](block: => A)(using out: Output): A = block
 
-  def printLn(text: String)(using console: Output): Unit = console.sf.printLn(text)
+  def printLn(text: String)(using console: Output): Unit = console.printLn(text)
 
-  def print(text: String)(using console: Output): Unit = console.sf.print(text)
+  def print(text: String)(using console: Output): Unit = console.print(text)
 
-  def printErrLn(text: String)(using console: Output): Unit = console.sf.printErrLn(text)
+  def printErrLn(text: String)(using console: Output): Unit = console.printErrLn(text)
 
-  def printErr(text: String)(using console: Output): Unit = console.sf.printErr(text)
+  def printErr(text: String)(using console: Output): Unit = console.printErr(text)
 
   def run[A](block: Output ?=> A): A =
     block(using Output.unsafe)
 
-  val unsafe = new Effect(new Print {
+  val unsafe = new Output {
     override def printErr(text: String): Unit = scala.Console.err.print(text)
 
     override def print(text: String): Unit = scala.Console.print(text)
@@ -32,5 +30,5 @@ object Output {
     override def printErrLn(text: String): Unit = scala.Console.err.println(text)
 
     override def printLn(text: String): Unit = scala.Console.println(text)
-  })
+  }
 }

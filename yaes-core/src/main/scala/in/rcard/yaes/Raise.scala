@@ -5,21 +5,16 @@ import scala.util.control.ControlThrowable
 import scala.util.control.NoStackTrace
 import scala.util.control.NonFatal
 
-trait TypedError[-E] {
+trait Raise[-E] extends Effect {
   def raise(error: => E): Nothing
 }
 
-type Raise[E] = Effect[TypedError[E]]
-
 private[yaes] case class Raised[E](original: E) extends ControlThrowable with NoStackTrace
-
-private[yaes] class DefaultTypedError extends TypedError[Any]:
-  def raise(e: => Any): Nothing = throw Raised(e)
 
 object Raise {
   def apply[E, A](block: => A): Raise[E] ?=> A = block
 
-  def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.sf.raise(error)
+  def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.raise(error)
 
   def fold[E, A, B](block: Raise[E] ?=> A)(onError: E => B)(onSuccess: A => B): B = {
     try {
@@ -29,9 +24,9 @@ object Raise {
     }
   }
 
-  def unsafe[E] = new Effect(new TypedError[E] {
+  def unsafe[E] = new Raise[E] {
     override def raise(e: => E): Nothing = throw Raised(e)
-  })
+  }
 
   def run[E, A](block: Raise[E] ?=> A): A | E = fold(block)(identity)(identity)
 

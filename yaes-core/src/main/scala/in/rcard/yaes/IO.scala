@@ -8,20 +8,18 @@ import scala.util.Success
 import scala.util.Try
 import scala.util.Using
 
-trait SideEffect {
+trait IO extends Effect {
   def submit[A](task: => A): Try[A] // FIXME Maybe we can change with a custom type
 }
-
-type IO = Effect[SideEffect]
 
 object IO {
   def apply[A](block: => A): IO ?=> A = block
 
   def run[A](block: IO ?=> A): Try[A] = {
-    IO.unsafe.sf.submit(block(using IO.unsafe))
+    IO.unsafe.submit(block(using IO.unsafe))
   }
 
-  val unsafe: IO = new Effect(new SideEffect {
+  val unsafe: IO = new IO {
 
     val es: ExecutorService = Executors.newVirtualThreadPerTaskExecutor()
 
@@ -34,5 +32,5 @@ object IO {
         case throwable                => Failure(throwable)
       }
     }
-  })
+  }
 }

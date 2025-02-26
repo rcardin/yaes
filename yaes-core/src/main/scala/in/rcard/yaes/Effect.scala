@@ -6,9 +6,9 @@ package in.rcard.yaes
   * @tparam F
   *   The type of the side-effecting operation.
   */
-class Effect[F](val sf: F)
+trait Effect
 
-extension [F, A](inline eff: Effect[F] ?=> A) {
-  inline def map[B](inline f: A => B): Effect[F] ?=> B                   = eff.flatMap(a => f(a))
-  inline def flatMap[B](inline f: A => Effect[F] ?=> B): Effect[F] ?=> B = f(eff)
+extension [F <: Effect, A](inline eff: F ?=> A) {
+  inline def flatMap[B](inline f: A => F ?=> B): F ?=> B = f(eff)
+  inline def map[B](inline f: A => B): F ?=> B           = eff.flatMap(a => f(a))
 }
