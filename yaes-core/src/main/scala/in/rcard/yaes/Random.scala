@@ -17,14 +17,16 @@ object Random {
   def nextLong(using r: Random): Long       = r.nextLong()
 
   def run[A](block: Random ?=> A): A = {
-    block(using Random.unsafe)
+    val handler = new Effect.Handler[Random, A, A] {
+      override def handle(program: Random ?=> A): A = program(using Random.unsafe)
+    }
+    Effect.handle(block)(using handler)
   }
 
-  val unsafe: Random = new Random {
+  private val unsafe: Random = new Random {
     override def nextInt(): Int         = scala.util.Random.nextInt()
     override def nextLong(): Long       = scala.util.Random.nextLong()
     override def nextBoolean(): Boolean = scala.util.Random.nextBoolean()
     override def nextDouble(): Double   = scala.util.Random.nextDouble()
-
   }
 }

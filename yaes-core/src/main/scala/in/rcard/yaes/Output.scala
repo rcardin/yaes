@@ -19,10 +19,14 @@ object Output {
 
   def printErr(text: String)(using console: Output): Unit = console.printErr(text)
 
-  def run[A](block: Output ?=> A): A =
-    block(using Output.unsafe)
+  def run[A](block: Output ?=> A): A = {
+    val handler = new Effect.Handler[Output, A, A] {
+      override def handle(program: Output ?=> A): A = program(using Output.unsafe)
+    }
+    Effect.handle(block)(using handler)
+  }
 
-  val unsafe = new Output {
+  private val unsafe = new Output {
     override def printErr(text: String): Unit = scala.Console.err.print(text)
 
     override def print(text: String): Unit = scala.Console.print(text)

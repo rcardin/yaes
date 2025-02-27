@@ -12,7 +12,12 @@ object Input {
 
   def readLn()(using input: Input)(using t: Raise[IOException]): String = input.readLn()
 
-  def run[A](block: Input ?=> A): A = block(using Input.unsafe)
+  def run[A](block: Input ?=> A): A = {
+    val handler = new Effect.Handler[Input, A, A] {
+      override def handle(program: Input ?=> A): A = program(using Input.unsafe)
+    }
+    Effect.handle(block)(using handler)
+  }
 
   val unsafe = new Input {
     override def readLn()(using t: Raise[IOException]): String = Raise {
