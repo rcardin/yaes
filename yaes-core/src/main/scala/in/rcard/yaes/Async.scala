@@ -170,28 +170,24 @@ object Async {
     promise.get()
   }
 
-  def run[A](block: Async ?=> A): A =
-    Effect.handle(block)(using handler) `with` unsafe
-
-  val handler: Handler[JvmStructuredScope] = new Handler[JvmStructuredScope] {
-
-    override def handle[A](
-        program: (JvmStructuredScope) ?=> A
-    )(using async: JvmStructuredScope): A = {
-      val loomScope = new ShutdownOnFailure()
-      try {
-        val mainTask = loomScope.fork(() => {
-          async.scopes.addOne(Thread.currentThread().threadId -> loomScope)
-          program(using async)
-        })
-        loomScope.join().throwIfFailed(identity)
-        mainTask.get()
-      } finally {
-        loomScope.close()
+  def run[A](block: Async ?=> A): A = {
+    val handler = new Effect.Handler[JvmStructuredScope, A, A] {
+      override def handle(program: JvmStructuredScope ?=> A): A = {
+        val async     = new JvmStructuredScope(scala.collection.mutable.Map())
+        val loomScope = new ShutdownOnFailure()
+        try {
+          val mainTask = loomScope.fork(() => {
+            async.scopes.addOne(Thread.currentThread().threadId -> loomScope)
+            program(using async)
+          })
+          loomScope.join().throwIfFailed(identity)
+          mainTask.get()
+        } finally {
+          loomScope.close()
+        }
       }
     }
 
+    Effect.handle(block)(using handler)
   }
-
-  def unsafe = new JvmStructuredScope(scala.collection.mutable.Map())
 }

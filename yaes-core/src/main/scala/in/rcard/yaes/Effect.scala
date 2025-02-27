@@ -15,17 +15,11 @@ extension [F <: Effect, A](inline eff: F ?=> A) {
 
 object Effect {
 
-  def handle[F <: Effect, A](program: F ?=> A)(using handler: Handler[F]) = new WithEffect[F, A] {
-    override def `with`(effect: F): A = {
-      handler.handle(program)(using effect)
-    }
+  def handle[F <: Effect, A, B](program: F ?=> A)(using handler: Handler[F, A, B]): B = {
+    handler.handle(program)
   }
 
-  trait Handler[F <: Effect] {
-    def handle[A](program: F ?=> A)(using eff: F): A
-  }
-
-  trait WithEffect[F <: Effect, A] {
-    def `with`(effect: F): A
+  trait Handler[F <: Effect, A, B] {
+    def handle(program: F ?=> A): B
   }
 }
