@@ -8,15 +8,47 @@ import scala.util.Success
 import scala.util.Try
 import scala.util.Using
 
+/** The `IO` effect represents a side-effecting operation that can be run in a controlled
+  * environment. This effect is useful to represent operations that can fail with uncotrolled
+  * exceptions.
+  */
 trait IO extends Effect {
-  def submit[A](task: => A): Try[A] // FIXME Maybe we can change with a custom type
+
+  /** Runs the given side-effecting operation in a controlled environment.
+    *
+    * @param program
+    *   The side-effecting operation to run
+    * @tparam A
+    *   The result type of the operation
+    * @return
+    *   A `Try` with the result of the operation. If the operation fails, the `Try` will contain the
+    *   exception that caused the failure.
+    */
+  def submit[A](program: => A): Try[A] // FIXME Maybe we can change with a custom type
 }
 
 object IO {
-  def apply[A](block: => A): IO ?=> A = block
+  /** Lifts a side-effecting operation into the `IO` effect.
+    *
+    * @param program
+    *   The side-effecting operation to lift
+    * @tparam A
+    *   The result type of the operation
+    * @return
+    *   The side-effecting operation lifted into the `IO` effect
+    */
+  def apply[A](program: => A): IO ?=> A = program
 
-  inline def run[A](block: IO ?=> A): Try[A] = {
-    Effect.handle(block)(using handler)
+  /** Runs the given side-effecting operation in a controlled environment.
+    *
+    * @param program
+    *   The side-effecting operation to run
+    * @return
+    *   A `Try` with the result of the operation. If the operation fails, the `Try` will contain the
+    *   exception that caused the failure.
+    */
+  inline def run[A](program: IO ?=> A): Try[A] = {
+    Effect.handle(program)(using handler)
   }
 
   def handler[A] = new Effect.Handler[IO, A, Try[A]] {
@@ -25,7 +57,11 @@ object IO {
     }
   }
 
-  val unsafe: IO = new IO {
+  /** 
+   * The unsafe implementation of the `IO` effect. This implementation runs the side-effecting
+   * operations in a virtual thread per task executor.
+   */
+  private val unsafe: IO = new IO {
 
     val es: ExecutorService = Executors.newVirtualThreadPerTaskExecutor()
 
