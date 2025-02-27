@@ -15,13 +15,14 @@ trait IO extends Effect {
 object IO {
   def apply[A](block: => A): IO ?=> A = block
 
-  def run[A](block: IO ?=> A): Try[A] = {
-    val handler = new Effect.Handler[IO, A, Try[A]] {
-      override def handle(program: IO ?=> A): Try[A] = {
-        IO.unsafe.submit(program(using IO.unsafe))
-      }
-    }
+  inline def run[A](block: IO ?=> A): Try[A] = {
     Effect.handle(block)(using handler)
+  }
+
+  def handler[A] = new Effect.Handler[IO, A, Try[A]] {
+    override def handle(program: IO ?=> A): Try[A] = {
+      IO.unsafe.submit(program(using IO.unsafe))
+    }
   }
 
   val unsafe: IO = new IO {

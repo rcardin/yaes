@@ -170,9 +170,13 @@ object Async {
     promise.get()
   }
 
-  def run[A](block: Async ?=> A): A = {
-    val handler = new Effect.Handler[JvmStructuredScope, A, A] {
-      override def handle(program: JvmStructuredScope ?=> A): A = {
+  inline def run[A](block: Async ?=> A): A = {
+    Effect.handle(block)(using handler)
+  }
+
+  def handler[A]: Effect.Handler[JvmStructuredScope, A, A] =
+    new Effect.Handler[JvmStructuredScope, A, A] {
+      override inline def handle(program: JvmStructuredScope ?=> A): A = {
         val async     = new JvmStructuredScope(scala.collection.mutable.Map())
         val loomScope = new ShutdownOnFailure()
         try {
@@ -187,7 +191,4 @@ object Async {
         }
       }
     }
-
-    Effect.handle(block)(using handler)
-  }
 }
