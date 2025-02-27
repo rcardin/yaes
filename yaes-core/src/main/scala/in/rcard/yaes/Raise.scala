@@ -17,13 +17,19 @@ object Raise {
   def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.raise(error)
 
   def fold[E, A, B](block: Raise[E] ?=> A)(onError: E => B)(onSuccess: A => B): B = {
-    boundary {
-      given eff: Raise[E] = new Raise[E] {
-        def raise(error: => E): Nothing =
-          break(onError(error))
+    val handler = new Effect.Handler[Raise[E], A, B] {
+
+      override def handle(program: (Raise[E]) ?=> A): B = {
+        boundary {
+          given eff: Raise[E] = new Raise[E] {
+            def raise(error: => E): Nothing =
+              break(onError(error))
+          }
+          onSuccess(block)
+        }
       }
-      onSuccess(block)
     }
+    Effect.handle(block)(using handler)
   }
 
   def run[E, A](block: Raise[E] ?=> A): A | E = fold(block)(identity)(identity)
