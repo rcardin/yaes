@@ -4,12 +4,12 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 import scala.util.control.NoStackTrace
 import scala.util.control.NonFatal
+import scala.util.boundary.break
+import scala.util.boundary
 
 trait Raise[-E] extends Effect {
   def raise(error: => E): Nothing
 }
-
-private[yaes] case class Raised[E](original: E) extends ControlThrowable with NoStackTrace
 
 object Raise {
   def apply[E, A](block: => A): Raise[E] ?=> A = block
@@ -17,15 +17,13 @@ object Raise {
   def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.raise(error)
 
   def fold[E, A, B](block: Raise[E] ?=> A)(onError: E => B)(onSuccess: A => B): B = {
-    try {
-      onSuccess(block(using Raise.unsafe))
-    } catch {
-      case Raised(e) => onError(e.asInstanceOf[E])
+    boundary {
+      given eff: Raise[E] = new Raise[E] {
+        def raise(error: => E): Nothing =
+          break(onError(error))
+      }
+      onSuccess(block)
     }
-  }
-
-  def unsafe[E] = new Raise[E] {
-    override def raise(e: => E): Nothing = throw Raised(e)
   }
 
   def run[E, A](block: Raise[E] ?=> A): A | E = fold(block)(identity)(identity)
