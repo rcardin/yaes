@@ -3,22 +3,22 @@ package in.rcard.yaes
 /** Type class representing an effectful computation */
 trait Effect
 
-extension [F <: Effect, A](inline eff: F ?=> A) {
-
-  /** Sequences the given effectful computation `eff` with the one in input
-    * @param f
-    *   The effectful computation to be sequenced after `eff`
-    */
-  inline def flatMap[B](inline f: A => F ?=> B): F ?=> B = f(eff)
-
-  /** Maps the result of the effectful computation `eff`
-    * @param f
-    *   The function to be applied to the result of the effectful computation
-    */
-  inline def map[B](inline f: A => B): F ?=> B = eff.flatMap(a => f(a))
-}
-
 object Effect {
+
+  extension [F <: Effect, A](inline eff: F ?=> A) {
+
+    /** Sequences the given effectful computation `eff` with the one in input
+      * @param f
+      *   The effectful computation to be sequenced after `eff`
+      */
+    inline def flatMap[B](inline f: A => F ?=> B): F ?=> B = f(eff)
+
+    /** Maps the result of the effectful computation `eff`
+      * @param f
+      *   The function to be applied to the result of the effectful computation
+      */
+    inline def map[B](inline f: A => B): F ?=> B = eff.flatMap(a => f(a))
+  }
 
   /** Handles the effectful computation in input using the given handler
     * @param program

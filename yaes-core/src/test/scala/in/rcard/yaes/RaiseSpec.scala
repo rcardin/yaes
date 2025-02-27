@@ -1,8 +1,10 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Effect.*
+import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.TryValues.*
+
 import java.io.IOException
 
 class RaiseSpec extends AnyFlatSpec with Matchers {
