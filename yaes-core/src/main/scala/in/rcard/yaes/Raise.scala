@@ -240,7 +240,7 @@ object Raise {
   def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
     if !condition then Raise.raise(error)
 
-  /** Catches an exception and raises an error.
+  /** Catches an exception and raises an error of type `E`. For other exceptions, the exception is rethrown.  
     *
     * Example:
     * {{{
@@ -281,7 +281,7 @@ object Raise {
     * }}}
     *
     * @param block the computation that may raise an error  
-    * @tparam E the type of error that can be raised  
+    * @tparam E the type of exception to catch and lift to an error 
     * @tparam A the type of the result of the block
     */
   def catching[E <: Throwable, A](block: => A)(using r: Raise[E], E: ClassTag[E]): A =
