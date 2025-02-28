@@ -14,7 +14,7 @@ class IOSpec extends AnyFlatSpec with Matchers {
 
     val fortyThree: IO ?=> Int = fortyTwo + 1
 
-    IO.run(fortyThree).success.value shouldBe 43
+    IO.runBlocking(fortyThree).success.value shouldBe 43
   }
 
   it should "be able to run a side-effecting operation that throws an exception" in {
@@ -24,7 +24,7 @@ class IOSpec extends AnyFlatSpec with Matchers {
 
     val fortyThree: IO ?=> Int = fortyTwo + 1
 
-    val actualResult = IO.run(fortyThree)
+    val actualResult = IO.runBlocking(fortyThree)
 
     actualResult.failure.exception should have message "Boom!"
   }
@@ -35,6 +35,6 @@ class IOSpec extends AnyFlatSpec with Matchers {
       b <- IO(1)
     } yield a + b
 
-    IO.run(fortyThree).success.value shouldBe 43
+    IO.runBlocking(fortyThree).success.value shouldBe 43
   }
 }

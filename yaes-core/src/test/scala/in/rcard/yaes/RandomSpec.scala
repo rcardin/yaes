@@ -66,6 +66,6 @@ class RandomSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.run { Random.run { actualResult } }.success.value shouldBe a[Int]
+    IO.runBlocking { Random.run { actualResult } }.success.value shouldBe a[Int]
   }
 }

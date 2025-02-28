@@ -46,7 +46,7 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.run { Raise.run { actualResult } }.success.value shouldBe "Boom!"
+    IO.runBlocking { Raise.run { actualResult } }.success.value shouldBe "Boom!"
   }
 
   it should "be able to provide a default value if an error is risen" in {
