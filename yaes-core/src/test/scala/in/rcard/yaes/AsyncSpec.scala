@@ -11,6 +11,7 @@ import scala.util.Try
 import java.util.concurrent.CancellationException
 import org.scalatest.EitherValues
 import in.rcard.yaes.Async.TimedOut
+import in.rcard.yaes.Async.Cancelled
 
 class AsyncSpec extends AnyFlatSpec with Matchers {
   "The Async effect" should "wait the completion of all the forked fibers" in {
