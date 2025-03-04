@@ -6,8 +6,9 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
+import org.scalatest.flatspec.AsyncFlatSpec
 
-class RaiseSpec extends AnyFlatSpec with Matchers {
+class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   "Raise effect" should "be able to raise a typed error" in {
     val actualResult = Raise.run {
@@ -46,7 +47,9 @@ class RaiseSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.runBlocking { Raise.run { actualResult } }.success.value shouldBe "Boom!"
+    for {
+      actualResult <- IO.run { Raise.run { actualResult } }
+    } yield actualResult shouldBe "Boom!"
   }
 
   it should "be able to provide a default value if an error is risen" in {

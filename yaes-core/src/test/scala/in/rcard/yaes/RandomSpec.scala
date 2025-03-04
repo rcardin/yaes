@@ -4,8 +4,9 @@ import in.rcard.yaes.Effect.*
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.flatspec.AsyncFlatSpec
 
-class RandomSpec extends AnyFlatSpec with Matchers {
+class RandomSpec extends AsyncFlatSpec with Matchers {
 
   "The Random effect" should "be able to generate a random integer" in {
     val randomInt: Random ?=> Int = Random {
@@ -66,6 +67,8 @@ class RandomSpec extends AnyFlatSpec with Matchers {
       }
     } yield result
 
-    IO.runBlocking { Random.run { actualResult } }.success.value shouldBe a[Int]
+    for {
+      actualResult <- IO.run { Random.run { actualResult } }
+    } yield actualResult shouldBe a[Int]
   }
 }

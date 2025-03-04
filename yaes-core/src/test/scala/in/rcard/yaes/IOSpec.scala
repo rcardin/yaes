@@ -4,8 +4,10 @@ import in.rcard.yaes.Effect.*
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.flatspec.AsyncFlatSpec
+import org.scalatest.concurrent.Futures
 
-class IOSpec extends AnyFlatSpec with Matchers {
+class IOSpec extends AsyncFlatSpec with Matchers {
 
   "The IO effect" should "be able to run a side-effecting operation" in {
     val fortyTwo: IO ?=> Int = IO {
@@ -14,7 +16,9 @@ class IOSpec extends AnyFlatSpec with Matchers {
 
     val fortyThree: IO ?=> Int = fortyTwo + 1
 
-    IO.runBlocking(fortyThree).success.value shouldBe 43
+    for {
+      actualResult <- IO.run(fortyThree)
+    } yield actualResult shouldBe 43
   }
 
   it should "be able to run a side-effecting operation that throws an exception" in {
@@ -24,9 +28,9 @@ class IOSpec extends AnyFlatSpec with Matchers {
 
     val fortyThree: IO ?=> Int = fortyTwo + 1
 
-    val actualResult = IO.runBlocking(fortyThree)
-
-    actualResult.failure.exception should have message "Boom!"
+    for {
+      actualResult <- IO.run(fortyThree).failed
+    } yield actualResult should have message "Boom!"
   }
 
   it should "be use map and flatMap from Effect type" in {
@@ -35,6 +39,8 @@ class IOSpec extends AnyFlatSpec with Matchers {
       b <- IO(1)
     } yield a + b
 
-    IO.runBlocking(fortyThree).success.value shouldBe 43
+    for {
+      actualResult <- IO.run(fortyThree)
+    } yield actualResult shouldBe 43
   }
 }
