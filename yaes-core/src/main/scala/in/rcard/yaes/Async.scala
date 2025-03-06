@@ -1,5 +1,6 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Effect.Handler
 import in.rcard.yaes.Raise.Raise
 
@@ -15,50 +16,8 @@ import java.util.function.Consumer
 import scala.collection.immutable.Stream.Cons
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
+
 import Async.Cancelled
-
-/** A trait representing asynchronous computations.
-  *
-  * The `Async` trait provides primitives for working with asynchronous operations, including
-  * delaying execution and forking concurrent computations.
-  *
-  * Example:
-  * {{{
-  * def asyncOperation(using async: Async): Unit = {
-  *   // Delay execution for 1 second
-  *   async.delay(Duration(1, TimeUnit.SECONDS))
-  *
-  *   // Fork a new computation
-  *   val fiber = async.fork("computation") {
-  *     // Some long-running task
-  *     42
-  *   }
-  *
-  *   // Join the fiber to wait for completion and get the result
-  *   fiber.value
-  * }
-  * }}}
-  */
-trait Async extends Effect {
-
-  /** Delays the execution for the specified duration.
-    *
-    * @param duration
-    *   the time to delay the execution
-    */
-  def delay(duration: Duration): Unit
-
-  /** Creates a new fiber executing the given block of code.
-    *
-    * @param name
-    *   the name of the fiber
-    * @param block
-    *   the code to execute asynchronously
-    * @return
-    *   a [[Fiber]] representing the forked computation
-    */
-  def fork[A](name: String)(block: => A): Fiber[A]
-}
 
 /** Represents an asynchronous computation that can be controlled.
   *
@@ -188,7 +147,7 @@ class JvmFiber[A](
   */
 class JvmStructuredScope(
     val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
-) extends Async {
+) extends Async.Unsafe {
 
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
@@ -260,6 +219,8 @@ class JvmStructuredScope(
   */
 object Async {
 
+  type Async = Yaes[Async.Unsafe]
+
   /** A type representing a cancelled computation.
     *
     * This type is used to signal that a computation was cancelled.
@@ -291,7 +252,7 @@ object Async {
     *   the async context
     */
   def delay(duration: Duration)(using async: Async): Unit = {
-    async.delay(duration)
+    async.unsafe.delay(duration)
   }
 
   /** Creates a new fiber with a specified name.
@@ -306,7 +267,7 @@ object Async {
     *   a [[Fiber]] representing the forked computation
     */
   def fork[A](name: String)(block: => A)(using async: Async): Fiber[A] =
-    async.fork(name)(block)
+    async.unsafe.fork(name)(block)
 
   /** Creates a new fiber with an automatically generated name.
     *
@@ -318,7 +279,7 @@ object Async {
     *   a [[Fiber]] representing the forked computation
     */
   def fork[A](block: => A)(using async: Async): Fiber[A] =
-    async.fork(s"fiber-${scala.util.Random.nextString(10)}")(block)
+    async.unsafe.fork(s"fiber-${scala.util.Random.nextString(10)}")(block)
 
   /** Executes a block of code with a timeout.
     *
@@ -473,18 +434,18 @@ object Async {
     *   the result of the computation
     */
   inline def run[A](block: Async ?=> A): A = {
-    Effect.handle(block)(using handler)
+    Yaes.handle(block)(using handler)
   }
 
-  def handler[A]: Effect.Handler[JvmStructuredScope, A, A] =
-    new Effect.Handler[JvmStructuredScope, A, A] {
-      override inline def handle(program: JvmStructuredScope ?=> A): A = {
+  def handler[A]: Yaes.Handler[JvmStructuredScope, A, A] =
+    new Yaes.Handler[JvmStructuredScope, A, A] {
+      override inline def handle(program: Yaes[JvmStructuredScope] ?=> A): A = {
         val async     = new JvmStructuredScope(scala.collection.mutable.Map())
         val loomScope = new ShutdownOnFailure()
         try {
           val mainTask = loomScope.fork(() => {
             async.scopes.addOne(Thread.currentThread().threadId -> loomScope)
-            program(using async)
+            program(using new Yaes(async))
           })
           loomScope.join().throwIfFailed(identity)
           mainTask.get()
@@ -493,4 +454,47 @@ object Async {
         }
       }
     }
+
+  /** A trait representing asynchronous computations.
+    *
+    * The `Async` trait provides primitives for working with asynchronous operations, including
+    * delaying execution and forking concurrent computations.
+    *
+    * Example:
+    * {{{
+    * def asyncOperation(using async: Async): Unit = {
+    *   // Delay execution for 1 second
+    *   async.delay(Duration(1, TimeUnit.SECONDS))
+    *
+    *   // Fork a new computation
+    *   val fiber = async.fork("computation") {
+    *     // Some long-running task
+    *     42
+    *   }
+    *
+    *   // Join the fiber to wait for completion and get the result
+    *   fiber.value
+    * }
+    * }}}
+    */
+  trait Unsafe extends Eff {
+
+    /** Delays the execution for the specified duration.
+      *
+      * @param duration
+      *   the time to delay the execution
+      */
+    def delay(duration: Duration): Unit
+
+    /** Creates a new fiber executing the given block of code.
+      *
+      * @param name
+      *   the name of the fiber
+      * @param block
+      *   the code to execute asynchronously
+      * @return
+      *   a [[Fiber]] representing the forked computation
+      */
+    def fork[A](name: String)(block: => A): Fiber[A]
+  }
 }
