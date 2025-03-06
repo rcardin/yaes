@@ -1,7 +1,5 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Yaes.Effect
-
 /** Companion object for the Random effect providing utility methods and handlers.
   *
   * This object contains:
@@ -86,7 +84,7 @@ object Random {
     * This trait is unsafe because it provides direct access to the random number generator
     * implementation.
     */
-  trait Unsafe extends Effect {
+  trait Unsafe {
 
     /** Generates a random integer.
       *

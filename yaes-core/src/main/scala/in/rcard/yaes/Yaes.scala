@@ -1,15 +1,18 @@
 package in.rcard.yaes
 
-class Yaes[+F <: Yaes.Effect](val unsafe: F)
+/** Represents a capability built on top af an effect `F`. The effect is represented by the `unsafe`
+  * field, and it should not be handled directly but throught the [[Yaes.Handler]] interface.
+  *
+  * @param unsafe
+  *   An instance of the effect `F`
+  * @tparam F
+  *   The effect type
+  */
+class Yaes[F](val unsafe: F)
 
 object Yaes {
 
-  /** Represents an effect. An Effect is an unpredictable interaction, usually with an external
-    * system.
-    */
-  trait Effect
-
-  extension [F <: Effect, A](eff: Yaes[F] ?=> A) {
+  extension [F, A](eff: Yaes[F] ?=> A) {
     inline def map[B](inline f: A => B): Yaes[F] ?=> B                 = eff.flatMap(a => f(a))
     inline def flatMap[B](inline f: A => Yaes[F] ?=> B): Yaes[F] ?=> B = f(eff)
   }
@@ -26,14 +29,14 @@ object Yaes {
     * @tparam B
     *   The result type of the effectful computation after the handling
     */
-  inline def handle[F <: Effect, A, B](
+  inline def handle[F, A, B](
       inline program: Yaes[F] ?=> A
   )(using inline handler: Handler[F, A, B]): B = {
     handler.handle(program)
   }
 
   /** Represents a handler for an effectful computation */
-  trait Handler[F <: Effect, A, B] {
+  trait Handler[F, A, B] {
 
     /** Handles the effectful computation in input producing a result
       * @param program

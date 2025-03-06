@@ -1,7 +1,6 @@
 package in.rcard.yaes
 
 import in.rcard.yaes.Raise.Raise
-import in.rcard.yaes.Yaes.Effect
 
 import java.io.IOException
 
@@ -93,7 +92,7 @@ object Input {
     *   output.println(s"Hello, $name!")
     * }}}
     */
-  trait Unsafe extends Effect {
+  trait Unsafe {
     def readLn()(using t: Raise[IOException]): String
   }
 }

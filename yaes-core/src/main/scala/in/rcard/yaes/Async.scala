@@ -2,7 +2,6 @@ package in.rcard.yaes
 
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
-import in.rcard.yaes.Yaes.Effect
 
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -437,9 +436,9 @@ object Async {
     Yaes.handle(block)(using handler)
   }
 
-  def handler[A]: Yaes.Handler[JvmStructuredScope, A, A] =
-    new Yaes.Handler[JvmStructuredScope, A, A] {
-      override inline def handle(program: Yaes[JvmStructuredScope] ?=> A): A = {
+  def handler[A]: Yaes.Handler[Async.Unsafe, A, A] =
+    new Yaes.Handler[Async.Unsafe, A, A] {
+      override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
         val async     = new JvmStructuredScope(scala.collection.mutable.Map())
         val loomScope = new ShutdownOnFailure()
         try {
@@ -477,7 +476,7 @@ object Async {
     * }
     * }}}
     */
-  trait Unsafe extends Effect {
+  trait Unsafe {
 
     /** Delays the execution for the specified duration.
       *

@@ -1,7 +1,5 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Yaes.Effect
-
 import scala.reflect.ClassTag
 import scala.util.boundary
 import scala.util.boundary.break
@@ -34,7 +32,7 @@ import scala.util.control.NonFatal
   */
 object Raise {
 
-  type Raise[-E] = Yaes[Raise.Unsafe[E]]
+  type Raise[E] = Yaes[Raise.Unsafe[E]]
 
   /** Lifts a block of code that may use the Raise effect.
     *
@@ -346,7 +344,7 @@ object Raise {
     }
 
   /** A capability that represents the ability to raise an error of type `E`. */
-  trait Unsafe[-E] extends Effect {
+  trait Unsafe[-E] {
 
     /** Raises an error of type `E`.
       *

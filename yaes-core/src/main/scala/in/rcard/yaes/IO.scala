@@ -1,7 +1,5 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Yaes.Effect
-
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.concurrent.ExecutorService
@@ -72,7 +70,7 @@ object IO {
   inline def runBlocking[A](
       timeout: Duration
   )(program: IO ?=> A)(implicit ec: ExecutionContext): Try[A] = {
-    Yaes.handle(program)(using blockingHandler1(timeout))
+    Yaes.handle(program)(using blockingHandler(timeout))
   }
 
   /** Runs the given side-effecting operation in a controlled environment. The method does not block
@@ -84,23 +82,23 @@ object IO {
     *   A `Future` with the result of the operation.
     */
   inline def run[A](program: IO ?=> A)(implicit ec: ExecutionContext): Future[A] = {
-    Yaes.handle(program)(using handler1)
+    Yaes.handle(program)(using handler)
   }
 
-  def blockingHandler1[A](timeout: Duration)(implicit ec: ExecutionContext) =
+  def blockingHandler[A](timeout: Duration)(implicit ec: ExecutionContext) =
     new Yaes.Handler[IO.Unsafe, A, Try[A]] {
       override def handle(program: Yaes[IO.Unsafe] ?=> A): Try[A] = {
-        val futureResult: Future[A] = handler1.handle(program)
+        val futureResult: Future[A] = handler.handle(program)
         Try {
           Await.result(futureResult, timeout)
         }
       }
     }
 
-  def handler1[A](implicit ec: ExecutionContext) = new Yaes.Handler[IO.Unsafe, A, Future[A]] {
+  def handler[A](implicit ec: ExecutionContext) = new Yaes.Handler[IO.Unsafe, A, Future[A]] {
     override def handle(program: Yaes[IO.Unsafe] ?=> A): Future[A] = {
-      val executor = IO.unsafe1.executor
-      executor.submit(program(using new Yaes(IO.unsafe1))).transform {
+      val executor = IO.unsafe.executor
+      executor.submit(program(using new Yaes(IO.unsafe))).transform {
         case s @ Success(_) => s
         case Failure(ex) =>
           ex match {
@@ -114,13 +112,13 @@ object IO {
   /** The unsafe implementation of the `IO` effect. This implementation runs the side-effecting
     * operations in a Java virtual thread per task executor.
     */
-  private val unsafe1 = new Unsafe {
+  private val unsafe = new Unsafe {
     override val executor: Executor = new JvmExecutor()
   }
 
   /** The unsafe flavor of the `IO` effect.
     */
-  trait Unsafe extends Effect {
+  trait Unsafe {
     val executor: Executor
   }
 }
