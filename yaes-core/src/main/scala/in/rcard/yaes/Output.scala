@@ -1,5 +1,6 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Yaes.Effect
 
 /** Companion object providing convenient methods for working with the Output effect.
   *
@@ -122,7 +123,7 @@ object Output {
     * manner. Following the capability-passing style pattern, programs requiring output operations
     * must receive an instance of `Output` through context parameters.
     */
-  trait Unsafe extends Eff {
+  trait Unsafe extends Effect {
 
     /** Prints `text` to the console.
       *

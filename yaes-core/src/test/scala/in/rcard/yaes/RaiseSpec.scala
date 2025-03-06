@@ -1,14 +1,13 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Effect.*
+import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Yaes.*
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
-import org.scalatest.flatspec.AsyncFlatSpec
-
-import in.rcard.yaes.Random.Random
 
 class RaiseSpec extends AsyncFlatSpec with Matchers {
 

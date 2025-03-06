@@ -1,11 +1,13 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Yaes.Effect
+
 import scala.reflect.ClassTag
+import scala.util.boundary
+import scala.util.boundary.break
 import scala.util.control.ControlThrowable
 import scala.util.control.NoStackTrace
 import scala.util.control.NonFatal
-import scala.util.boundary.break
-import scala.util.boundary
 
 /** A capability that represents the ability to raise an error of type `E`.
   *
@@ -344,7 +346,7 @@ object Raise {
     }
 
   /** A capability that represents the ability to raise an error of type `E`. */
-  trait Unsafe[-E] extends Eff {
+  trait Unsafe[-E] extends Effect {
 
     /** Raises an error of type `E`.
       *

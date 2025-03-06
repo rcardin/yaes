@@ -1,20 +1,21 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Yaes.Effect
+
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionException
+import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.jdk.FutureConverters.*
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 import scala.util.Using
-import scala.concurrent.Future
-import scala.jdk.FutureConverters._
-import java.util.concurrent.CompletableFuture
-import scala.concurrent.Await
-import java.util.concurrent.CompletionException
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext
-
 
 /** The executor service used to run the side-effecting operation. */
 trait Executor {
@@ -110,7 +111,7 @@ object IO {
     }
   }
 
-   /** The unsafe implementation of the `IO` effect. This implementation runs the side-effecting
+  /** The unsafe implementation of the `IO` effect. This implementation runs the side-effecting
     * operations in a Java virtual thread per task executor.
     */
   private val unsafe1 = new Unsafe {
@@ -119,7 +120,7 @@ object IO {
 
   /** The unsafe flavor of the `IO` effect.
     */
-  trait Unsafe extends Eff {
+  trait Unsafe extends Effect {
     val executor: Executor
   }
 }

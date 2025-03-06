@@ -1,8 +1,8 @@
 package in.rcard.yaes
 
 import in.rcard.yaes.Async.Async
-import in.rcard.yaes.Effect.Handler
 import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Yaes.Effect
 
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -477,7 +477,7 @@ object Async {
     * }
     * }}}
     */
-  trait Unsafe extends Eff {
+  trait Unsafe extends Effect {
 
     /** Delays the execution for the specified duration.
       *
