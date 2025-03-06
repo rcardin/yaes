@@ -1,39 +1,5 @@
 package in.rcard.yaes
 
-/** A capability trait representing random number generation effects. It provides basic random
-  * number generation operations that can be used in effectful computations.
-  */
-trait Random extends Effect {
-
-  /** Generates a random integer.
-    *
-    * @return
-    *   A random integer
-    */
-  def nextInt(): Int
-
-  /** Generates a random boolean.
-    *
-    * @return
-    *   A random boolean
-    */
-  def nextBoolean(): Boolean
-
-  /** Generates a random double.
-    *
-    * @return
-    *   A random double
-    */
-  def nextDouble(): Double
-
-  /** Generates a random long.
-    *
-    * @return
-    *   A random long
-    */
-  def nextLong(): Long
-}
-
 /** Companion object for the Random effect providing utility methods and handlers.
   *
   * This object contains:
@@ -42,6 +8,8 @@ trait Random extends Effect {
   *   - A handler implementation to run Random effects
   */
 object Random {
+
+  type Random = Yaes[Random.Unsafe]
 
   /** Creates a computation that depends on the Random capability.
     *
@@ -61,7 +29,7 @@ object Random {
     * @return
     *   A random integer
     */
-  def nextInt(using r: Random): Int = r.nextInt()
+  def nextInt(using r: Random): Int = r.unsafe.nextInt()
 
   /** Generates a random boolean using the current Random capability.
     *
@@ -70,7 +38,7 @@ object Random {
     * @return
     *   A random boolean
     */
-  def nextBoolean(using r: Random): Boolean = r.nextBoolean()
+  def nextBoolean(using r: Random): Boolean = r.unsafe.nextBoolean()
 
   /** Generates a random double using the current Random capability.
     *
@@ -79,8 +47,8 @@ object Random {
     * @return
     *   A random double
     */
-  def nextDouble(using r: Random): Double = r.nextDouble()
-  def nextLong(using r: Random): Long     = r.nextLong()
+  def nextDouble(using r: Random): Double = r.unsafe.nextDouble()
+  def nextLong(using r: Random): Long     = r.unsafe.nextLong()
 
   /** Runs a computation that requires the Random capability.
     *
@@ -95,16 +63,55 @@ object Random {
     *   The result of the computation
     */
   def run[A](block: Random ?=> A): A = {
-    val handler = new Effect.Handler[Random, A, A] {
-      override def handle(program: Random ?=> A): A = program(using Random.unsafe)
+    val handler = new Yaes.Handler[Random.Unsafe, A, A] {
+      override def handle(program: Random ?=> A): A = program(using
+        new Yaes(Random.unsafe)
+      )
     }
-    Effect.handle(block)(using handler)
+    Yaes.handle(block)(using handler)
   }
 
-  private val unsafe: Random = new Random {
+  private val unsafe = new Random.Unsafe {
     override def nextInt(): Int         = scala.util.Random.nextInt()
     override def nextLong(): Long       = scala.util.Random.nextLong()
     override def nextBoolean(): Boolean = scala.util.Random.nextBoolean()
     override def nextDouble(): Double   = scala.util.Random.nextDouble()
+  }
+
+  /** A capability trait representing random number generation effects. It provides basic random
+    * number generation operations that can be used in effectful computations.
+    *
+    * This trait is unsafe because it provides direct access to the random number generator
+    * implementation.
+    */
+  trait Unsafe extends Eff {
+
+    /** Generates a random integer.
+      *
+      * @return
+      *   A random integer
+      */
+    def nextInt(): Int
+
+    /** Generates a random boolean.
+      *
+      * @return
+      *   A random boolean
+      */
+    def nextBoolean(): Boolean
+
+    /** Generates a random double.
+      *
+      * @return
+      *   A random double
+      */
+    def nextDouble(): Double
+
+    /** Generates a random long.
+      *
+      * @return
+      *   A random long
+      */
+    def nextLong(): Long
   }
 }

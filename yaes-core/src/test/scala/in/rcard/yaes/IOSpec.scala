@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Effect.*
+import in.rcard.yaes.Yaes.*
+import in.rcard.yaes.IO.IO
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
