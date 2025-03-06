@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
 import in.rcard.yaes.Effect.Handler
+import in.rcard.yaes.Raise.Raise
 
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -18,15 +19,15 @@ import Async.Cancelled
 
 /** A trait representing asynchronous computations.
   *
-  * The `Async` trait provides primitives for working with asynchronous operations,
-  * including delaying execution and forking concurrent computations.
+  * The `Async` trait provides primitives for working with asynchronous operations, including
+  * delaying execution and forking concurrent computations.
   *
   * Example:
   * {{{
   * def asyncOperation(using async: Async): Unit = {
   *   // Delay execution for 1 second
   *   async.delay(Duration(1, TimeUnit.SECONDS))
-  *   
+  *
   *   // Fork a new computation
   *   val fiber = async.fork("computation") {
   *     // Some long-running task
@@ -39,25 +40,30 @@ import Async.Cancelled
   * }}}
   */
 trait Async extends Effect {
+
   /** Delays the execution for the specified duration.
     *
-    * @param duration the time to delay the execution
+    * @param duration
+    *   the time to delay the execution
     */
   def delay(duration: Duration): Unit
 
   /** Creates a new fiber executing the given block of code.
     *
-    * @param name the name of the fiber
-    * @param block the code to execute asynchronously
-    * @return a [[Fiber]] representing the forked computation
+    * @param name
+    *   the name of the fiber
+    * @param block
+    *   the code to execute asynchronously
+    * @return
+    *   a [[Fiber]] representing the forked computation
     */
   def fork[A](name: String)(block: => A): Fiber[A]
 }
 
 /** Represents an asynchronous computation that can be controlled.
   *
-  * A `Fiber` is a lightweight thread of execution that can be joined, cancelled,
-  * and monitored for completion.
+  * A `Fiber` is a lightweight thread of execution that can be joined, cancelled, and monitored for
+  * completion.
   *
   * Example:
   * {{{
@@ -84,35 +90,45 @@ trait Async extends Effect {
   * }
   * }}}
   *
-  * @tparam A the type of value produced by this fiber
+  * @tparam A
+  *   the type of value produced by this fiber
   */
 trait Fiber[A] {
-  /** Retrieves the value of the computation. It raises a [[Cancelled]] error if the fiber was cancelled.
+
+  /** Retrieves the value of the computation. It raises a [[Cancelled]] error if the fiber was
+    * cancelled.
     *
-    * @param async the async context
-    * @return the computed value
+    * @param async
+    *   the async context
+    * @return
+    *   the computed value
     */
   def value(using async: Async): Raise[Cancelled] ?=> A
 
-  /** Waits for the computation to complete. It does not raise any errors if the fiber was cancelled.
+  /** Waits for the computation to complete. It does not raise any errors if the fiber was
+    * cancelled.
     *
-    * @param async the async context
+    * @param async
+    *   the async context
     */
   def join()(using async: Async): Unit
 
-  /** Cancels the computation. the job is not immediately canceled. The job is canceled when it reaches 
-   * the first point operation that can be interrupted.
-   * Cancellation is cooperative. Cancelling a job follows the relationship between parent and child jobs. 
-   * If a parent's job is canceled, all the children's jobs are canceled as well.
-   *
-   * @param async the async context
-   */
+  /** Cancels the computation. the job is not immediately canceled. The job is canceled when it
+    * reaches the first point operation that can be interrupted. Cancellation is cooperative.
+    * Cancelling a job follows the relationship between parent and child jobs. If a parent's job is
+    * canceled, all the children's jobs are canceled as well.
+    *
+    * @param async
+    *   the async context
+    */
   def cancel()(using async: Async): Unit
 
   /** Registers a callback to be executed when the computation completes.
     *
-    * @param result the callback function
-    * @param async the async context
+    * @param result
+    *   the callback function
+    * @param async
+    *   the async context
     */
   def onComplete(result: A => Unit)(using async: Async): Unit
 
@@ -121,13 +137,16 @@ trait Fiber[A] {
 
 /** JVM implementation of [[Fiber]] using Java's structured concurrency.
   *
-  * This implementation provides fiber functionality using Java's structured concurrency.
-  * It manages the lifecycle of an asynchronous computation, including completion,
-  * cancellation, and value retrieval.
+  * This implementation provides fiber functionality using Java's structured concurrency. It manages
+  * the lifecycle of an asynchronous computation, including completion, cancellation, and value
+  * retrieval.
   *
-  * @param promise the CompletableFuture holding the computation's result
-  * @param forkedThread the Future holding the thread running the computation
-  * @tparam A the type of value produced by this fiber
+  * @param promise
+  *   the CompletableFuture holding the computation's result
+  * @param forkedThread
+  *   the Future holding the thread running the computation
+  * @tparam A
+  *   the type of value produced by this fiber
   */
 class JvmFiber[A](
     private val promise: CompletableFuture[A],
@@ -161,11 +180,11 @@ class JvmFiber[A](
 
 /** JVM implementation of [[Async]] using Java's [[StructuredTaskScope]].
   *
-  * This implementation provides structured concurrency support using Java's
-  * StructuredTaskScope API. It manages hierarchical relationships between
-  * concurrent tasks and ensures proper cleanup.
+  * This implementation provides structured concurrency support using Java's StructuredTaskScope
+  * API. It manages hierarchical relationships between concurrent tasks and ensures proper cleanup.
   *
-  * @param scopes mutable map tracking task scopes by thread ID
+  * @param scopes
+  *   mutable map tracking task scopes by thread ID
   */
 class JvmStructuredScope(
     val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
@@ -209,9 +228,8 @@ class JvmStructuredScope(
 
 /** Companion object for [[Async]] providing utility methods and constructors.
   *
-  * This object contains methods for working with asynchronous computations,
-  * including timing out operations, racing between computations, and running
-  * computations in parallel.
+  * This object contains methods for working with asynchronous computations, including timing out
+  * operations, racing between computations, and running computations in parallel.
   *
   * Example:
   * {{{
@@ -258,15 +276,19 @@ object Async {
 
   /** Lifts a computation to the Async context.
     *
-    * @param block the code to execute asynchronously
-    * @return the result of the computation
+    * @param block
+    *   the code to execute asynchronously
+    * @return
+    *   the result of the computation
     */
   def apply[A](block: => A): Async ?=> A = block
 
   /** Delays the execution for the specified duration.
     *
-    * @param duration the time to delay
-    * @param async the async context
+    * @param duration
+    *   the time to delay
+    * @param async
+    *   the async context
     */
   def delay(duration: Duration)(using async: Async): Unit = {
     async.delay(duration)
@@ -274,27 +296,34 @@ object Async {
 
   /** Creates a new fiber with a specified name.
     *
-    * @param name the name of the fiber
-    * @param block the code to execute asynchronously
-    * @param async the async context
-    * @return a [[Fiber]] representing the forked computation
+    * @param name
+    *   the name of the fiber
+    * @param block
+    *   the code to execute asynchronously
+    * @param async
+    *   the async context
+    * @return
+    *   a [[Fiber]] representing the forked computation
     */
   def fork[A](name: String)(block: => A)(using async: Async): Fiber[A] =
     async.fork(name)(block)
 
   /** Creates a new fiber with an automatically generated name.
     *
-    * @param block the code to execute asynchronously
-    * @param async the async context
-    * @return a [[Fiber]] representing the forked computation
+    * @param block
+    *   the code to execute asynchronously
+    * @param async
+    *   the async context
+    * @return
+    *   a [[Fiber]] representing the forked computation
     */
   def fork[A](block: => A)(using async: Async): Fiber[A] =
     async.fork(s"fiber-${scala.util.Random.nextString(10)}")(block)
 
   /** Executes a block of code with a timeout.
     *
-    * If the computation doesn't complete within the specified timeout,
-    * it raises a [[TimedOut]] error.
+    * If the computation doesn't complete within the specified timeout, it raises a [[TimedOut]]
+    * error.
     *
     * Example:
     * {{{
@@ -304,12 +333,18 @@ object Async {
     * }
     * }}}
     *
-    * @param timeout maximum duration to wait for the computation
-    * @param block the code to execute with timeout
-    * @param async the async context
-    * @param raise the raise context for timeout errors
-    * @return the result of the computation if it completes in time
-    * @throws TimedOut if the computation exceeds the timeout
+    * @param timeout
+    *   maximum duration to wait for the computation
+    * @param block
+    *   the code to execute with timeout
+    * @param async
+    *   the async context
+    * @param raise
+    *   the raise context for timeout errors
+    * @return
+    *   the result of the computation if it completes in time
+    * @throws TimedOut
+    *   if the computation exceeds the timeout
     */
   def timeout[A](
       timeout: Duration
@@ -324,8 +359,8 @@ object Async {
     )
   }
 
-  /** Races two computations against each other, returning the result of the first to complete wether 
-    * if it was completed successfully or not.
+  /** Races two computations against each other, returning the result of the first to complete
+    * wether if it was completed successfully or not.
     *
     * The losing computation is automatically cancelled.
     *
@@ -337,10 +372,14 @@ object Async {
     * )
     * }}}
     *
-    * @param block1 the first computation
-    * @param block2 the second computation
-    * @param async the async context
-    * @return either the result of block1 or block2, whichever completes first
+    * @param block1
+    *   the first computation
+    * @param block2
+    *   the second computation
+    * @param async
+    *   the async context
+    * @return
+    *   either the result of block1 or block2, whichever completes first
     */
   def race[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = {
     racePair(block1, block2) match {
@@ -353,9 +392,9 @@ object Async {
     }
   }
 
-  /** Executes two computations in parallel and returns both results. If one of the computations fails, 
-    * the other one is cancelled.
-    * 
+  /** Executes two computations in parallel and returns both results. If one of the computations
+    * fails, the other one is cancelled.
+    *
     * Unlike [[race]], this waits for both computations to complete.
     *
     * Example:
@@ -366,10 +405,14 @@ object Async {
     * )
     * }}}
     *
-    * @param block1 the first computation
-    * @param block2 the second computation
-    * @param async the async context
-    * @return a tuple of both results
+    * @param block1
+    *   the first computation
+    * @param block2
+    *   the second computation
+    * @param async
+    *   the async context
+    * @return
+    *   a tuple of both results
     */
   def par[R1, R2](block1: => R1, block2: => R2)(using async: Async): (R1, R2) = {
     racePair(block1, block2) match {
@@ -386,10 +429,14 @@ object Async {
     *
     * This is a lower-level version of [[race]] that gives you access to the underlying fibers.
     *
-    * @param block1 the first computation
-    * @param block2 the second computation
-    * @param async the async context
-    * @return either (result1, fiber2) if block1 wins, or (fiber1, result2) if block2 wins
+    * @param block1
+    *   the first computation
+    * @param block2
+    *   the second computation
+    * @param async
+    *   the async context
+    * @return
+    *   either (result1, fiber2) if block1 wins, or (fiber1, result2) if block2 wins
     */
   def racePair[R1, R2](block1: => R1, block2: => R2)(using
       async: Async
@@ -420,8 +467,10 @@ object Async {
     * }
     * }}}
     *
-    * @param block the async computation to run
-    * @return the result of the computation
+    * @param block
+    *   the async computation to run
+    * @return
+    *   the result of the computation
     */
   inline def run[A](block: Async ?=> A): A = {
     Effect.handle(block)(using handler)
