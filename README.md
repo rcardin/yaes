@@ -1,20 +1,150 @@
 ![GitHub Workflow Status (with branch)](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)
 
-# Yet Another Effect System (yaes)
+# Yet Another Effect System (yæs)
 
-An experimental effect system in Scala mixing monadic and direct-style
+YÆS is an experimental effect system in Scala based upon Capabilities and Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner. 
 
-## Introduction to Algebraic Effects
+What's new in YÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
-Algebraic effects are a way to represent and handle side effects in a program in a modular and composable manner. Unlike traditional approaches such as über-monads, algebraic effects separate the definition of effects from their implementation. This allows for more flexible and reusable code.
+```scala 3
+import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Yaes.*
 
-In essence, an algebraic effect system consists of:
-1. **Effect Signatures**: These define the operations that can be performed.
-2. **Effect Handlers**: These provide the implementation for the operations.
+def drunkFlip(using Random, Raise[String]): String = for {
+  caught <- Random.nextBoolean
+  heads  <- if (caught) Random.nextBoolean else Raise.raise("We dropped the coin")
+} yield if (heads) "Heads" else "Tails"
+```
 
-By using algebraic effects, you can write code that is easier to reason about, test, and maintain. The effects are described declaratively, and their execution is deferred until they are handled.
+Or a more direct style like this:
 
-## Effects
+```scala 3
+import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Random.Random
+
+def drunkFlip(using Random, Raise[String]): String = {
+  val caught = Random.nextBoolean
+  if (caught) {
+    val heads = Random.nextBoolean
+    if (heads) "Heads" else "Tails"
+  } else {
+    Raise.raise("We dropped the coin")
+  }
+}
+```
+
+In YÆS types like `Random` and `Raise` are capabilities, or *Effects*. An *Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Effects* by wrapping them and providing a set of components that replace effectful functions in standard libraries. We manage Effect behavior by putting that Effect in a kind of box. 
+
+Calling the above `drunkFlip` function will not execute the effects. Instead, it will return a value that represents something that can be run but hasn’t yet. This is called deferred execution. It's kinda different than _direct-style_ approach. We call it **Capability-Passing Style**. As you might image, *Effect* and *Capabilities* are quite sinonyms in the YÆS context. 
+
+An Effect System provides all the tools to manage and execute Effectful computations in a deferred manner. In YÆS, such tools are called *Handlers*.
+
+```scala 3
+import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Raise.Raise
+
+val result: String = Raise.run { 
+  Random.run { 
+    drunkFlip
+  }
+}
+```
+
+In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` capabilities. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory.
+
+## Dependency
+
+The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.0.1"
+```
+
+The library is only available for Scala 3.
+
+## Usage
+
+The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
+
+- `IO`: Allows for running side-effecting operations.
+- `Async`: Allows for asynchronous computations and fiber management.
+- `Raise`: Allows for raising and handling errors.
+- `Input`: Allows for reading input from the console.
+- `Output`: Allows for printing output to the console.
+- `Random`: Allows for generating random numbers.
+
+Each effect provides a not-comprehensive set of operations that can be used to define effectful computations. The operations are defined directly on the companion object of the effect. For example, here is the set of functions available on the `Random` effect:
+
+```scala 3
+object Random {
+  def nextInt(using r: Random): Int
+  def nextBoolean(using r: Random): Boolean
+  def nextDouble(using r: Random): Double
+  def nextLong(using r: Random): Long
+}
+```
+
+Each effect also defines an `Unsafe` trait that provides the implementation of the effect in an unsafe manner. The `Unsafe` trait is always part of the effect companion object:
+
+```scala 3
+object Random {
+  trait Unsafe {
+    def nextInt: Int
+    def nextBoolean: Boolean
+    def nextDouble: Double
+    def nextLong: Long
+  }
+}
+```
+
+The `Unsafe` trait is used to define the *Handlers* that will execute the deferred effects. It's not intended to be used directly by the user since is does not provide any kind of safety (referential transparency, for example). The `Handler` trait is in the `Yeas` object:
+
+```scala 3
+trait Handler[F, A, B] {
+  def handle(program: Yaes[F] ?=> A): B // FIXME Make it inline
+}
+```
+
+Each handler handles an effectful program that requires a capability of type `Yeas[F]`. The `Yaes` type is a class wrapping an instance of capability (or effect) of type `F`:
+
+```scala 3
+class Yaes[F](val unsafe: F)
+```
+
+It's the core of the library since it allows the definition of the `flatMap` and `map` functions on the `Yaes[F] ?=> A` type.
+
+Every effect companion objects defines a type alias for the capability of the effect:
+
+```scala 3
+object Random {
+  type Random = Yaes[Random]
+}
+```
+
+Handlers are used to define the `run` method of each effect, which is the method that will execute the deferred effects:
+
+```scala 3
+object Random {
+  def run[A](block: Random ?=> A): A = {
+    val handler = new Yaes.Handler[Random.Unsafe, A, A] {
+      override def handle(program: Random ?=> A): A = program(using
+        new Yaes(new Random.Unsafe {
+          override def nextInt(): Int         = scala.util.Random.nextInt()
+          override def nextLong(): Long       = scala.util.Random.nextLong()
+          override def nextBoolean(): Boolean = scala.util.Random.nextBoolean()
+          override def nextDouble(): Double   = scala.util.Random.nextDouble()
+        })
+      )
+    }
+    Yaes.handle(block)(using handler)
+  }
+}
+```
+
+It follows the list of effects and for each of them a brief description of their operations.
+
+## Effects (or Capabilities)
 
 ### Async
 
