@@ -67,8 +67,8 @@ The library is only available for Scala 3.
 
 The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
 
-- `IO`: Allows for running side-effecting operations.
-- `Async`: Allows for asynchronous computations and fiber management.
+- [`IO`](#io-effect): Allows for running side-effecting operations.
+- [`Async`](#async): Allows for asynchronous computations and fiber management.
 - `Raise`: Allows for raising and handling errors.
 - `Input`: Allows for reading input from the console.
 - `Output`: Allows for printing output to the console.
@@ -145,6 +145,51 @@ object Random {
 It follows the list of effects and for each of them a brief description of their operations.
 
 ## Effects (or Capabilities)
+
+### `IO` Effect
+
+The `IO` effect allows for running side-effecting operations:
+
+```scala 3
+import in.rcard.yaes.IO.IO
+
+case class User(name: String)
+
+def saveUser(user: User)(using IO): Long =
+  throw new RuntimeException("Read timed out")
+```
+
+The above code can throw an uncontrolled exception if the connection with the database times out. The generic `IO` effect lift the function in the world of the effectful computations, making it referentially transparent. It means that everything that is not referentially transparent should be defined using the `IO` effect. In fact, the `IO` effect provides a guard rail to uncontrolled exceptions since its handler returns always a monad that wraps the result of the effectful computation.
+
+
+To run the effectful computation, we can use the provided handlers.
+
+The first handler doesn't block the current thread:
+
+```scala 3
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
+val result: Future[Long] = IO.run {
+  saveUser(User("John"))
+}
+```
+
+The library also provides a blocking handler that will block the current thread until the effectful computation is finished:
+
+```scala 3
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.DurationInt
+import scala.util.Try
+
+val result: Long = IO.blockingRun {
+  saveUser(User("John"))
+}
+```
+
+Please, be aware that running an `IO` effectful computation both using the `IO.run` and `IO.blockingRun` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
+
+The default `IO` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
 
 ### Async
 
