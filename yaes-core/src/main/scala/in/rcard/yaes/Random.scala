@@ -48,6 +48,14 @@ object Random {
     *   A random double
     */
   def nextDouble(using r: Random): Double = r.unsafe.nextDouble()
+
+  /** Generates a random long using the current Random capability.
+    *
+    * @param r
+    *   The implicit Random capability
+    * @return
+    *   A random long
+    */
   def nextLong(using r: Random): Long     = r.unsafe.nextLong()
 
   /** Runs a computation that requires the Random capability.
