@@ -67,8 +67,8 @@ The library is only available for Scala 3.
 
 The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
 
-- [`IO`](#io-effect): Allows for running side-effecting operations.
-- [`Async`](#async): Allows for asynchronous computations and fiber management.
+- [`IO`](#the-io-effect): Allows for running side-effecting operations.
+- [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - `Raise`: Allows for raising and handling errors.
 - `Input`: Allows for reading input from the console.
 - `Output`: Allows for printing output to the console.
@@ -146,7 +146,7 @@ It follows the list of effects and for each of them a brief description of their
 
 ## Effects (or Capabilities)
 
-### `IO` Effect
+### The `IO` Effect
 
 The `IO` effect allows for running side-effecting operations:
 
@@ -191,25 +191,52 @@ Please, be aware that running an `IO` effectful computation both using the `IO.r
 
 The default `IO` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
 
-### Async
+### The `Async` Effect
 
-The `Async` effect allows for asynchronous computations and fiber management.
+The `Async` effect is built around the ideas developed in the [Sus4s](https://github.com/rcardin/sus4s) library. It allows for running asynchronous computations and managing fibers.
 
-Example:
+The default implementation of the `Async` effect is based Java Structured Concurrency provided by Java versions after 21. The `Async` effect provides a way to define asynchronous computations that are executed in a structured way. It means that every asynchronous computation is executed in a fiber that is managed by the `Async` effect.
+
+The most important operation of the `Async` effect is the `fork` operation:
+
 ```scala 3
-import in.rcard.yaes.Async
-import scala.concurrent.duration.*
+import in.rcard.yaes.Async.Async
 
-val result = Async.run {
-  val fiber = Async.fork {
-    Async.delay(1.second)
-    42
-  }
-  fiber.value
-}
-
-println(result) // Output: 42
+def findUserByName(name: String): Option[User] = Some(User(name))
+val fb: Async ?=> Fiber[Option[User]] = Async.fork { findUserByName("John") }
 ```
+
+The `fb` variable represent a fiber (lightweight thread) that is executing the `findUserByName` function. The `fork` operation returns a `Fiber` object that can be used to manage the execution of the asynchronous computation. In details, we can wait for the value of the computation using the `value` operation:
+
+```scala 3
+import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Async.Cancelled
+
+val maybeUser: (Async, Raise[Cancelled]) ?=> Option[User] = fb.value
+```
+
+Or, we can just wait for the computation to finish:
+
+```scala 3
+val p: Async ?=> Option[User] = fb.join()
+```
+
+As for the `IO` effect, forking a new fiber or joining it doesn't execute the effectful computation. It just returns a value that represents the computation that can be run but hasn't yet.
+
+Again, we can run the effectful computation using the provided handlers:
+
+```scala 3
+val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
+    val fb: Async ?=> Fiber[Option[User]] = Async.fork { findUserByName("John") }
+    fb.value
+  }
+```
+
+The above code shows another important aspect of the YÆS library. We can handle an effect eliminating it from the needed capabilities one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
+
+The `Async` effect implements **structured concurrency**. The `Async.run` handler creates a new structured concurrency scope where all the fibers are executed. The `Async.run` will wait for all the fibers to finish before returning the result of the effectful computation both if the fibers are joined or not.
+
+The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
 
 ### Input
 
