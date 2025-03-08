@@ -210,6 +210,7 @@ The `fb` variable represent a fiber (lightweight thread) that is executing the `
 
 ```scala 3
 import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Async.Cancelled
 
 val maybeUser: (Async, Raise[Cancelled]) ?=> Option[User] = fb.value
@@ -226,6 +227,8 @@ As for the `IO` effect, forking a new fiber or joining it doesn't execute the ef
 Again, we can run the effectful computation using the provided handlers:
 
 ```scala 3
+import in.rcard.yaes.Async.Async
+
 val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
     val fb: Async ?=> Fiber[Option[User]] = Async.fork { findUserByName("John") }
     fb.value
@@ -234,9 +237,96 @@ val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
 
 The above code shows another important aspect of the YÆS library. We can handle an effect eliminating it from the needed capabilities one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
 
+The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
+
+#### Structured Concurrency
+
 The `Async` effect implements **structured concurrency**. The `Async.run` handler creates a new structured concurrency scope where all the fibers are executed. The `Async.run` will wait for all the fibers to finish before returning the result of the effectful computation both if the fibers are joined or not.
 
-The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
+```scala 3
+import in.rcard.yaes.Async.Async
+
+def updateUser(user: User): Unit                = ???
+def updateClicks(user: User, clicks: Int): Unit = ???
+
+Async.run {
+  val john = User("John")
+  Async.fork {
+    updateUser(john)
+  }
+  Async.fork {
+    updateClicks(john, 10)
+  }
+}
+```
+
+The `Async.run` function will wait for both the `updateUser` and `updateClicks` functions to finish before returning. It's a powerful feature that allows for a structured way to manage the execution of asynchronous computations.
+
+Another important feature of strutctured concurrency is the *cancellation* of the fibers. Canceling a fiber is possible by calling the `cancel` method on the `Fiber` instance. The following code snippet shows how:
+
+```scala 3
+import in.rcard.yaes.Async.Async
+import in.rcard.yaes.Async.Cancelled
+import java.util.concurrent.ConcurrentLinkedQueue
+
+val actualQueue = Async.run {
+  val queue = new ConcurrentLinkedQueue[String]()
+  val cancellable = Async.fork {
+    Async.delay(2.seconds)
+    queue.add("cancellable")
+  }
+  val fb = Async.fork {
+    Async.delay(500.millis)
+    `cancellable.cancel()`
+    queue.add("fb2")
+  }
+  cancellable.join()
+  queue
+}
+```
+
+Cancellation is collaborative. In the above example, the fiber `cancellable` is marked for cancellation by the call `cancellable.cancel()`. However, the fiber is not immediately canceled. The fiber is canceled when it reaches the first operation that can be interrupted by the JVM. Hence, cancellation is based on the concept of interruption. In the above example, the `cancellable` is canceled when it reaches the `delay(2.seconds)` operation. The fiber will never be canceled if we remove the delay operation. A similar behavior is implemented by Kotlin coroutines (see [Kotlin Coroutines - A Comprehensive Introduction / Cancellation](https://rockthejvm.com/articles/kotlin-101-coroutines#cancellation) for further details).
+
+Cancelling a fiber follows the relationship between parent and child jobs. If a parent's fiber is canceled, all the children's fibers are canceled as well:
+
+```scala 3
+import in.rcard.yaes.Async.Async
+import in.rcard.yaes.Async.Cancelled
+import java.util.concurrent.ConcurrentLinkedQueue
+
+val actualQueue = Async.run {
+  val queue = new ConcurrentLinkedQueue[String]()
+  val fb1 = Async.fork("fb1") {
+    Async.fork("inner-fb") {
+      Async.fork("inner-inner-fb") {
+        Async.delay(6.seconds)
+        queue.add("inner-inner-fb")
+      }
+
+      Async.delay(5.seconds)
+      queue.add("innerfb")
+    }
+    Async.delay(1.second)
+    queue.add("fb1")
+  }
+  Async.fork("fb2") {
+    Async.delay(500.millis)
+    fb1.cancel()
+    queue.add("fb2")
+  }
+  queue
+}
+```
+
+Trying to get the value from a canceled fiber will raise a `Cancelled` error. However, joining a canceled fiber will not raise any error.
+
+#### Structured Concurrency Primitives
+
+Using the `Async.fork` DSL is quite low-level. The library provides a set of structured concurrency primitives that can be used to define more complex asynchronous computations. The available primitives are:
+
+- `Async.par`: Runs two asynchronous computations in parallel and returns both .
+- `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
+- `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 
 ### Input
 
