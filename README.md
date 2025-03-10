@@ -71,7 +71,7 @@ The library is available on Maven Central. To use it, add the following dependen
 libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.0.1"
 ```
 
-The library is only available for Scala 3.
+The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
 
 ## Usage
 
@@ -80,7 +80,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`IO`](#the-io-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
-- `Input`: Allows for reading input from the console.
+- [`Input`](#the-input-effect): Allows for reading input from the console.
 - `Output`: Allows for printing output to the console.
 - `Random`: Allows for generating random numbers.
 
@@ -444,6 +444,36 @@ val divisionByZeroResult: Int | Null = Raise.nullable {
   divide(10, 0)
 }
 ```
+
+### The `Input` Effect
+
+Every time we need to read input from the console, we can use the `Input` effect. The `Input` effect provides a set of operations to read input from the console. Since the project is still in an experimental stage, the only one developed operation is the `readLn` function that reads a line from the console:
+
+```scala 3
+import in.rcard.yaes.Input.Input
+import in.rcard.yaes.Raise.Raise
+import java.io.IOException
+
+val name: (Input, Raise[IOException]) ?=> String = Input.readLn()
+```
+
+The effect uses the Scala `scala.io.StdIn` object under the hood, which uses the Java `System.in` object to read input from the console. Reading from the console can result in an `IOException`, so the `Input` effect requires a `Raise[IOException]` capability.
+
+To run the effectful computation, we can use the provided handlers, which returns the read line:
+
+```scala 3
+import in.rcard.yaes.Input.Input
+import in.rcard.yaes.Raise.Raise
+import java.io.IOException
+
+val result: String | Null = Raise.nullable {
+  Input.run {
+    name
+  }
+}
+```
+
+In the above example, we decided to ignore the `IOException` error and return a `Null` value if an error occurs.
 
 ## References
 
