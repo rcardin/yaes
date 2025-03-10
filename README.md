@@ -338,25 +338,6 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 - `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 
-### Input
-
-The Input effect allows for reading input from the console.
-
-Example:
-
-```scala 3
-import in.rcard.yaes.{Input, Raise}
-import java.io.IOException
-
-val result = Raise.run {
-  Input.run {
-    Input.readLn()
-  }
-}
-
-println(result) // Output: (depends on user input)
-```
-
 ### The `Raise` Effect
 
 The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavinly inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
