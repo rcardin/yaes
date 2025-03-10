@@ -513,6 +513,22 @@ val result: Boolean = Random.run {
 }
 ```
 
+## Contributing
+
+If you want to contribute to the project, please do it 🙏! Any help is welcome.
+
+## Acknowledgments
+
+Many smart engineers helped me with thei ideas and suggestions. I want to thank them all. In particular, I want to thank:
+
+- [Daniel Ciocîrlan](https://rockthejvm.com/): He's the first that saw something in me and gave me the opportunity to work with him. He's a great mentor and a great friend.
+- [Simon Vergauwen](https://github.com/nomisRev): He's a great engineer. Now, he's focused on Kotlin and the Arrow Kt library, which drove many of the ideas behind the YÆS library.
+- [Jon Pretty](https://github.com/propensive): We shared some great ideas about the [Raise] effect. I love the way he thinks about programming.
+- [Noel Welsh](https://noelwelsh.com/): We chat about the `Raise` effect and the way to handle errors in a functional way. He's a great engineer and a great person.
+- [Flavio Brasil](https://github.com/fwbrasil): He creates the Kyo library, which is a great inspiration for the YÆS library. He helped me a lot with good suggestions and ideas.
+
+Thanks guys! 🙏
+
 ## References
 
 It follows some quotations and links to valuable resources to understand the concepts behind the library:
