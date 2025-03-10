@@ -82,7 +82,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
 - [`Input`](#the-input-effect): Allows for reading input from the console.
 - [`Output`](#the-output-effect): Allows for printing output to the console.
-- `Random`: Allows for generating random numbers.
+- [`Random`](#the-random-effect): Allows for generating random content.
 
 Each effect provides a not-comprehensive set of operations that can be used to define effectful computations. The operations are defined directly on the companion object of the effect. For example, here is the set of functions available on the `Random` effect:
 
@@ -485,6 +485,32 @@ In a similar way, we can output to system err using the `printErr` function:
 import in.rcard.yaes.Output.Output
 
 val program: Output ?=> Unit = Output.printErr("Hello, world!")
+```
+
+### The `Random` Effect
+
+The `Random` effect provides a set of operations to generate random content. If we need to generate non-deterministic content, we can use it. Under the hood, the effect uses the `scala.util.Random` object. As we saw in the introduction, we can use the `Random` effect to define a function that generates a random boolean:
+
+```scala 3
+import in.rcard.yaes.Random.Random
+
+def flipCoin(using Random): Boolean = Random.nextBoolean
+```
+
+The other random content we can generate is:
+
+- `nextInt`: Generates a random integer.
+- `nextDouble`: Generates a random double.
+- `nextLong`: Generates a random long.
+
+As usual, we can run the effectful computation using the provided handlers:
+
+```scala 3
+import in.rcard.yaes.Random.Random
+
+val result: Boolean = Random.run {
+  flipCoin
+}
 ```
 
 ## References
