@@ -81,7 +81,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
 - [`Input`](#the-input-effect): Allows for reading input from the console.
-- `Output`: Allows for printing output to the console.
+- [`Output`](#the-output-effect): Allows for printing output to the console.
 - `Random`: Allows for generating random numbers.
 
 Each effect provides a not-comprehensive set of operations that can be used to define effectful computations. The operations are defined directly on the companion object of the effect. For example, here is the set of functions available on the `Random` effect:
@@ -455,6 +455,37 @@ val result: String | Null = Raise.nullable {
 ```
 
 In the above example, we decided to ignore the `IOException` error and return a `Null` value if an error occurs.
+
+### The `Output` Effect
+
+The `Output` effect provides a set of operations to print output to the console. Is uses the `scala.Console` object under the hood.
+
+```scala 3
+import in.rcard.yaes.Output.Output
+
+val program: Output ?=> Unit = Output.printLn("Hello, world!")
+```
+
+As we can see, outputting to the console doesn't raise any error. The behavior mimics exactly the one exposed by the `scala.Console`, which silently ignores any error that can occur during the output operation.
+
+To run the effectful computation, we can use the provided handlers:
+
+```scala 3
+import in.rcard.yaes.Output.Output
+
+// Prints "Hello, world!" to the console
+Output.run {
+  program
+}
+```
+
+In a similar way, we can output to system err using the `printErr` function:
+
+```scala 3
+import in.rcard.yaes.Output.Output
+
+val program: Output ?=> Unit = Output.printErr("Hello, world!")
+```
 
 ## References
 
