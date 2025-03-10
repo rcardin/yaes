@@ -51,7 +51,17 @@ val result: String = Raise.run {
 }
 ```
 
-In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` capabilities. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory.
+In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` capabilities. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory. The example shows how to handle the `Raise` and `Random` effects one at time. However, we're free to handle only one effect at time:
+
+```scala 3
+import in.rcard.yaes.Random.Random
+
+val result: Raise[String] ?=> String = Random.run { 
+  drunkFlip
+}
+```
+
+The above code shows how to handle only the `Random` effect. The `Raise` effect is still present in the needed capabilities. It's a powerful feature that allows for a fine-grained management of the effects.
 
 ## Dependency
 
@@ -69,7 +79,7 @@ The library provides a set of effects that can be used to define and handle effe
 
 - [`IO`](#the-io-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
-- `Raise`: Allows for raising and handling errors.
+- [`Raise`](#the-raise-effect): Allows for raising and handling errors.
 - `Input`: Allows for reading input from the console.
 - `Output`: Allows for printing output to the console.
 - `Random`: Allows for generating random numbers.
@@ -347,50 +357,92 @@ val result = Raise.run {
 println(result) // Output: (depends on user input)
 ```
 
-### IO
+### The `Raise` Effect
 
-The IO effect allows for running side-effecting operations.
+The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavinly inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
 
-Example:
+Let's see an example:
+
 ```scala 3
-import in.rcard.yaes.IO
+import in.rcard.yaes.Raise.Raise
 
-val result = IO.run {
-  val fortyTwo: IO ?=> Int = IO {
-    42
+def divide(a: Int, b: Int)(using Raise[ArithmeticException]): Int =
+  if (b == 0) Raise.raise(new ArithmeticException("Division by zero"))
+  else a / b
+```
+
+In the above example, the `divide` function can raise an `ArithmeticException` if the second parameter is zero. In the example, we used an exception as the error type. However, we can use any type as the error type: 
+
+```scala 3
+import in.rcard.yaes.Raise.Raise
+
+object DivisionByZero
+type DivisionByZero = DivisionByZero.type
+
+def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
+  if (b == 0) Raise.raise(DivisionByZero)
+  else a / b
+```
+
+The capability offers some functions to lift an program into an effectful computation that uses the `Raise[E]` capability. For example, we can rewrite the above example using the `ensure` utility function:
+
+```scala 3
+import in.rcard.yaes.Raise.Raise
+
+def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
+  Raise.ensure(b != 0) { DivisionByZero }
+  a / b
+```
+
+If we know that a function can throw an exception, we can catch it and trasform it into an error of type `E` with the `catching` function:
+
+```scala 3
+import in.rcard.yaes.Raise.Raise
+
+def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
+  Raise.catching[ArithmeticException] {
+    a / b
+  } { _ => DivisionByZero }
+```
+
+The effect defines many handlers to deal with the raised errors. For example, we can execute the effectful computation and handle the raised error as a union type:
+
+```scala 3
+import in.rcard.yaes.Raise.Raise
+
+val divisionByZeroResult: Int | DivisionByZero = Raise.run {
+    divide(10, 0)
   }
-  fortyTwo + 1
-}
-
-println(result) // Output: 43
 ```
 
-### Output
+Alternatively, we can handle the raised error transforming it into an `Either` type:
 
-The Output effect allows for printing output to the console.
-
-Example:
 ```scala 3
-import in.rcard.yaes.Output
+import in.rcard.yaes.Raise.Raise
 
-Output.run {
-  Output.printLn("Hello, World!")
+val divisionByZeroResult: Either[DivisionByZero, Int] = Raise.either {
+  divide(10, 0)
 }
 ```
 
-### Random
+If we're not interested in propagating the exact reason of error, we can use the `option` handler:
 
-The Random effect allows for generating random numbers.
-
-Example:
 ```scala 3
-import in.rcard.yaes.Random
+import in.rcard.yaes.Raise.Raise
 
-val result = Random.run {
-  Random.nextInt
+val divisionByZeroResult: Option[Int] = Raise.option {
+  divide(10, 0)
 }
+```
 
-println(result) // Output: (random integer)
+We can even ignore the raised error returning a `Null` value:
+
+```scala 3
+import in.rcard.yaes.Raise.Raise
+
+val divisionByZeroResult: Int | Null = Raise.nullable {
+  divide(10, 0)
+}
 ```
 
 ## References
