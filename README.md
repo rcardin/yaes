@@ -1,4 +1,7 @@
 ![GitHub Workflow Status (with branch)](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)
+![Maven Central](https://img.shields.io/maven-central/v/in.rcard.yaes/yaes-core_3)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)
+[![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-core_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-core_3)
 
 # Yet Another Effect System (yæs)
 
