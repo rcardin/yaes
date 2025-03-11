@@ -7,8 +7,10 @@ YÆS is an experimental effect system in Scala based upon Capabilities and Algeb
 What's new in YÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
 ```scala 3
-import in.rcard.yaes.Random.Random
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Random
+import in.rcard.yaes.Random.*
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Yaes.*
 
 def drunkFlip(using Random, Raise[String]): String = for {
@@ -20,8 +22,10 @@ def drunkFlip(using Random, Raise[String]): String = for {
 Or a more direct style like this:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
-import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Random
+import in.rcard.yaes.Random.*
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 def drunkFlip(using Random, Raise[String]): String = {
   val caught = Random.nextBoolean
@@ -41,8 +45,10 @@ Calling the above `drunkFlip` function will not execute the effects. Instead, it
 An Effect System provides all the tools to manage and execute Effectful computations in a deferred manner. In YÆS, such tools are called *Handlers*.
 
 ```scala 3
-import in.rcard.yaes.Random.Random
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Random
+import in.rcard.yaes.Random.*
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 val result: String = Raise.run { 
   Random.run { 
@@ -54,7 +60,8 @@ val result: String = Raise.run {
 In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` capabilities. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory. The example shows how to handle the `Raise` and `Random` effects one at time. However, we're free to handle only one effect at time:
 
 ```scala 3
-import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Random
+import in.rcard.yaes.Random.*
 
 val result: Raise[String] ?=> String = Random.run { 
   drunkFlip
@@ -161,7 +168,8 @@ It follows the list of effects and for each of them a brief description of their
 The `IO` effect allows for running side-effecting operations:
 
 ```scala 3
-import in.rcard.yaes.IO.IO
+import in.rcard.yaes.IO
+import in.rcard.yaes.IO.*
 
 case class User(name: String)
 
@@ -177,6 +185,9 @@ To run the effectful computation, we can use the provided handlers.
 The first handler doesn't block the current thread:
 
 ```scala 3
+import in.rcard.yaes.IO
+import in.rcard.yaes.IO.*
+
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -188,6 +199,9 @@ val result: Future[Long] = IO.run {
 The library also provides a blocking handler that will block the current thread until the effectful computation is finished:
 
 ```scala 3
+import in.rcard.yaes.IO
+import in.rcard.yaes.IO.*
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
@@ -210,7 +224,8 @@ The default implementation of the `Async` effect is based Java Structured Concur
 The most important operation of the `Async` effect is the `fork` operation:
 
 ```scala 3
-import in.rcard.yaes.Async.Async
+import in.rcard.yaes.Async
+import in.rcard.yaes.Async.*
 
 def findUserByName(name: String): Option[User] = Some(User(name))
 val fb: Async ?=> Fiber[Option[User]] = Async.fork { findUserByName("John") }
@@ -219,9 +234,9 @@ val fb: Async ?=> Fiber[Option[User]] = Async.fork { findUserByName("John") }
 The `fb` variable represent a fiber (lightweight thread) that is executing the `findUserByName` function. The `fork` operation returns a `Fiber` object that can be used to manage the execution of the asynchronous computation. In details, we can wait for the value of the computation using the `value` operation:
 
 ```scala 3
+import in.rcard.yaes.Async
+import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.Raise
-import in.rcard.yaes.Async.Async
-import in.rcard.yaes.Async.Cancelled
 
 val maybeUser: (Async, Raise[Cancelled]) ?=> Option[User] = fb.value
 ```
@@ -237,7 +252,8 @@ As for the `IO` effect, forking a new fiber or joining it doesn't execute the ef
 Again, we can run the effectful computation using the provided handlers:
 
 ```scala 3
-import in.rcard.yaes.Async.Async
+import in.rcard.yaes.Async
+import in.rcard.yaes.Async.*
 
 val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
     val fb: Async ?=> Fiber[Option[User]] = Async.fork { findUserByName("John") }
@@ -254,7 +270,8 @@ The `Async` effect is transparent to possible exceptions thrown by the effectful
 The `Async` effect implements **structured concurrency**. The `Async.run` handler creates a new structured concurrency scope where all the fibers are executed. The `Async.run` will wait for all the fibers to finish before returning the result of the effectful computation both if the fibers are joined or not.
 
 ```scala 3
-import in.rcard.yaes.Async.Async
+import in.rcard.yaes.Async
+import in.rcard.yaes.Async.*
 
 def updateUser(user: User): Unit                = ???
 def updateClicks(user: User, clicks: Int): Unit = ???
@@ -275,8 +292,8 @@ The `Async.run` function will wait for both the `updateUser` and `updateClicks` 
 Another important feature of strutctured concurrency is the *cancellation* of the fibers. Canceling a fiber is possible by calling the `cancel` method on the `Fiber` instance. The following code snippet shows how:
 
 ```scala 3
-import in.rcard.yaes.Async.Async
-import in.rcard.yaes.Async.Cancelled
+import in.rcard.yaes.Async
+import in.rcard.yaes.Async.*
 import java.util.concurrent.ConcurrentLinkedQueue
 
 val actualQueue = Async.run {
@@ -300,8 +317,8 @@ Cancellation is collaborative. In the above example, the fiber `cancellable` is 
 Cancelling a fiber follows the relationship between parent and child jobs. If a parent's fiber is canceled, all the children's fibers are canceled as well:
 
 ```scala 3
-import in.rcard.yaes.Async.Async
-import in.rcard.yaes.Async.Cancelled
+import in.rcard.yaes.Async
+import in.rcard.yaes.Async.*
 import java.util.concurrent.ConcurrentLinkedQueue
 
 val actualQueue = Async.run {
@@ -345,7 +362,8 @@ The `Raise[E]` type describes the possibility that a function can raise an error
 Let's see an example:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 def divide(a: Int, b: Int)(using Raise[ArithmeticException]): Int =
   if (b == 0) Raise.raise(new ArithmeticException("Division by zero"))
@@ -355,7 +373,8 @@ def divide(a: Int, b: Int)(using Raise[ArithmeticException]): Int =
 In the above example, the `divide` function can raise an `ArithmeticException` if the second parameter is zero. In the example, we used an exception as the error type. However, we can use any type as the error type: 
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 object DivisionByZero
 type DivisionByZero = DivisionByZero.type
@@ -368,7 +387,8 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 The capability offers some functions to lift an program into an effectful computation that uses the `Raise[E]` capability. For example, we can rewrite the above example using the `ensure` utility function:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
   Raise.ensure(b != 0) { DivisionByZero }
@@ -378,7 +398,8 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 If we know that a function can throw an exception, we can catch it and trasform it into an error of type `E` with the `catching` function:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
   Raise.catching[ArithmeticException] {
@@ -389,7 +410,8 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 The effect defines many handlers to deal with the raised errors. For example, we can execute the effectful computation and handle the raised error as a union type:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 val divisionByZeroResult: Int | DivisionByZero = Raise.run {
     divide(10, 0)
@@ -399,7 +421,8 @@ val divisionByZeroResult: Int | DivisionByZero = Raise.run {
 Alternatively, we can handle the raised error transforming it into an `Either` type:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 val divisionByZeroResult: Either[DivisionByZero, Int] = Raise.either {
   divide(10, 0)
@@ -409,7 +432,8 @@ val divisionByZeroResult: Either[DivisionByZero, Int] = Raise.either {
 If we're not interested in propagating the exact reason of error, we can use the `option` handler:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 val divisionByZeroResult: Option[Int] = Raise.option {
   divide(10, 0)
@@ -419,7 +443,8 @@ val divisionByZeroResult: Option[Int] = Raise.option {
 We can even ignore the raised error returning a `Null` value:
 
 ```scala 3
-import in.rcard.yaes.Raise.Raise
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
 
 val divisionByZeroResult: Int | Null = Raise.nullable {
   divide(10, 0)
@@ -431,7 +456,8 @@ val divisionByZeroResult: Int | Null = Raise.nullable {
 Every time we need to read input from the console, we can use the `Input` effect. The `Input` effect provides a set of operations to read input from the console. Since the project is still in an experimental stage, the only one developed operation is the `readLn` function that reads a line from the console:
 
 ```scala 3
-import in.rcard.yaes.Input.Input
+import in.rcard.yaes.Input
+import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.Raise
 import java.io.IOException
 
@@ -443,7 +469,8 @@ The effect uses the Scala `scala.io.StdIn` object under the hood, which uses the
 To run the effectful computation, we can use the provided handlers, which returns the read line:
 
 ```scala 3
-import in.rcard.yaes.Input.Input
+import in.rcard.yaes.Input
+import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.Raise
 import java.io.IOException
 
@@ -461,7 +488,8 @@ In the above example, we decided to ignore the `IOException` error and return a 
 The `Output` effect provides a set of operations to print output to the console. Is uses the `scala.Console` object under the hood.
 
 ```scala 3
-import in.rcard.yaes.Output.Output
+import in.rcard.yaes.Output
+import in.rcard.yaes.Output.*
 
 val program: Output ?=> Unit = Output.printLn("Hello, world!")
 ```
@@ -471,7 +499,8 @@ As we can see, outputting to the console doesn't raise any error. The behavior m
 To run the effectful computation, we can use the provided handlers:
 
 ```scala 3
-import in.rcard.yaes.Output.Output
+import in.rcard.yaes.Output
+import in.rcard.yaes.Output.*
 
 // Prints "Hello, world!" to the console
 Output.run {
@@ -482,7 +511,8 @@ Output.run {
 In a similar way, we can output to system err using the `printErr` function:
 
 ```scala 3
-import in.rcard.yaes.Output.Output
+import in.rcard.yaes.Output
+import in.rcard.yaes.Output.*
 
 val program: Output ?=> Unit = Output.printErr("Hello, world!")
 ```
@@ -492,7 +522,8 @@ val program: Output ?=> Unit = Output.printErr("Hello, world!")
 The `Random` effect provides a set of operations to generate random content. If we need to generate non-deterministic content, we can use it. Under the hood, the effect uses the `scala.util.Random` object. As we saw in the introduction, we can use the `Random` effect to define a function that generates a random boolean:
 
 ```scala 3
-import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Random
+import in.rcard.yaes.Random.*
 
 def flipCoin(using Random): Boolean = Random.nextBoolean
 ```
@@ -506,7 +537,8 @@ The other random content we can generate is:
 As usual, we can run the effectful computation using the provided handlers:
 
 ```scala 3
-import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Random
+import in.rcard.yaes.Random.*
 
 val result: Boolean = Random.run {
   flipCoin
