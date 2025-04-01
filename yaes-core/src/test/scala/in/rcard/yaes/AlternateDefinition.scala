@@ -3,9 +3,7 @@ package in.rcard.yaes
 object AlternateDefinition {
 
   // Eff[Random & Output] ?=> A
-  trait Eff[+A] {
-
-  }
+  trait Eff[+A] {}
 
   trait Random
   object Random {
@@ -30,5 +28,5 @@ object AlternateDefinition {
   }
 
   val partial: Eff[Output] ?=> Unit = Random.run(program) // Eff[Output] ?=> Unit
-  val total: Unit = Output.run(partial) // Unit
+  val total: Unit                   = Output.run(partial) // Unit
 }
