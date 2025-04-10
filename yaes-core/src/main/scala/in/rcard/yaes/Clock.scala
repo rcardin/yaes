@@ -10,8 +10,10 @@ object Clock {
 
   type Clock = Yaes[Clock.Unsafe]
 
+  def apply[A](block: => A): Clock ?=> A = block
+
   def now(using clock: Clock): Instant           = clock.unsafe.now
-  def nowMonotonic(using clock: Clock): Duration = ???
+  def nowMonotonic(using clock: Clock): Duration = clock.unsafe.nowMonotonic
 
   def run[A](block: Clock ?=> A): A = {
     val handler = new Yaes.Handler[Clock.Unsafe, A, A] {
