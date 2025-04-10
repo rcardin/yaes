@@ -31,12 +31,14 @@ object Clock {
     */
   def apply[A](block: => A)(using clock: Clock): A = block
 
-  /** Gets the current time as an [[Instant]].
+  /** Gets the current calendar time as an [[Instant]] (wall-clock time).
     *
     * @param clock
     *   The Clock capability provided through context parameters
     * @return
     *   The current time as an [[Instant]]
+    * @see
+    *   [[nowMonotonic]] for measuring elapsed time between events
     */
   def now(using clock: Clock): Instant = clock.unsafe.now
 
@@ -67,6 +69,8 @@ object Clock {
     *   The code block to be run with the Clock capability
     * @return
     *   The result of the code block
+    * @see
+    *   [[now]] for calendar time/date operations
     */
   def run[A](block: Clock ?=> A): A = {
     val handler = new Yaes.Handler[Clock.Unsafe, A, A] {
