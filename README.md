@@ -93,6 +93,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Input`](#the-input-effect): Allows for reading input from the console.
 - [`Output`](#the-output-effect): Allows for printing output to the console.
 - [`Random`](#the-random-effect): Allows for generating random content.
+- [`Clock`](#the-clock-effect): Allows for managing time.
 
 Each effect provides a not-comprehensive set of operations that can be used to define effectful computations. The operations are defined directly on the companion object of the effect. For example, here is the set of functions available on the `Random` effect:
 
@@ -545,6 +546,28 @@ import in.rcard.yaes.Random.*
 
 val result: Boolean = Random.run {
   flipCoin
+}
+```
+
+### The `Clock` Effect
+
+The `Clock` effect provides a set of operations to manage time effectfully. It's possible to get the current time, even in a monotonic way. The `Clock.now` function returns a `java.time.Instant`, while the `Clock.nowMonotonic` returns a strictly monotonically increasing time value, guaranteed to always move forward. Returns a `Duration` rather than an Instant because monotonic time represents the time elapsed since some arbitrary starting point, not a specific point in calendar time.
+
+Both functions use the `java.time` package under the hood.
+
+```scala 3
+import in.rcard.yaes.Clock
+import in.rcard.yaes.Clock.*
+import in.rcard.yaes.Output
+import in.rcard.yaes.Output.*
+
+val program = Output.run {
+  Clock.run {
+    val now = Clock.now()
+    val nowMonotonic = Clock.nowMonotonic()
+    Output.printLn(s"Now: $now")
+    Output.printLn(s"Now monotonic: $nowMonotonic")
+  }
 }
 ```
 
