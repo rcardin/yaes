@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
 import java.time.Instant
+import java.lang.System as JSystem
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.DurationLong
 
@@ -81,7 +82,7 @@ object Clock {
 
   private val unsafe: Unsafe = new Unsafe {
     def now: Instant           = Instant.now()
-    def nowMonotonic: Duration = System.nanoTime().nanos
+    def nowMonotonic: Duration = JSystem.nanoTime().nanos
   }
 
   /** Unsafe implementation of the Clock capability.
