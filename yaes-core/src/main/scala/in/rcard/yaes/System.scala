@@ -7,9 +7,9 @@ object System {
 
   type System = Yaes[System.Unsafe]
 
-  def env[E, A](
+  def env[A](
       name: String
-  )(using parser: Parser[E, A])(using env: System, raise: Raise[E]): Option[A] = {
+  )[E](using parser: Parser[E, A])(using env: System, raise: Raise[E]): Option[A] = {
     val maybeEnvValue = unsafe.env(name)
     maybeEnvValue.flatMap { value =>
       parser.parse(value) match {
@@ -19,7 +19,7 @@ object System {
     }
   }
 
-  def env[E, A](name: String, default: => A)(using
+  def env[A](name: String, default: => A)[E](using
       parser: Parser[E, A]
   )(using env: System, raise: Raise[E]): A = {
     System.env(name) match {
@@ -27,6 +27,24 @@ object System {
       case None        => default
     }
   }
+
+  def property[A](name: String)[E](using parser: Parser[E, A])(using System, Raise[E]): Option[A] =
+    unsafe
+      .property(name)
+      .flatMap(value =>
+        parser.parse(value) match {
+          case Right(parsedValue) => Some(parsedValue)
+          case Left(error)        => Raise.raise(error)
+        }
+      )
+
+  def property[A](name: String, default: => A)[E](using
+      parser: Parser[E, A]
+  )(using System, Raise[E]): A =
+    System.property(name) match {
+      case Some(value) => value
+      case None        => default
+    }
 
   def run[A](block: System ?=> A): A = {
     val handler = new Yaes.Handler[System.Unsafe, A, A] {
@@ -36,11 +54,15 @@ object System {
   }
 
   private val unsafe: Unsafe = new Unsafe {
+
+    override def property(name: String): Option[String] = Option(JSystem.getProperty(name))
+
     override def env(name: String): Option[String] = Option(JSystem.getenv(name))
   }
 
   trait Unsafe {
     def env(name: String): Option[String]
+    def property(name: String): Option[String]
   }
 
   sealed trait Parser[E, A] {
@@ -52,13 +74,13 @@ object System {
       def parse(value: String): Either[Nothing, String] = Right(value)
     }
 
-    // given Parser[NumberFormatException, Int] with {
-    //   def parse(value: String): Either[NumberFormatException, Int] =
-    //     try {
-    //       Right(value.toInt)
-    //     } catch {
-    //       case e: NumberFormatException => Left(e)
-    //     }
-    // }
+    given Parser[NumberFormatException, Int] with {
+      def parse(value: String): Either[NumberFormatException, Int] =
+        try {
+          Right(value.toInt)
+        } catch {
+          case e: NumberFormatException => Left(e)
+        }
+    }
   }
 }

@@ -2,8 +2,9 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import java.time.Instant
+
 import java.lang.System as JSystem
+import java.time.Instant
 
 class ClockSpec extends AnyFlatSpec with Matchers {
 
