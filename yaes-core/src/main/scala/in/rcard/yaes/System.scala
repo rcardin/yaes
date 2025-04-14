@@ -82,5 +82,14 @@ object System {
           case e: NumberFormatException => Left(e)
         }
     }
+
+    given Parser[IllegalArgumentException, Boolean] with {
+      def parse(value: String): Either[IllegalArgumentException, Boolean] =
+        try {
+          Right(value.toBoolean)
+        } catch {
+          case e: IllegalArgumentException => Left(e)
+        }
+    }
   }
 }

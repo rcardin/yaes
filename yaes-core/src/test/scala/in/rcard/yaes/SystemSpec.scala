@@ -73,8 +73,8 @@ class SystemSpec extends AnyFlatSpec with OptionValues with Matchers {
       }
     }
     actualResult match
-        case _: NumberFormatException => fail("Expected an Int, but got a NumberFormatException")
-        case maybePropertyValue : Option[Int] => maybePropertyValue.value shouldBe 42
+      case _: NumberFormatException => fail("Expected an Int, but got a NumberFormatException")
+      case maybePropertyValue: Option[Int] => maybePropertyValue.value shouldBe 42
   }
 
   it should "raise a NumberFormatException an invalid int" in {
@@ -85,7 +85,32 @@ class SystemSpec extends AnyFlatSpec with OptionValues with Matchers {
       }
     }
     actualResult match
-        case _: NumberFormatException => succeed
-        case _ => fail("Expected a NumberFormatException, but got a valid Int")
+      case _: NumberFormatException => succeed
+      case _                        => fail("Expected a NumberFormatException, but got a valid Int")
+  }
+
+  it should "read a boolean from an environment variable" in {
+    JSystem.setProperty("test.boolean", "true")
+    val actualResult: Option[Boolean] | IllegalArgumentException = Raise.run {
+      System.run {
+        System.property[Boolean]("test.boolean")
+      }
+    }
+    actualResult match
+      case _: IllegalArgumentException =>
+        fail("Expected a Boolean, but got a IllegalArgumentException")
+      case maybePropertyValue: Option[Boolean] => maybePropertyValue.value shouldBe true
+  }
+
+  it should "raise an IllegalArgumentException for an invalid boolean" in {
+    JSystem.setProperty("test.boolean", "invalid")
+    val actualResult: Option[Boolean] | IllegalArgumentException = Raise.run {
+      System.run {
+        System.property[Boolean]("test.boolean")
+      }
+    }
+    actualResult match
+      case _: IllegalArgumentException => succeed
+      case _ => fail("Expected an IllegalArgumentException, but got a valid Boolean")
   }
 }
