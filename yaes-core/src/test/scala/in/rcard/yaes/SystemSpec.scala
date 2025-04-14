@@ -163,4 +163,79 @@ class SystemSpec extends AnyFlatSpec with OptionValues with Matchers {
       case _: NumberFormatException => succeed
       case _ => fail("Expected a NumberFormatException, but got a valid Double")
   }
+
+  it should "read a float from an environment variable" in {
+    JSystem.setProperty("test.float", "123.456")
+    val actualResult: Option[Float] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Float]("test.float")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => fail("Expected a Float, but got a NumberFormatException")
+      case maybePropertyValue: Option[Float] =>
+        maybePropertyValue.value shouldBe 123.456f
+  }
+
+  it should "raise a NumberFormatException for an invalid float" in {
+    JSystem.setProperty("test.float", "invalid")
+    val actualResult: Option[Float] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Float]("test.float")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => succeed
+      case _ => fail("Expected a NumberFormatException, but got a valid Float")
+  }
+
+  it should "read a short from an environment variable" in {
+    JSystem.setProperty("test.short", "12345")
+    val actualResult: Option[Short] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Short]("test.short")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => fail("Expected a Short, but got a NumberFormatException")
+      case maybePropertyValue: Option[Short] =>
+        maybePropertyValue.value shouldBe 12345.toShort
+  }
+
+  it should "raise a NumberFormatException for an invalid short" in {
+    JSystem.setProperty("test.short", "invalid")
+    val actualResult: Option[Short] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Short]("test.short")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => succeed
+      case _ => fail("Expected a NumberFormatException, but got a valid Short")
+  }
+
+  it should "read a byte from an environment variable" in {
+    JSystem.setProperty("test.byte", "123")
+    val actualResult: Option[Byte] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Byte]("test.byte")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => fail("Expected a Byte, but got a NumberFormatException")
+      case maybePropertyValue: Option[Byte] =>
+        maybePropertyValue.value shouldBe 123.toByte
+  }
+
+  it should "raise a NumberFormatException for an invalid byte" in {
+    JSystem.setProperty("test.byte", "invalid")
+    val actualResult: Option[Byte] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Byte]("test.byte")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => succeed
+      case _ => fail("Expected a NumberFormatException, but got a valid Byte")
+  }
 }

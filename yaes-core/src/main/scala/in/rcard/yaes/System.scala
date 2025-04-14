@@ -109,5 +109,32 @@ object System {
           case e: NumberFormatException => Left(e)
         }
     }
+
+    given Parser[NumberFormatException, Float] with {
+      def parse(value: String): Either[NumberFormatException, Float] =
+        try {
+          Right(value.toFloat)
+        } catch {
+          case e: NumberFormatException => Left(e)
+        }
+    }
+
+    given Parser[NumberFormatException, Short] with {
+      def parse(value: String): Either[NumberFormatException, Short] =
+        try {
+          Right(value.toShort)
+        } catch {
+          case e: NumberFormatException => Left(e)
+        }
+    }
+
+    given Parser[NumberFormatException, Byte] with {
+      def parse(value: String): Either[NumberFormatException, Byte] =
+        try {
+          Right(value.toByte)
+        } catch {
+          case e: NumberFormatException => Left(e)
+        }
+    }
   }
 }
