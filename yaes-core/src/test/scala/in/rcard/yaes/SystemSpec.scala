@@ -238,4 +238,29 @@ class SystemSpec extends AnyFlatSpec with OptionValues with Matchers {
       case _: NumberFormatException => succeed
       case _ => fail("Expected a NumberFormatException, but got a valid Byte")
   }
+
+  it should "read a char from an environment variable" in {
+    JSystem.setProperty("test.char", "a")
+    val actualResult: Option[Char] | IllegalArgumentException = Raise.run {
+      System.run {
+        System.property[Char]("test.char")
+      }
+    }
+    actualResult match
+      case _: IllegalArgumentException =>
+        fail("Expected a Char, but got a IllegalArgumentException")
+      case maybePropertyValue: Option[Char] => maybePropertyValue.value shouldBe 'a'
+  }
+
+  it should "raise an IllegalArgumentException for an invalid char" in {
+    JSystem.setProperty("test.char", "invalid")
+    val actualResult: Option[Char] | IllegalArgumentException = Raise.run {
+      System.run {
+        System.property[Char]("test.char")
+      }
+    }
+    actualResult match
+      case _: IllegalArgumentException => succeed
+      case _ => fail("Expected an IllegalArgumentException, but got a valid Char")
+  }
 }

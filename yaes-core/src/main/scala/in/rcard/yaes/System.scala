@@ -136,5 +136,11 @@ object System {
           case e: NumberFormatException => Left(e)
         }
     }
+
+    given Parser[IllegalArgumentException, Char] with {
+      def parse(value: String): Either[IllegalArgumentException, Char] =
+        if (value.length == 1) Right(value.charAt(0))
+        else Left(new IllegalArgumentException("String must have exactly one character"))
+    }
   }
 }
