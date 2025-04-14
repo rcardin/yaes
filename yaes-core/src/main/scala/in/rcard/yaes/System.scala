@@ -91,5 +91,23 @@ object System {
           case e: IllegalArgumentException => Left(e)
         }
     }
+
+    given Parser[NumberFormatException, Long] with {
+      def parse(value: String): Either[NumberFormatException, Long] =
+        try {
+          Right(value.toLong)
+        } catch {
+          case e: NumberFormatException => Left(e)
+        }
+    }
+
+    given Parser[NumberFormatException, Double] with {
+      def parse(value: String): Either[NumberFormatException, Double] =
+        try {
+          Right(value.toDouble)
+        } catch {
+          case e: NumberFormatException => Left(e)
+        }
+    }
   }
 }

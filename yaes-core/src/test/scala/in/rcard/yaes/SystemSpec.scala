@@ -113,4 +113,54 @@ class SystemSpec extends AnyFlatSpec with OptionValues with Matchers {
       case _: IllegalArgumentException => succeed
       case _ => fail("Expected an IllegalArgumentException, but got a valid Boolean")
   }
+
+  it should "read a long from an environment variable" in {
+    JSystem.setProperty("test.long", "1234567890123456789")
+    val actualResult: Option[Long] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Long]("test.long")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => fail("Expected a Long, but got a NumberFormatException")
+      case maybePropertyValue: Option[Long] =>
+        maybePropertyValue.value shouldBe 1234567890123456789L
+  }
+
+  it should "raise a NumberFormatException for an invalid long" in {
+    JSystem.setProperty("test.long", "invalid")
+    val actualResult: Option[Long] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Long]("test.long")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => succeed
+      case _ => fail("Expected a NumberFormatException, but got a valid Long")
+  }
+
+  it should "read a double from an environment variable" in {
+    JSystem.setProperty("test.double", "123.456")
+    val actualResult: Option[Double] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Double]("test.double")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => fail("Expected a Double, but got a NumberFormatException")
+      case maybePropertyValue: Option[Double] =>
+        maybePropertyValue.value shouldBe 123.456
+  }
+
+  it should "raise a NumberFormatException for an invalid double" in {
+    JSystem.setProperty("test.double", "invalid")
+    val actualResult: Option[Double] | NumberFormatException = Raise.run {
+      System.run {
+        System.property[Double]("test.double")
+      }
+    }
+    actualResult match
+      case _: NumberFormatException => succeed
+      case _ => fail("Expected a NumberFormatException, but got a valid Double")
+  }
 }
