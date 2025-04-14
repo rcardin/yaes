@@ -9,7 +9,8 @@ YÆS is an experimental effect system in Scala based upon Capabilities and Algeb
 
 Here is the talk I gave at the **Scalar 2025** about the main concepts behind the library: 
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/TXUxCsPpZp0?si=iWnO27DorOMhBRg6" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+[![Watch the video](https://img.youtube.com/vi/TXUxCsPpZp0/maxresdefault.jpg)](https://youtu.be/TXUxCsPpZp0)
+
 
 What's new in YÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
