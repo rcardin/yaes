@@ -7,6 +7,10 @@
 
 YÆS is an experimental effect system in Scala based upon Capabilities and Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner. 
 
+Here is the talk I gave at the **Scalar 2025** about the main concepts behind the library: 
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/TXUxCsPpZp0?si=iWnO27DorOMhBRg6" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 What's new in YÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
 ```scala 3
