@@ -94,6 +94,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Output`](#the-output-effect): Allows for printing output to the console.
 - [`Random`](#the-random-effect): Allows for generating random content.
 - [`Clock`](#the-clock-effect): Allows for managing time.
+- [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 
 Each effect provides a not-comprehensive set of operations that can be used to define effectful computations. The operations are defined directly on the companion object of the effect. For example, here is the set of functions available on the `Random` effect:
 
@@ -570,6 +571,46 @@ val program = Output.run {
   }
 }
 ```
+
+### The `System` Effect
+
+The `System` effect provides a set of operations to manage system properties and environment variables. It allows for reading system properties and environment variables in a type-safe way.
+
+Use the `System.env` function to read an environment variable and eventually use a default value if the variable is not set:
+
+```scala 3
+import in.rcard.yaes.System
+import in.rcard.yaes.System.*
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
+
+val port: (System, Raise[NumberFormatException]) ?=> Option[Int] = System.env[Int]("PORT")
+val host: System ?=> String = System.env[String]("HOST", "localhost")
+```
+
+The same applies to system properties. Use the `System.property` function to read a system property and eventually use a default value if the property is not set:
+
+```scala 3
+import in.rcard.yaes.System
+import in.rcard.yaes.System.*
+import in.rcard.yaes.Raise
+import in.rcard.yaes.Raise.*
+
+val port: (System, Raise[NumberFormatException]) ?=> Option[Int] = System.property[Int]("server.port")
+val host: System ?=> String = System.property[String]("server.host", "localhost")
+```
+
+The available types for properties and environment variables are:
+
+- `String`: A string value.
+- `Int`: An integer value.
+- `Long`: A long value.
+- `Double`: A double value.
+- `Boolean`: A boolean value.
+- `Float`: A float value.
+- `Short`: A short value.
+- `Byte`: A byte value.
+- `Char`: A char value.
 
 ## Contributing
 

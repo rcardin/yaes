@@ -2,6 +2,8 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.lang.System as JSystem
 import java.time.Instant
 
 class ClockSpec extends AnyFlatSpec with Matchers {
@@ -17,11 +19,11 @@ class ClockSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "return a monotonic duration" in {
-    val startPoint = System.nanoTime()
+    val startPoint = JSystem.nanoTime()
     val actualResult = Clock.run {
       Clock.nowMonotonic
     }
-    val endPoint = System.nanoTime()
+    val endPoint = JSystem.nanoTime()
     actualResult.toNanos should be >= startPoint
     actualResult.toNanos should be <= endPoint
   }
