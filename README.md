@@ -597,7 +597,7 @@ import in.rcard.yaes.Raise
 import in.rcard.yaes.Raise.*
 
 val port: (System, Raise[NumberFormatException]) ?=> Option[Int] = System.property[Int]("server.port")
-val host: System ?=> String = System.property[String]("HOST", "server.port")
+val host: System ?=> String = System.property[String]("server.port", "8080")
 ```
 
 The available types for properties and environment variables are:
