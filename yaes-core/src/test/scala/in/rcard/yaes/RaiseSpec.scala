@@ -1,6 +1,6 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Random.Random
+import in.rcard.yaes.Random.*
 import in.rcard.yaes.Yaes.*
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec

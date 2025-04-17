@@ -5,8 +5,8 @@ import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.flatspec.AsyncFlatSpec
-import in.rcard.yaes.Random.Random
-import in.rcard.yaes.IO.IO
+import in.rcard.yaes.Random.*
+import in.rcard.yaes.IO.*
 
 class RandomSpec extends AsyncFlatSpec with Matchers {
 
