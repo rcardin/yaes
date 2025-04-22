@@ -1,6 +1,8 @@
 package in.rcard.yaes
 
 import in.rcard.yaes.Log.Log
+
+import java.time.Clock as JClock
 import java.time.LocalDateTime
 
 trait Logger {
@@ -16,6 +18,8 @@ trait Logger {
 
 object Log {
 
+  given clock: JClock = java.time.Clock.systemDefaultZone()
+
   type Log = Yaes[Log.Unsafe]
 
   sealed abstract class Level(private val level: Int) {
@@ -30,8 +34,11 @@ object Log {
     case object Fatal extends Level(50)
   }
 
-  class ConsoleLogger private[Log] (override val name: String, override val level: Level)
-      extends Logger {
+  class ConsoleLogger private[Log] (
+      override val name: String,
+      override val level: Level,
+      private val clock: java.time.Clock
+  ) extends Logger {
 
     override def trace(msg: => String)(using Log): Unit =
       if (level.enabled(Level.Trace)) {
@@ -64,14 +71,37 @@ object Log {
       }
 
     private def log(level: String, message: String): Unit = {
-      val now = LocalDateTime.now()
+      val now = LocalDateTime.now(clock)
       println(s"$now - $level - $name - $message")
     }
   }
 
-  def getLogger(name: String)(using log: Log): Logger = log.unsafe.getLogger(name)
+  def getLogger(name: String)(using log: Log): Logger = log.unsafe.getLogger(name, Level.Debug)
+
+  def getLogger(name: String, level: Level)(using log: Log): Logger =
+    log.unsafe.getLogger(name, level)
+
+  def run[A](block: Log ?=> A)(using clock: JClock): A =
+    val handler = new Yaes.Handler[Log.Unsafe, A, A] {
+      override def handle(program: Log ?=> A): A = program(using
+        Yaes(Log.unsafe(clock))
+      )
+    }
+    Yaes.handle(block)(using handler)
+
+//   def run[A](clock: java.time.Clock)(block: Log ?=> A): A = {
+//     val handler = new Yaes.Handler[Log.Unsafe, A, A] {
+//       override def handle(program: Log ?=> A): A = program(using Yaes(Log.unsafe(clock)))
+//     }
+//     Yaes.handle(block)(using handler)
+//   }
+
+  private def unsafe(clock: java.time.Clock) = new Unsafe {
+    override def getLogger(name: String, level: Level): Logger =
+      new ConsoleLogger(name, level, clock)
+  }
 
   trait Unsafe {
-    def getLogger(name: String): Logger
+    def getLogger(name: String, level: Level): Logger
   }
 }
