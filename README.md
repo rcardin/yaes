@@ -93,78 +93,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Random`](#the-random-effect): Allows for generating random content.
 - [`Clock`](#the-clock-effect): Allows for managing time.
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
-
-Each effect provides a not-comprehensive set of operations that can be used to define effectful computations. The operations are defined directly on the companion object of the effect. For example, here is the set of functions available on the `Random` effect:
-
-```scala 3
-object Random {
-  def nextInt(using r: Random): Int
-  def nextBoolean(using r: Random): Boolean
-  def nextDouble(using r: Random): Double
-  def nextLong(using r: Random): Long
-}
-```
-
-Each effect also defines an `Unsafe` trait that provides the implementation of the effect in an unsafe manner. The `Unsafe` trait is always part of the effect companion object:
-
-```scala 3
-object Random {
-  trait Unsafe {
-    def nextInt: Int
-    def nextBoolean: Boolean
-    def nextDouble: Double
-    def nextLong: Long
-  }
-}
-```
-
-The `Unsafe` trait is used to define the *Handlers* that will execute the deferred effects. It's not intended to be used directly by the user since is does not provide any kind of safety (referential transparency, for example). The `Handler` trait is in the `Yeas` object:
-
-```scala 3
-trait Handler[F, A, B] {
-  def handle(program: Yaes[F] ?=> A): B // FIXME Make it inline
-}
-```
-
-Each handler handles an effectful program that requires a capability of type `Yeas[F]`. The `Yaes` type is a class wrapping an instance of capability (or effect) of type `F`:
-
-```scala 3
-class Yaes[F](val unsafe: F)
-```
-
-It's the core of the library since it allows the definition of the `flatMap` and `map` functions on the `Yaes[F] ?=> A` type.
-
-Every effect companion objects defines a type alias for the capability of the effect:
-
-```scala 3
-object Random {
-  type Random = Yaes[Random]
-}
-```
-
-Handlers are used to define the `run` method of each effect, which is the method that will execute the deferred effects:
-
-```scala 3
-object Random {
-  def run[A](block: Random ?=> A): A = {
-    val handler = new Yaes.Handler[Random.Unsafe, A, A] {
-      override def handle(program: Random ?=> A): A = program(using
-        new Yaes(new Random.Unsafe {
-          override def nextInt(): Int         = scala.util.Random.nextInt()
-          override def nextLong(): Long       = scala.util.Random.nextLong()
-          override def nextBoolean(): Boolean = scala.util.Random.nextBoolean()
-          override def nextDouble(): Double   = scala.util.Random.nextDouble()
-        })
-      )
-    }
-    Yaes.handle(block)(using handler)
-  }
-}
-```
-
-It follows the list of effects and for each of them a brief description of their operations.
-
-## Effects (or Capabilities)
+- [`Log`](#the-log-effect): Allows for logging messages at different levels.
 
 ### The `IO` Effect
 
@@ -579,6 +508,53 @@ The available types for properties and environment variables are:
 - `Short`: A short value.
 - `Byte`: A byte value.
 - `Char`: A char value.
+
+### The `Log` Effect
+
+The `Log` effect provides the capability to log messages at different levels. The available levels are:
+  - `TRACE`
+  - `DEBUG`
+  - `INFO`
+  - `WARN`
+  - `ERROR`
+  - `FATAL`
+  
+We can log using a concrete implementation of the `in.rcard.yaes.Logger` interface. Each logger instance has a name and a log level associated with it. To create a logger, we can use the `Log.getLogger` method:
+
+```scala 3
+import in.rcard.yaes.Log.*
+
+val logger: Log ?=> Logger = Log.getLogger("TestLogger", Log.Level.Trace)
+```
+
+It's possible to create a new logger providing only the name. In this case, the logger will use the default log level, which is `Log.Level.Debug`.
+
+The only logger implementation available is the `ConsoleLogger`, which logs messages to the console. The message printed to the console has the following format:
+
+```
+2025-04-22T19:55:59 - TRACE - TestLogger - Trace message
+```
+
+To run the effectful computation, we can use the provided handlers:
+
+```scala 3
+import in.rcard.yaes.Log.*
+
+val program = Log.run {
+  val logger = Log.getLogger("TestLogger", Log.Level.Trace)
+
+  logger.info("Info message")
+}
+```
+
+It's possible to change the clock used by the logger. By default, the `java.time.Clock.systemDefaultZone()` is used. The clock is provided as a given parameter to the `Log.run` handler method. The default clock is defined as a given instance in the `Log` object.
+
+```scala 3
+object Log {
+  given defaultClock: java.time.Clock = java.time.Clock.systemDefaultZone()
+  // ...
+}
+```
 
 ## Contributing
 
