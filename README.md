@@ -551,7 +551,7 @@ It's possible to change the clock used by the logger. By default, the `java.time
 
 ```scala 3
 object Log {
-  given defaultClock = java.time.Clock = java.time.Clock.systemDefaultZone()
+  given defaultClock: java.time.Clock = java.time.Clock.systemDefaultZone()
   // ...
 }
 ```
