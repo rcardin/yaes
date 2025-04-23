@@ -527,6 +527,8 @@ import in.rcard.yaes.Log.*
 val logger: Log ?=> Logger = Log.getLogger("TestLogger", Log.Level.Trace)
 ```
 
+It's possible to create a new logger providing only the name. In this case, the logger will use the default log level, which is `Log.Level.Debug`.
+
 The only logger implementation available is the `ConsoleLogger`, which logs messages to the console. The message printed to the console has the following format:
 
 ```
