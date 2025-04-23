@@ -164,4 +164,24 @@ class LogSpec extends AnyFlatSpec with Matchers {
       "2025-04-22T19:55:59 - FATAL - TestLogger - Fatal message"
     )
   }
+
+  it should "use different name for different instances of loggers" in {
+    val actualResult = new ByteArrayOutputStream()
+    Console.withOut(actualResult) {
+      Log.run {
+        val logger1 = Log.getLogger("TestLogger1", Log.Level.Trace)
+        val logger2 = Log.getLogger("TestLogger2", Log.Level.Trace)
+
+        logger1.trace("Trace message")
+        logger2.debug("Debug message")
+      }
+    }
+
+    val actualLoggedLines = actualResult.toString.split('\n')
+
+    actualLoggedLines should contain allOf (
+      "2025-04-22T19:55:59 - TRACE - TestLogger1 - Trace message",
+      "2025-04-22T19:55:59 - DEBUG - TestLogger2 - Debug message"
+    )
+  }
 }
