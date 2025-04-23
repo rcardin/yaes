@@ -5,8 +5,22 @@ import in.rcard.yaes.Log.Log
 import java.time.Clock as JClock
 import java.time.LocalDateTime
 
+/** Represents a logging capability.
+  *
+  * Provides methods for logging messages at different severity levels (trace, debug, info, warn,
+  * error, fatal). Implementations determine where and how messages are logged.
+  *
+  * @see
+  *   [[Log.Level]]
+  */
 trait Logger {
+
+  /** The name of this logger */
   val name: String
+
+  /** The minimum logging level enabled for this logger. Messages below this level will be ignored.
+    * Defaults to [[Log.Level.Debug]].
+    */
   val level: Log.Level = Log.Level.Debug
   def trace(msg: => String)(using Log): Unit
   def debug(msg: => String)(using Log): Unit
@@ -18,10 +32,18 @@ trait Logger {
 
 object Log {
 
+  /** Default clock used for timestamping log messages. Uses the system's default time zone. */
   given clock: JClock = java.time.Clock.systemDefaultZone()
 
   type Log = Yaes[Log.Unsafe]
 
+  /** Represents the severity level of a log message.
+    *
+    * Levels are ordered: TRACE < DEBUG < INFO < WARN < ERROR < FATAL.
+    *
+    * @param level
+    *   Internal integer representation of the level's priority.
+    */
   sealed abstract class Level(private val level: Int) {
     def enabled(other: Level): Boolean = level <= other.level
   }
@@ -34,6 +56,7 @@ object Log {
     case object Fatal extends Level(50)
   }
 
+  /** Internal console-based implementation of the [[Logger]] trait. */
   class ConsoleLogger private[Log] (
       override val name: String,
       override val level: Level,
@@ -76,11 +99,55 @@ object Log {
     }
   }
 
+  /** Retrieves a logger instance with the specified name and default level (DEBUG).
+    *
+    * @param name
+    *   The name for the logger.
+    * @param log
+    *   The Log capability provided through context parameters.
+    * @return
+    *   A [[Logger]] instance.
+    */
   def getLogger(name: String)(using log: Log): Logger = log.unsafe.getLogger(name, Level.Debug)
 
+  /** Retrieves a logger instance with the specified name and level.
+    *
+    * @param name
+    *   The name for the logger.
+    * @param level
+    *   The minimum logging level for the logger.
+    * @param log
+    *   The Log capability provided through context parameters.
+    * @return
+    *   A [[Logger]] instance.
+    */
   def getLogger(name: String, level: Level)(using log: Log): Logger =
     log.unsafe.getLogger(name, level)
 
+  /** Runs a computation that requires the [[Log]] capability, using a provided clock.
+    *
+    * This handler provides the [[Log]] capability to the `block` of code. The default
+    * implementation uses a [[ConsoleLogger]].
+    *
+    * Example:
+    * {{{
+    * Log.run {
+    *   val logger = Log.getLogger("MyLogger")
+    *   logger.info("Starting computation...")
+    *   // ... computation logic ...
+    *   logger.info("Computation finished.")
+    * }
+    * }}}
+    *
+    * @param block
+    *   The computation requiring the [[Log]] capability.
+    * @param clock
+    *   The clock to use for timestamping log messages (a default is provided implicitly).
+    * @tparam A
+    *   The result type of the computation.
+    * @return
+    *   The result of the computation `block`.
+    */
   def run[A](block: Log ?=> A)(using clock: JClock): A =
     val handler = new Yaes.Handler[Log.Unsafe, A, A] {
       override def handle(program: Log ?=> A): A = program(using
@@ -88,13 +155,6 @@ object Log {
       )
     }
     Yaes.handle(block)(using handler)
-
-//   def run[A](clock: java.time.Clock)(block: Log ?=> A): A = {
-//     val handler = new Yaes.Handler[Log.Unsafe, A, A] {
-//       override def handle(program: Log ?=> A): A = program(using Yaes(Log.unsafe(clock)))
-//     }
-//     Yaes.handle(block)(using handler)
-//   }
 
   private def unsafe(clock: java.time.Clock) = new Unsafe {
     override def getLogger(name: String, level: Level): Logger =
