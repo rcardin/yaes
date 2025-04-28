@@ -5,7 +5,7 @@ import java.lang.System as JSystem
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.DurationLong
 
-/** Companion object for the [[Clock]] capability, providing utility methods and handlers.
+/** Companion object for the [[Clock]] effect, providing utility methods and handlers.
   *
   * This object contains methods to run Clock operations to get the current time and a monotonic
   * duration in an effectful way.
@@ -26,16 +26,16 @@ object Clock {
     * @param block
     *   The code block to be lifted into the Clock effect
     * @param clock
-    *   The Clock capability provided through context parameters
+    *   The Clock effect provided through context parameters
     * @return
-    *   The block with the Clock capability
+    *   The block with the Clock effect
     */
   def apply[A](block: => A)(using clock: Clock): A = block
 
   /** Gets the current calendar time as an [[Instant]] (wall-clock time).
     *
     * @param clock
-    *   The Clock capability provided through context parameters
+    *   The Clock effect provided through context parameters
     * @return
     *   The current time as an [[Instant]]
     * @see
@@ -48,13 +48,13 @@ object Clock {
     * by changes to the system clock.
     *
     * @param clock
-    *   The Clock capability provided through context parameters
+    *   The Clock effect provided through context parameters
     * @return
     *   The current monotonic duration as a [[Duration]]
     */
   def nowMonotonic(using clock: Clock): Duration = clock.unsafe.nowMonotonic
 
-  /** Runs a program that requires Clock capability.
+  /** Runs a program that requires Clock effect.
     *
     * This method handles the Clock effect by supplying the implementation that directly interfaces
     * with the system clock.
@@ -67,7 +67,7 @@ object Clock {
     * }}}
     *
     * @param block
-    *   The code block to be run with the Clock capability
+    *   The code block to be run with the Clock effect
     * @return
     *   The result of the code block
     * @see
@@ -85,9 +85,9 @@ object Clock {
     def nowMonotonic: Duration = JSystem.nanoTime().nanos
   }
 
-  /** Unsafe implementation of the Clock capability.
+  /** Unsafe implementation of the Clock effect.
     *
-    * The capability provides access to methods to get the current time and a monotonic duration.
+    * The effect provides access to methods to get the current time and a monotonic duration.
     * Monotonic time is a time measurement that always increases and never goes backward. It's
     * independent of the system clock, so it's not affected by changes to the system clock.
     */

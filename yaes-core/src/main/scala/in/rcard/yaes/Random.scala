@@ -3,7 +3,7 @@ package in.rcard.yaes
 /** Companion object for the Random effect providing utility methods and handlers.
   *
   * This object contains:
-  *   - Convenience methods for random number generation using capability passing style
+  *   - Convenience methods for random number generation
   *   - A method to construct effect-dependent computations
   *   - A handler implementation to run Random effects
   */
@@ -11,10 +11,10 @@ object Random {
 
   type Random = Yaes[Random.Unsafe]
 
-  /** Creates a computation that depends on the Random capability.
+  /** Creates a computation that depends on the Random effect.
     *
     * @param block
-    *   The computation that requires the Random capability
+    *   The computation that requires the Random effect
     * @tparam A
     *   The type of the computation's result
     * @return
@@ -22,43 +22,43 @@ object Random {
     */
   def apply[A](block: => A): Random ?=> A = block
 
-  /** Generates a random integer using the current Random capability.
+  /** Generates a random integer using the current Random effect.
     *
     * @param r
-    *   The implicit Random capability
+    *   The implicit Random effect
     * @return
     *   A random integer
     */
   def nextInt(using r: Random): Int = r.unsafe.nextInt()
 
-  /** Generates a random boolean using the current Random capability.
+  /** Generates a random boolean using the current Random effect.
     *
     * @param r
-    *   The implicit Random capability
+    *   The implicit Random effect
     * @return
     *   A random boolean
     */
   def nextBoolean(using r: Random): Boolean = r.unsafe.nextBoolean()
 
-  /** Generates a random double using the current Random capability.
+  /** Generates a random double using the current Random effect.
     *
     * @param r
-    *   The implicit Random capability
+    *   The implicit Random effect
     * @return
     *   A random double
     */
   def nextDouble(using r: Random): Double = r.unsafe.nextDouble()
 
-  /** Generates a random long using the current Random capability.
+  /** Generates a random long using the current Random effect.
     *
     * @param r
-    *   The implicit Random capability
+    *   The implicit Random effect
     * @return
     *   A random long
     */
   def nextLong(using r: Random): Long     = r.unsafe.nextLong()
 
-  /** Runs a computation that requires the Random capability.
+  /** Runs a computation that requires the Random effect.
     *
     * This method provides a handler that executes the Random effects using the default Scala random
     * number generator implementation.
@@ -86,7 +86,7 @@ object Random {
     override def nextDouble(): Double   = scala.util.Random.nextDouble()
   }
 
-  /** A capability trait representing random number generation effects. It provides basic random
+  /** An effect trait representing random number generation effects. It provides basic random
     * number generation operations that can be used in effectful computations.
     *
     * This trait is unsafe because it provides direct access to the random number generator

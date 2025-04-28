@@ -41,9 +41,9 @@ object System {
     * @param block
     *   The code block to be lifted into the System effect
     * @param env
-    *   The System capability provided through context parameters
+    *   The System effect provided through context parameters
     * @return
-    *   The block with the System capability
+    *   The block with the System effect
     */
   def apply[A](block: => A)(using env: System): A = block
 
@@ -60,9 +60,9 @@ object System {
     * @param parser
     *   The parser to convert the string value to the desired type
     * @param env
-    *   The `System`` capability provided through context parameters
+    *   The `System` effect provided through context parameters
     * @param raise
-    *   The `Raise` capability for error handling
+    *   The `Raise` effect for error handling
     * @return
     *   An [[Option]] containing the parsed value, or [[None]] if the variable is not set
     * @tparam A
@@ -100,7 +100,7 @@ object System {
     * @param parser
     *   The parser to convert the string value to the desired type
     * @param env
-    *   The `System` capability provided through context parameters
+    *   The `System` effect provided through context parameters
     * @return
     *   The parsed value or the default value if the variable is not set
     * @tparam A
@@ -132,9 +132,9 @@ object System {
     * @param parser
     *   The parser to convert the string value to the desired type
     * @param env
-    *   The `System` capability provided through context parameters
+    *   The `System` effect provided through context parameters
     * @param raise
-    *   The `Raise` capability for error handling
+    *   The `Raise` effect for error handling
     * @return
     *   An [[Option]] containing the parsed value, or [[None]] if the property is not set
     * @tparam A
@@ -170,7 +170,7 @@ object System {
     * @param parser
     *   The parser to convert the string value to the desired type
     * @param env
-    *   The `System` capability provided through context parameters
+    *   The `System` effect provided through context parameters
     * @return
     *   The parsed value or the default value if the property is not set
     * @tparam A
@@ -188,7 +188,7 @@ object System {
       case None        => default
     }
 
-  /** Runs a program that requires `System` capability.
+  /** Runs a program that requires the `System` effect.
     *
     * This method handles the `System` effect by supplying the implementation that uses the
     * `java.lang.System` class to access system properties and environment variables.
@@ -199,7 +199,7 @@ object System {
     * }}}
     *
     * @param block
-    *   The code block to be run with the `System` capability
+    *   The code block to be run with the `System` effect
     * @return
     *   The result of the code block
     */

@@ -5,7 +5,7 @@ import in.rcard.yaes.Log.Log
 import java.time.Clock as JClock
 import java.time.LocalDateTime
 
-/** Represents a logging capability.
+/** Represents a logging effect.
   *
   * Provides methods for logging messages at different severity levels (trace, debug, info, warn,
   * error, fatal). Implementations determine where and how messages are logged.
@@ -104,7 +104,7 @@ object Log {
     * @param name
     *   The name for the logger.
     * @param log
-    *   The Log capability provided through context parameters.
+    *   The Log effect provided through context parameters.
     * @return
     *   A [[Logger]] instance.
     */
@@ -117,16 +117,16 @@ object Log {
     * @param level
     *   The minimum logging level for the logger.
     * @param log
-    *   The Log capability provided through context parameters.
+    *   The Log effect provided through context parameters.
     * @return
     *   A [[Logger]] instance.
     */
   def getLogger(name: String, level: Level)(using log: Log): Logger =
     log.unsafe.getLogger(name, level)
 
-  /** Runs a computation that requires the [[Log]] capability, using a provided clock.
+  /** Runs a computation that requires the [[Log]] effect, using a provided clock.
     *
-    * This handler provides the [[Log]] capability to the `block` of code. The default
+    * This handler provides the [[Log]] effect to the `block` of code. The default
     * implementation uses a [[ConsoleLogger]].
     *
     * Example:
@@ -140,7 +140,7 @@ object Log {
     * }}}
     *
     * @param block
-    *   The computation requiring the [[Log]] capability.
+    *   The computation requiring the [[Log]] effect.
     * @param clock
     *   The clock to use for timestamping log messages (a default is provided implicitly).
     * @tparam A
