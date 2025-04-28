@@ -42,8 +42,7 @@ def drunkFlip(using Random, Raise[String]): String = {
 }
 ```
 
-In YÆS types like `Random` and `Raise` are *Effects*. An *Side Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Side Effects* by tracking and wrapping them into *Effects*. An *Effect* describes the type of the *Side Effect* and the return type of an effectful computation. We manage *Side Effect* behavior by putting them in a kind of box.
-
+In YÆS types like `Random` and `Raise` are *Effects*. A *Side Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Side Effects* by tracking and wrapping them into *Effects*. An *Effect* describes the type of the *Side Effect* and the return type of an effectful computation. We manage *Side Effect* behavior by putting them in a kind of box.
 Calling the above `drunkFlip` function will not execute the effects. Instead, it will return a value that represents something that can be run but hasn’t yet. This is called deferred execution. 
 
 An Effect System provides all the tools to manage and execute Effectful computations in a deferred manner. In YÆS, such tools are called *Handlers*.
