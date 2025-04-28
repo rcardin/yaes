@@ -7,7 +7,7 @@ import scala.util.control.ControlThrowable
 import scala.util.control.NoStackTrace
 import scala.util.control.NonFatal
 
-/** A capability that represents the ability to raise an error of type `E`.
+/** An effect that represents the ability to raise an error of type `E`.
   *
   * Example usage:
   * {{{
@@ -343,7 +343,7 @@ object Raise {
       case ex => throw ex
     }
 
-  /** A capability that represents the ability to raise an error of type `E`. */
+  /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
 
     /** Raises an error of type `E`.

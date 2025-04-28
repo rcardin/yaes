@@ -1,6 +1,6 @@
 package in.rcard.yaes
 
-/** Represents a capability built on top af an effect `F`. The effect is represented by the `unsafe`
+/** Represents an effect built on top af an effect `F`. The effect is represented by the `unsafe`
   * field, and it should not be handled directly but throught the [[Yaes.Handler]] interface.
   *
   * @param unsafe
