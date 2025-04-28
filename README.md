@@ -5,7 +5,7 @@
 
 # Yet Another Effect System (yæs)
 
-YÆS is an experimental effect system in Scala based upon Capabilities and Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner. 
+YÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner. 
 
 Here is the talk I gave at the **Scalar 2025** about the main concepts behind the library: 
 
@@ -42,9 +42,9 @@ def drunkFlip(using Random, Raise[String]): String = {
 }
 ```
 
-In YÆS types like `Random` and `Raise` are capabilities, or *Effects*. An *Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Effects* by wrapping them and providing a set of components that replace effectful functions in standard libraries. We manage Effect behavior by putting that Effect in a kind of box. 
+In YÆS types like `Random` and `Raise` are *Effects*. An *Side Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Side Effects* by tracking and wrapping them into *Effects*. An *Effect* describes the type of the *Side Effect* and the return type of an effectful computation. We manage *Side Effect* behavior by putting them in a kind of box.
 
-Calling the above `drunkFlip` function will not execute the effects. Instead, it will return a value that represents something that can be run but hasn’t yet. This is called deferred execution. It's kinda different than _direct-style_ approach. We call it **Capability-Passing Style**. As you might image, *Effect* and *Capabilities* are quite sinonyms in the YÆS context. 
+Calling the above `drunkFlip` function will not execute the effects. Instead, it will return a value that represents something that can be run but hasn’t yet. This is called deferred execution. 
 
 An Effect System provides all the tools to manage and execute Effectful computations in a deferred manner. In YÆS, such tools are called *Handlers*.
 
@@ -59,7 +59,7 @@ val result: String = Raise.run {
 }
 ```
 
-In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` capabilities. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory. The example shows how to handle the `Raise` and `Random` effects one at time. However, we're free to handle only one effect at time:
+In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` effects. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory. The example shows how to handle the `Raise` and `Random` effects one at time. However, we're free to handle only one effect at time:
 
 ```scala 3
 import in.rcard.yaes.Random.*
@@ -69,7 +69,7 @@ val result: Raise[String] ?=> String = Random.run {
 }
 ```
 
-The above code shows how to handle only the `Random` effect. The `Raise` effect is still present in the needed capabilities. It's a powerful feature that allows for a fine-grained management of the effects.
+The above code shows how to handle only the `Random` effect. The `Raise` effect is still present. It's a powerful feature that allows for a fine-grained management of the effects.
 
 ## Dependency
 
@@ -187,7 +187,7 @@ val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
   }
 ```
 
-The above code shows another important aspect of the YÆS library. We can handle an effect eliminating it from the needed capabilities one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
+The above code shows another important aspect of the YÆS library. We can handle an effect eliminating it from the list of effects one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
 
 The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
 
@@ -305,7 +305,7 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
   else a / b
 ```
 
-The capability offers some functions to lift an program into an effectful computation that uses the `Raise[E]` capability. For example, we can rewrite the above example using the `ensure` utility function:
+The effect offers some functions to lift an program into an effectful computation that uses the `Raise[E]` effect. For example, we can rewrite the above example using the `ensure` utility function:
 
 ```scala 3
 import in.rcard.yaes.Raise.*
@@ -378,7 +378,7 @@ import java.io.IOException
 val name: (Input, Raise[IOException]) ?=> String = Input.readLn()
 ```
 
-The effect uses the Scala `scala.io.StdIn` object under the hood, which uses the Java `System.in` object to read input from the console. Reading from the console can result in an `IOException`, so the `Input` effect requires a `Raise[IOException]` capability.
+The effect uses the Scala `scala.io.StdIn` object under the hood, which uses the Java `System.in` object to read input from the console. Reading from the console can result in an `IOException`, so the `Input` effect requires a `Raise[IOException]` effect.
 
 To run the effectful computation, we can use the provided handlers, which returns the read line:
 
@@ -601,3 +601,5 @@ It follows some quotations and links to valuable resources to understand the con
 9. [Algebraic Effects from Scratch by Kit Langton](https://www.youtube.com/watch?v=qPvPdRbTF-E&t=763s)
 
 10. [Effekt: Capability-passing style for type- and effect-safe, extensible effect handlers in Scala](https://www.cambridge.org/core/journals/journal-of-functional-programming/article/effekt-capabilitypassing-style-for-type-and-effectsafe-extensible-effect-handlers-in-scala/A19680B18FB74AD95F8D83BC4B097D4F)
+
+11. [Object-capability model](https://en.wikipedia.org/wiki/Object-capability_model)
