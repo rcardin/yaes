@@ -58,7 +58,7 @@ val result: String = Raise.run {
 }
 ```
 
-In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` effects. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach remids the one defined in the Algebraic Effects and Handlers. theory. The example shows how to handle the `Raise` and `Random` effects one at time. However, we're free to handle only one effect at time:
+In the above code, we are running the `drunkFlip` function with the `Random` and `Raise` effects. The `Raise.run` and `Random.run` functions are defined using *Handlers* that will execute the deferred effects. The approach reminds the one defined in the Algebraic Effects and Handlers theory. The example shows how to handle the `Raise` and `Random` effects one at a time. However, we're free to handle only one effect at a time:
 
 ```scala 3
 import in.rcard.yaes.Random.*
