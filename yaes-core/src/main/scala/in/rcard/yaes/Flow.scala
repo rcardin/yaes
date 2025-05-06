@@ -15,6 +15,16 @@ object Flow {
       seq.foreach(item => emit(item))
     }
 
+  extension [A](originalFlow: Flow[A]) {
+    def onStart(action: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
+      override def collect(collector: Flow.FlowCollector[A]): Unit = {
+        given Flow.FlowCollector[A] = collector
+        action
+        originalFlow.collect(collector)
+      }
+    }
+  }
+
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
     override def collect(collector: Flow.FlowCollector[A]): Unit = {
       given Flow.FlowCollector[A] = collector
