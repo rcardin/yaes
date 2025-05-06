@@ -107,4 +107,45 @@ class FlowSpec extends AnyFlatSpec with Matchers {
       actualEffectfulResult.toString should be("0")
     }
   }
+
+  "transform" should "transform the emitted values" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[String]()
+    flow.transform { value =>
+      Flow.emit(value.toString)
+    }.collect { value =>
+      actualResult += value
+    }
+
+    actualResult should contain theSameElementsInOrderAs Seq("1", "2", "3")
+  }
+
+  it should "transform the emitted values in a stateful program" in {
+    val actualEffectfulResult = new java.io.ByteArrayOutputStream()
+    Console.withOut(actualEffectfulResult) {
+      val flow: Flow[Int] = Flow.flow[Int] {
+        Flow.emit(1)
+        Flow.emit(2)
+        Flow.emit(3)
+      }
+
+      val actualResult = scala.collection.mutable.ArrayBuffer[String]()
+      val program: Output ?=> Unit = flow.transform { value =>
+        Output.print(value.toString)
+        Flow.emit(value.toString)
+      }.collect { value =>
+        actualResult += value
+      }
+
+      Output.run(program)
+
+      actualResult should contain theSameElementsInOrderAs Seq("1", "2", "3")
+      actualEffectfulResult.toString should be("123")
+    }
+  }
 }

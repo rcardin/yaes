@@ -23,6 +23,15 @@ object Flow {
         originalFlow.collect(collector)
       }
     }
+
+    def transform[B](transform: FlowCollector[B] ?=> A => Unit): Flow[B] = new Flow[B] {
+      override def collect(collector: Flow.FlowCollector[B]): Unit = {
+        given Flow.FlowCollector[B] = collector
+        originalFlow.collect { value =>
+          transform(value)
+        }
+      }
+    }
   }
 
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
