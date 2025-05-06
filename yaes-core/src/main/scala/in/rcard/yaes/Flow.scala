@@ -6,6 +6,10 @@ trait Flow[A] {
 
 object Flow {
 
+  trait FlowCollector[A] {
+    def emit(value: A): Unit
+  }
+
   extension [A](seq: Seq[A])
     def asFlow(): Flow[A] = flow {
       seq.foreach(item => emit(item))
@@ -22,8 +26,8 @@ object Flow {
     collector.emit(value)
   }
 
-  trait FlowCollector[A] {
-    def emit(value: A): Unit
+  def apply[A](elements: A*): Flow[A] = flow {
+    elements.foreach(item => emit(item))
   }
 
 }

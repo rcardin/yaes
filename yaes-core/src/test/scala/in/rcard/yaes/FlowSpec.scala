@@ -56,4 +56,15 @@ class FlowSpec extends AnyFlatSpec with Matchers {
 
     actualResult should contain theSameElementsInOrderAs Seq(1, 2, 3)
   }
+
+  it should "be created an array of elements (varargs)" in {
+    val flow: Flow[Int] = Flow(1, 2, 3)
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    flow.collect {
+      actualResult += _
+    }
+
+    actualResult should contain theSameElementsInOrderAs Seq(1, 2, 3)
+  }
 }
