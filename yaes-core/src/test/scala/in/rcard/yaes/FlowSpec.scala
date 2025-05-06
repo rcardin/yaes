@@ -1,5 +1,7 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Output.*
+
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -14,10 +16,32 @@ class FlowSpec extends AnyFlatSpec with Matchers {
     }
 
     val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
-    flow.collect { 
+    flow.collect {
       actualResult += _
     }
 
     actualResult should contain theSameElementsInOrderAs Seq(1, 2, 3)
+  }
+
+  it should "collect a stateful program" in {
+    val actualEffectfulResult = new java.io.ByteArrayOutputStream()
+    Console.withOut(actualEffectfulResult) {
+      val flow: Flow[Int] = Flow.flow[Int] {
+        Flow.emit(1)
+        Flow.emit(2)
+        Flow.emit(3)
+      }
+
+      val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+      val program: Output ?=> Unit = flow.collect { value =>
+        Output.print(value.toString)
+        actualResult += value
+      }
+
+      Output.run(program)
+
+      actualResult should contain theSameElementsInOrderAs Seq(1, 2, 3)
+      actualEffectfulResult.toString should be("123")
+    }
   }
 }
