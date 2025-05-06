@@ -4,6 +4,7 @@ import in.rcard.yaes.Output.*
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import in.rcard.yaes.Flow.asFlow
 
 class FlowSpec extends AnyFlatSpec with Matchers {
 
@@ -43,5 +44,16 @@ class FlowSpec extends AnyFlatSpec with Matchers {
       actualResult should contain theSameElementsInOrderAs Seq(1, 2, 3)
       actualEffectfulResult.toString should be("123")
     }
+  }
+
+  it should "be created from a list" in {
+    val flow: Flow[Int] = List(1, 2, 3).asFlow()
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    flow.collect {
+      actualResult += _
+    }
+
+    actualResult should contain theSameElementsInOrderAs Seq(1, 2, 3)
   }
 }

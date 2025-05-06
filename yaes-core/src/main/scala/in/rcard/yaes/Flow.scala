@@ -6,6 +6,11 @@ trait Flow[A] {
 
 object Flow {
 
+  extension [A](seq: Seq[A])
+    def asFlow(): Flow[A] = flow {
+      seq.foreach(item => emit(item))
+    }
+
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
     override def collect(collector: Flow.FlowCollector[A]): Unit = {
       given Flow.FlowCollector[A] = collector
