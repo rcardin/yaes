@@ -32,6 +32,11 @@ object Flow {
         }
       }
     }
+
+    def onEach(action: A => Unit): Flow[A] = originalFlow.transform { value =>
+      action(value)
+      Flow.emit(value)
+    }
   }
 
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
