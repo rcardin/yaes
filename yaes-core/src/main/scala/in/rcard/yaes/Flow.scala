@@ -37,6 +37,10 @@ object Flow {
       action(value)
       Flow.emit(value)
     }
+
+    def map[B](transform: A => B): Flow[B] = originalFlow.transform { value =>
+      Flow.emit(transform(value))
+    }
   }
 
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
