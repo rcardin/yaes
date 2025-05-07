@@ -41,6 +41,12 @@ object Flow {
     def map[B](transform: A => B): Flow[B] = originalFlow.transform { value =>
       Flow.emit(transform(value))
     }
+
+    def filter(predicate: A => Boolean): Flow[A] = transform { value =>
+      if (predicate(value)) {
+        Flow.emit(value)
+      }
+    }
   }
 
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
