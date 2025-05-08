@@ -31,6 +31,7 @@ lazy val `yaes-data` = project
   )
 
 lazy val `yaes-core` = project
+  .dependsOn(`yaes-data`)
   .settings(
     name         := "yaes-core",
     scalaVersion := scala3Version,

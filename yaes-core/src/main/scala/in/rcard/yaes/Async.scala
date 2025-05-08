@@ -234,6 +234,12 @@ object Async {
   object TimedOut
   type TimedOut = TimedOut.type
 
+  extension [A](flow: Flow[A]) {
+    def forkOn()(using async: Async): Fiber[Unit] = Async.fork {
+      flow.collect { _ => () }
+    }
+  }
+
   /** Lifts a computation to the Async context.
     *
     * @param block
