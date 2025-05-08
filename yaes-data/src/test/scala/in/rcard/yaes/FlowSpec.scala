@@ -202,4 +202,48 @@ class FlowSpec extends AnyFlatSpec with Matchers {
 
     exception.getMessage should be("n must be greater than 0")
   }
+
+  "fold" should "reduce the emitted values to a single value" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val result = flow.fold(0) { (acc, value) =>
+      acc + value
+    }
+
+    result should be(6)
+  }
+
+  it should "return the initial value if no values are emitted" in {
+    val flow: Flow[Int] = Flow.flow[Int] {}
+
+    val result = flow.fold(0) { (acc, value) =>
+      acc + value
+    }
+
+    result should be(0)
+  }
+
+  "count" should "return the number of emitted values" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val result = flow.count()
+
+    result should be(3)
+  }
+  
+  it should "return 0 if no values are emitted" in {
+    val flow: Flow[Int] = Flow.flow[Int] {}
+
+    val result = flow.count()
+
+    result should be(0)
+  }
 }

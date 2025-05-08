@@ -77,6 +77,23 @@ object Flow {
           }
         }
       }
+
+    def fold[R](initial: R)(opertaion: (R, A) => R): R = {
+      var result = initial
+      originalFlow.collect { value =>
+        result = opertaion(result, value)
+      }
+      result
+    }
+
+    def count(): Int = {
+      var count = 0
+      originalFlow.collect { _ =>
+        count += 1
+      }
+      count
+    }
+
   }
 
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {
