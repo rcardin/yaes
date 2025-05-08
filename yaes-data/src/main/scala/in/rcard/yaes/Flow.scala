@@ -47,6 +47,36 @@ object Flow {
         Flow.emit(value)
       }
     }
+
+    def take(n: Int): Flow[A] =
+      if (n <= 0) {
+        throw new IllegalArgumentException("n must be greater than 0")
+      }
+      Flow.flow {
+        var count = 0
+
+        originalFlow.collect { value =>
+          if (count < n) {
+            count += 1
+            Flow.emit(value)
+          }
+        }
+      }
+
+    def drop(n: Int): Flow[A] =
+      if (n <= 0) {
+        throw new IllegalArgumentException("n must be greater than 0")
+      }
+      Flow.flow {
+        var skipped = 0
+        originalFlow.collect { value =>
+          if (skipped < n) {
+            skipped += 1
+          } else {
+            Flow.emit(value)
+          }
+        }
+      }
   }
 
   def flow[A](builder: Flow.FlowCollector[A] ?=> Unit): Flow[A] = new Flow[A] {

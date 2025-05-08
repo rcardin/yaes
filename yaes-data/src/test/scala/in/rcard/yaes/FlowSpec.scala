@@ -89,7 +89,7 @@ class FlowSpec extends AnyFlatSpec with Matchers {
       Flow.emit(3)
     }
 
-    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    val actualResult       = scala.collection.mutable.ArrayBuffer[Int]()
     val onEachActualResult = scala.collection.mutable.ArrayBuffer[Int]()
     flow
       .onEach { value =>
@@ -139,5 +139,67 @@ class FlowSpec extends AnyFlatSpec with Matchers {
       }
 
     actualResult should contain theSameElementsInOrderAs Seq(2)
+  }
+
+  "take" should "limit the number of emitted values" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    flow
+      .take(2)
+      .collect { value =>
+        actualResult += value
+      }
+
+    actualResult should contain theSameElementsInOrderAs Seq(1, 2)
+  }
+
+  it should "throw an exception if n is less than or equal to 0" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val exception = intercept[IllegalArgumentException] {
+      flow.take(0).collect(_ => ())
+    }
+
+    exception.getMessage should be("n must be greater than 0")
+  }
+
+  "drop" should "skip the first n emitted values" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    flow
+      .drop(2)
+      .collect { value =>
+        actualResult += value
+      }
+
+    actualResult should contain theSameElementsInOrderAs Seq(3)
+  }
+
+  it should "throw an exception if n is less than or equal to 0" in {
+    val flow: Flow[Int] = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      Flow.emit(3)
+    }
+
+    val exception = intercept[IllegalArgumentException] {
+      flow.drop(0).collect(_ => ())
+    }
+
+    exception.getMessage should be("n must be greater than 0")
   }
 }
