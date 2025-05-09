@@ -11,6 +11,9 @@ Here is the talk I gave at the **Scalar 2025** about the main concepts behind th
 
 [![Watch the video](https://img.youtube.com/vi/TXUxCsPpZp0/maxresdefault.jpg)](https://youtu.be/TXUxCsPpZp0)
 
+Available modules are:
+ * `yaes-core`: The main effects of the YÆS library.
+ * `yaes-data`: A set of data structures that can be used with the YÆS library.
 
 What's new in YÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 

@@ -23,7 +23,15 @@ name := "yaes"
 val scala3Version = "3.6.4"
 scalaVersion := scala3Version
 
+lazy val `yaes-data` = project
+  .settings(
+    name         := "yaes-data",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies
+  )
+
 lazy val `yaes-core` = project
+  .dependsOn(`yaes-data`)
   .settings(
     name         := "yaes-core",
     scalaVersion := scala3Version,
@@ -31,7 +39,7 @@ lazy val `yaes-core` = project
   )
 
 lazy val yaes = (project in file("."))
-  .aggregate(`yaes-core`)
+  .aggregate(`yaes-core`, `yaes-data`)
   .settings(
     scalaVersion := scala3Version
   )
@@ -41,6 +49,7 @@ lazy val dependencies =
     val scalatestVersion = "3.2.19"
     val scalatest        = "org.scalatest" %% "scalatest" % scalatestVersion
   }
+
 
 lazy val commonDependencies = Seq(
   dependencies.scalatest % Test
