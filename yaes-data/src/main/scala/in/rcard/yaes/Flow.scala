@@ -406,6 +406,34 @@ object Flow {
       count
     }
 
+    /** Returns a flow that pairs each element of the original flow with its index as a Long
+     * and  beginning at 0L
+     *
+     * Example:
+     * {{{
+     * val originalFlow = Flow("a", "b", "c")
+     * val result = scala.collection.mutable.ArrayBuffer[(String, Int)]()
+     *
+     * originalFlow
+     *   .zipWithIndex()
+     *   .collect { value =>
+     *     result += value
+     *   }
+     * // result contains: ("a", 0), ("b", 1), ("c", 2)
+     * }}}
+     *
+     * @return
+     * A flow that pairs each element of the original flow with its index as a Long
+     * * and beginning at 0L
+     */
+    def zipWithIndex(): Flow[(A, Int)] = Flow.flow {
+      var index = 0
+      originalFlow.collect { a =>
+        Flow.emit((a, index))
+        index += 1
+      }
+    }
+
   }
 
   /** Creates a flow using the given builder block that emits values through the FlowCollector. The
