@@ -258,4 +258,17 @@ class FlowSpec extends AnyFlatSpec with Matchers {
     actualResult should contain theSameElementsInOrderAs Seq("a" -> 0, "b" -> 1, "c" -> 2)
   }
 
+  "unfold" should "create a flow from a seed and a step function" in {
+    val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
+      if (a > 50) None
+      else Some((a, (b, a + b)))
+    }
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    fibonacciFlow.collect { value =>
+      actualResult += value
+    }
+
+    actualResult should contain theSameElementsInOrderAs Seq(0, 1, 1, 2, 3, 5, 8, 13, 21, 34)
+  }
 }

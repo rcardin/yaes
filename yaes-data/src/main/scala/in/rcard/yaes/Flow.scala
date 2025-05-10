@@ -510,6 +510,26 @@ object Flow {
     collector.emit(value)
   }
 
+  /**
+   * Creates a flow by successively applying a function to a seed value to generate elements and a new state.
+   *
+   * {{{Example:
+   * // Creating a flow via unfold
+   * 
+   * }}}
+   * @param seed the initial state used to generate the first element
+   * @param step a function that takes the current state and returns an `Option` containing a tuple of 
+   *             the next element and the new state, or `None` to terminate the flow
+   * @return a flow containing the sequence of elements generated
+   */
+  def unfold[S, A](seed: S)(step: S => Option[(A, S)]): Flow[A] = flow {
+    var next = step(seed)
+    while (next.isDefined) {
+      Flow.emit(next.get._1)
+      next = step(next.get._2)
+    }
+  }
+  
   /** Creates a flow that emits the given varargs elements.
     *
     * Example:
