@@ -363,7 +363,7 @@ object Flow {
       *
       * @param initial
       *   The initial accumulator value
-      * @param opertaion
+      * @param operation
       *   The operation that takes the current accumulator value and a new value from the flow and
       *   calculates a new accumulator value
       * @tparam R
@@ -371,10 +371,10 @@ object Flow {
       * @return
       *   The final accumulator value
       */
-    def fold[R](initial: R)(opertaion: (R, A) => R): R = {
+    def fold[R](initial: R)(operation: (R, A) => R): R = {
       var result = initial
       originalFlow.collect { value =>
-        result = opertaion(result, value)
+        result = operation(result, value)
       }
       result
     }
