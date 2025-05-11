@@ -548,4 +548,16 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
     actualQueue.toArray should contain theSameElementsInOrderAs List("before", "flow", "after")
   }
+
+  "zipWith" should "mix the corresponding elements of the two flows with the function" in {
+    val flow1 = Flow("a", "b", "c", "d")
+    val flow2 = Flow(1, 2, 3)
+    val combined = flow1.zipWith(flow2)((_, _))
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[(String, Int)]()
+
+    combined.collect { actualResult += _ }
+
+    actualResult should contain theSameElementsInOrderAs Seq("a" -> 1, "b" -> 2, "c" -> 3)
+  }
 }
