@@ -3,7 +3,13 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
 
-import java.util.concurrent.{CancellationException, CompletableFuture, ConcurrentLinkedQueue, ExecutionException, Future, Semaphore, StructuredTaskScope}
+import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Future
+import java.util.concurrent.Semaphore
+import java.util.concurrent.StructuredTaskScope
 import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
 import java.util.concurrent.StructuredTaskScope.Subtask
 import java.util.function.Consumer
@@ -229,35 +235,33 @@ object Async {
   type TimedOut = TimedOut.type
 
   extension [A](flow: Flow[A]) {
-
-    /** Launches the collection of this flow in the current Async context. Returns a Fiber that
+    /** Launches the collection of this flow in the current Async context. Returns a Fiber that 
       * represents the launched coroutine and can be used to join or cancel collection of the flow.
-      *
+      * 
       * This is a terminal operator on the flow. The flow collection is launched when this function
       * is called and is performed asynchronously. This operator is usually used with extension
       * functions like `onEach`, `onCompletion`, and other operators to process all emitted values
       * and handle exceptions within the flow.
-      *
+      * 
       * Example:
       * {{{
       * val flow = Flow(1, 2, 3)
-      *
+      * 
       * // Launch the flow in the current Async context
       * val fiber = flow
       *   .onEach { value => println(s"Processed value: $value") }
       *   .forkOn()
-      *
+      *   
       * // Do some other work
-      *
+      * 
       * // Wait for the flow collection to complete
       * fiber.join()
       * }}}
-      *
+      * 
       * @param async
       *   the async context to launch the flow in
       * @return
-      *   a Fiber that represents the launched computation and can be used for joining or
-      *   cancellation
+      *   a Fiber that represents the launched computation and can be used for joining or cancellation
       */
     def forkOn()(using async: Async): Fiber[Unit] = Async.fork {
       flow.collect { _ => () }
