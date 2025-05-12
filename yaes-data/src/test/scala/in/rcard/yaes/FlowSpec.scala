@@ -250,7 +250,7 @@ class FlowSpec extends AnyFlatSpec with Matchers {
   "zipWithIndex" should "create a flow that adds its index to the value" in {
     val flow: Flow[String] = Flow("a", "b", "c")
 
-    val actualResult = scala.collection.mutable.ArrayBuffer[(String, Int)]()
+    val actualResult = scala.collection.mutable.ArrayBuffer[(String, Long)]()
     flow.zipWithIndex().collect {
       actualResult += _
     }
