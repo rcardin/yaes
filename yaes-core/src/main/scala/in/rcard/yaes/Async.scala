@@ -296,7 +296,7 @@ object Async {
       *   A new flow emitting elements resulting from applying the function `f` to pairs of elements
       *   from both flows.
       */
-    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using asyc: Async): Flow[C] =
+    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] =
       Flow.flow {
         val canEmitPair = new Semaphore(0)
         val canGetA     = new Semaphore(1)
