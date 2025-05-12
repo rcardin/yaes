@@ -298,49 +298,37 @@ object Async {
       *   A new flow emitting elements resulting from applying the function `f` to pairs of elements
       *   from both flows.
       */
-    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] =
+    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] = {
       Flow.flow {
         val canEmitPair = new Semaphore(0)
         val canGetA     = new Semaphore(1)
         val canGetB     = new Semaphore(1)
         var a           = null.asInstanceOf[A]
         var b           = null.asInstanceOf[B]
-        val zipFiber = Async.fork {
-          try {
-            while (true) {
-              canEmitPair.acquire(2)
-              Flow.emit(f(a, b))
-              canGetA.release()
-              canGetB.release()
-            }
-          } catch {
-            case _: InterruptedException => ()
+        Async.race(
+          {
+            Async.race(
+              flow.collect { value =>
+                canGetA.acquire()
+                a = value
+                canEmitPair.release()
+              },
+              other.collect { value =>
+                canGetB.acquire()
+                b = value
+                canEmitPair.release()
+              }
+            )
+          },
+          while (true) {
+            canEmitPair.acquire(2)
+            Flow.emit(f(a, b))
+            canGetA.release()
+            canGetB.release()
           }
-        }
-        val fiberFlowA = flow
-          .onEach { value =>
-            canGetA.acquire()
-            a = value
-            canEmitPair.release()
-          }
-          .forkOn()
-        val fiberFlowB = other
-          .onEach { value =>
-            canGetB.acquire()
-            b = value
-            canEmitPair.release()
-          }
-          .forkOn()
-        fiberFlowA.onComplete { _ =>
-          fiberFlowB.cancel()
-          zipFiber.cancel()
-        }
-        fiberFlowB.onComplete { _ =>
-          fiberFlowA.cancel()
-          zipFiber.cancel()
-        }
-        zipFiber.join()
+        )
       }
+    }
   }
 
   /** Lifts a computation to the Async context.
