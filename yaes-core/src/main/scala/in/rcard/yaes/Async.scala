@@ -292,6 +292,8 @@ object Async {
       *   The other flow to combine with this flow.
       * @param f
       *   A function that takes a pair of elements from both flows and produces a new element.
+      * @param async
+      *   The async context
       * @return
       *   A new flow emitting elements resulting from applying the function `f` to pairs of elements
       *   from both flows.
