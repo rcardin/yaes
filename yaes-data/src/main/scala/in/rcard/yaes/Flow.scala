@@ -406,6 +406,32 @@ object Flow {
       count
     }
 
+    /** Returns a flow that pairs each element of the original flow with its index beginning at 0
+     *
+     * Example:
+     * {{{
+     * val originalFlow = Flow("a", "b", "c")
+     * val result = scala.collection.mutable.ArrayBuffer[(String, Long)]()
+     *
+     * originalFlow
+     *   .zipWithIndex()
+     *   .collect { value =>
+     *     result += value
+     *   }
+     * // result contains: ("a", 0), ("b", 1), ("c", 2)
+     * }}}
+     *
+     * @return
+     * A flow that pairs each element of the original flow with its index beginning at 0
+     */
+    def zipWithIndex(): Flow[(A, Long)] = Flow.flow {
+      var index: Long = 0L
+      originalFlow.collect { a =>
+        Flow.emit((a, index))
+        index += 1
+      }
+    }
+
   }
 
   /** Creates a flow using the given builder block that emits values through the FlowCollector. The
@@ -482,6 +508,38 @@ object Flow {
     collector.emit(value)
   }
 
+  /**
+   * Creates a flow by successively applying a function to a seed value to generate elements and a new state.
+   *
+   * Example:
+   * {{{
+   * // Creating a flow via unfold
+   * val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
+   *   if (a > 50) None
+   *   else Some((a, (b, a + b)))
+   * }
+   *
+   * val result = scala.collection.mutable.ArrayBuffer[Int]()
+   * fibonacciFlow.collect { value =>
+   *   actualResult += value
+   * }
+   *
+   * // result contains: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
+   * }}}
+ *
+   * @param seed the initial state used to generate the first element
+   * @param step a function that takes the current state and returns an `Option` containing a tuple of 
+   *             the next element and the new state, or `None` to terminate the flow
+   * @return a flow containing the sequence of elements generated
+   */
+  def unfold[S, A](seed: S)(step: S => Option[(A, S)]): Flow[A] = flow {
+    var next = step(seed)
+    while (next.isDefined) {
+      Flow.emit(next.get._1)
+      next = step(next.get._2)
+    }
+  }
+  
   /** Creates a flow that emits the given varargs elements.
     *
     * Example:
