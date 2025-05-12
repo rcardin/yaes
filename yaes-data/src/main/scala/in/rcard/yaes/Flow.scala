@@ -411,7 +411,7 @@ object Flow {
      * Example:
      * {{{
      * val originalFlow = Flow("a", "b", "c")
-     * val result = scala.collection.mutable.ArrayBuffer[(String, Int)]()
+     * val result = scala.collection.mutable.ArrayBuffer[(String, Long)]()
      *
      * originalFlow
      *   .zipWithIndex()
