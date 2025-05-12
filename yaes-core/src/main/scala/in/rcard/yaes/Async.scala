@@ -235,110 +235,109 @@ object Async {
   type TimedOut = TimedOut.type
 
   extension [A](flow: Flow[A]) {
-    /** Launches the collection of this flow in the current Async context. Returns a Fiber that 
+
+    /** Launches the collection of this flow in the current Async context. Returns a Fiber that
       * represents the launched coroutine and can be used to join or cancel collection of the flow.
-      * 
+      *
       * This is a terminal operator on the flow. The flow collection is launched when this function
       * is called and is performed asynchronously. This operator is usually used with extension
       * functions like `onEach`, `onCompletion`, and other operators to process all emitted values
       * and handle exceptions within the flow.
-      * 
+      *
       * Example:
       * {{{
       * val flow = Flow(1, 2, 3)
-      * 
+      *
       * // Launch the flow in the current Async context
       * val fiber = flow
       *   .onEach { value => println(s"Processed value: $value") }
       *   .forkOn()
-      *   
+      *
       * // Do some other work
-      * 
+      *
       * // Wait for the flow collection to complete
       * fiber.join()
       * }}}
-      * 
+      *
       * @param async
       *   the async context to launch the flow in
       * @return
-      *   a Fiber that represents the launched computation and can be used for joining or cancellation
+      *   a Fiber that represents the launched computation and can be used for joining or
+      *   cancellation
       */
     def forkOn()(using async: Async): Fiber[Unit] = Async.fork {
       flow.collect { _ => () }
     }
 
-    /**
-     * Combines the elements of this flow with another flow using the provided function.
-     *
-     * The method emits elements by applying the provided function `f` to pairs of elements
-     * from the current flow and the `other` flow. It only emits elements when both flows
-     * provide values.
-     *
-     * Example:
-     * {{{
-     * val flow1 = Flow("a", "b", "c", "d")
-     * val flow2 = Flow(1, 2, 3)
-     * val combined = flow1.zipWith(flow2)((_, _))
-     *
-     * val result = scala.collection.mutable.ArrayBuffer[(String, Int)]()
-     *
-     * combined.collect { result += _ }
-     *
-     * // Result contains the elements ("a", 1), ("b", 2), ("c", 3)
-     * }}}
-     *
-     * @param other
-     * The other flow to combine with this flow.
-     * @param f
-     * A function that takes a pair of elements from both flows and produces a new element.
-     * @return
-     * A new flow emitting elements resulting from applying the function `f` to pairs
-     * of elements from both flows.
-     */
-    def zipWith[B, C](other: Flow[B])(f: (A, B) => C): Flow[C] =
+    /** Combines the elements of this flow with another flow using the provided function.
+      *
+      * The method emits elements by applying the provided function `f` to pairs of elements from
+      * the current flow and the `other` flow. It only emits elements when both flows provide
+      * values.
+      *
+      * Example:
+      * {{{
+      * val flow1 = Flow("a", "b", "c", "d")
+      * val flow2 = Flow(1, 2, 3)
+      * val combined = flow1.zipWith(flow2)((_, _))
+      *
+      * val result = scala.collection.mutable.ArrayBuffer[(String, Int)]()
+      *
+      * combined.collect { result += _ }
+      *
+      * // Result contains the elements ("a", 1), ("b", 2), ("c", 3)
+      * }}}
+      *
+      * @param other
+      *   The other flow to combine with this flow.
+      * @param f
+      *   A function that takes a pair of elements from both flows and produces a new element.
+      * @return
+      *   A new flow emitting elements resulting from applying the function `f` to pairs of elements
+      *   from both flows.
+      */
+    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using asyc: Async): Flow[C] =
       Flow.flow {
-        Async.run {
-          val canEmitPair = new Semaphore(0)
-          val canGetA     = new Semaphore(1)
-          val canGetB     = new Semaphore(1)
-          var a           = null.asInstanceOf[A]
-          var b           = null.asInstanceOf[B]
-          val zipFiber = Async.fork {
-            try {
-              while (true) {
-                canEmitPair.acquire(2)
-                Flow.emit(f(a, b))
-                canGetA.release()
-                canGetB.release()
-              }
-            } catch {
-              case _: InterruptedException => ()
+        val canEmitPair = new Semaphore(0)
+        val canGetA     = new Semaphore(1)
+        val canGetB     = new Semaphore(1)
+        var a           = null.asInstanceOf[A]
+        var b           = null.asInstanceOf[B]
+        val zipFiber = Async.fork {
+          try {
+            while (true) {
+              canEmitPair.acquire(2)
+              Flow.emit(f(a, b))
+              canGetA.release()
+              canGetB.release()
             }
+          } catch {
+            case _: InterruptedException => ()
           }
-          val fiberFlowA = flow
-            .onEach { value =>
-              canGetA.acquire()
-              a = value
-              canEmitPair.release()
-            }
-            .forkOn()
-          val fiberFlowB = other
-            .onEach { value =>
-              canGetB.acquire()
-              b = value
-              canEmitPair.release()
-            }
-            .forkOn()
-          fiberFlowA.onComplete { _ =>
-            fiberFlowB.cancel()
-            zipFiber.cancel()
-          }
-          fiberFlowB.onComplete { _ =>
-            fiberFlowA.cancel()
-            zipFiber.cancel()
-          }
-          zipFiber.join()
         }
+        val fiberFlowA = flow
+          .onEach { value =>
+            canGetA.acquire()
+            a = value
+            canEmitPair.release()
+          }
+          .forkOn()
+        val fiberFlowB = other
+          .onEach { value =>
+            canGetB.acquire()
+            b = value
+            canEmitPair.release()
+          }
+          .forkOn()
+        fiberFlowA.onComplete { _ =>
+          fiberFlowB.cancel()
+          zipFiber.cancel()
+        }
+        fiberFlowB.onComplete { _ =>
+          fiberFlowA.cancel()
+          zipFiber.cancel()
+        }
+        zipFiber.join()
       }
   }
 

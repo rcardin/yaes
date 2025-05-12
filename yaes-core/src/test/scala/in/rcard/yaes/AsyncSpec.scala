@@ -550,40 +550,47 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   "zipWith" should "mix the corresponding elements of the two flows with the function" in {
-    val flow1 = Flow("a", "b", "c", "d")
-    val flow2 = Flow(1, 2, 3)
-    val combined = flow1.zipWith(flow2)((_, _))
-
-    val actualResult = scala.collection.mutable.ArrayBuffer[(String, Int)]()
-
-    combined.collect { actualResult += _ }
-
-    actualResult should contain theSameElementsInOrderAs Seq("a" -> 1, "b" -> 2, "c" -> 3)
+    val actualQueue = new ConcurrentLinkedQueue[(String, Int)]()
+    val flow1       = Flow("a", "b", "c", "d")
+    val flow2       = Flow(1, 2, 3)
+    Async.run {
+      val combined = flow1.zipWith(flow2)((_, _))
+      combined.collect {
+        actualQueue.add(_)
+      }
+    }
+    actualQueue.toArray() should contain theSameElementsInOrderAs List("a" -> 1, "b" -> 2, "c" -> 3)
   }
 
   it should "mix the values of one flow with itself" in {
-    val flow = Flow(1, 2, 3)
-    val combined = flow.zipWith(flow)((_, _))
-
-    val actualResult = scala.collection.mutable.ArrayBuffer[(Int, Int)]()
-
-    combined.collect {
-      actualResult += _
+    val actualQueue = new ConcurrentLinkedQueue[(Int, Int)]()
+    val flow        = Flow(1, 2, 3)
+    Async.run {
+      val combined = flow.zipWith(flow)((_, _))
+      combined.collect {
+        actualQueue.add(_)
+      }
     }
-
-    actualResult should contain theSameElementsInOrderAs Seq(1 -> 1, 2 -> 2, 3 -> 3)
+    actualQueue.toArray() should contain theSameElementsInOrderAs List(1 -> 1, 2 -> 2, 3 -> 3)
   }
 
   it should "return the empty flow when one of the two flows is empty" in {
-    val empty = Flow()
+    val empty    = Flow()
     val nonEmpty = Flow(1, 2, 3)
-
-    val emptyLeft = empty.zipWith(nonEmpty)((_, _))
-    val emptyRight = nonEmpty.zipWith(empty)((_, _))
-    val emptyBoth = empty.zipWith(empty)((_, _))
-
-    emptyLeft.count() shouldBe 0
-    emptyRight.count() shouldBe 0
-    emptyBoth.count() shouldBe 0
+    val emptyLeftCount = Async.run {
+      val emptyLeft = empty.zipWith(nonEmpty)((_, _))
+      emptyLeft.count()
+    }
+    val emptyRightCount = Async.run {
+      val emptyRight = nonEmpty.zipWith(empty)((_, _))
+      emptyRight.count()
+    }
+    val emptyBothCount = Async.run {
+      val emptyBoth = empty.zipWith(empty)((_, _))
+      emptyBoth.count()
+    }
+    emptyLeftCount shouldBe 0
+    emptyRightCount shouldBe 0
+    emptyBothCount shouldBe 0
   }
 }
