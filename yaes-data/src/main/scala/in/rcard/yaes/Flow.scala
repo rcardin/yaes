@@ -424,8 +424,8 @@ object Flow {
      * @return
      * A flow that pairs each element of the original flow with its index beginning at 0
      */
-    def zipWithIndex(): Flow[(A, Int)] = Flow.flow {
-      var index = 0
+    def zipWithIndex(): Flow[(A, Long)] = Flow.flow {
+      var index: Long = 0L
       originalFlow.collect { a =>
         Flow.emit((a, index))
         index += 1
