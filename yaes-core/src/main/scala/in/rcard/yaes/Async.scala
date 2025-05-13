@@ -300,31 +300,43 @@ object Async {
       */
     def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] = {
       Flow.flow {
-        val canEmitPair = new Semaphore(0)
-        val canGetA     = new Semaphore(1)
-        val canGetB     = new Semaphore(1)
-        var a           = null.asInstanceOf[A]
-        var b           = null.asInstanceOf[B]
+        val canEmitPair  = new Semaphore(0)
+        val aCanContinue = new Semaphore(0)
+        val bCanContinue = new Semaphore(0)
+        var a: Option[A] = None
+        var b: Option[B] = None
         Async.race(
           {
             Async.race(
-              flow.collect { value =>
-                canGetA.acquire()
-                a = value
-                canEmitPair.release()
-              },
-              other.collect { value =>
-                canGetB.acquire()
-                b = value
-                canEmitPair.release()
+              {
+                flow.collect { value =>
+                  a = Some(value)
+                  canEmitPair.release()
+                  aCanContinue.acquire()
+                }
+                a = None // shutdown
+                canEmitPair.release(2)
+              }, {
+                other.collect { value =>
+                  b = Some(value)
+                  canEmitPair.release()
+                  bCanContinue.acquire()
+                }
+                b = None // shutdown
+                canEmitPair.release(2)
               }
             )
           },
-          while (true) {
-            canEmitPair.acquire(2)
-            Flow.emit(f(a, b))
-            canGetA.release()
-            canGetB.release()
+          {
+            var continue = true
+            while (continue) {
+              canEmitPair.acquire(2)
+              (a, b) match
+                case (Some(a), Some(b)) => Flow.emit(f(a, b))
+                case _ => continue = false
+              aCanContinue.release()
+              bCanContinue.release()
+            }
           }
         )
       }
