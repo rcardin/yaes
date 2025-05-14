@@ -96,6 +96,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Clock`](#the-clock-effect): Allows for managing time.
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
+- [`Var`](#the-var-effect): Provides a purely-functional effect for localized, thread-safe mutable state via an `AtomicReference`.
 
 ### The `IO` Effect
 
@@ -557,6 +558,52 @@ object Log {
   // ...
 }
 ```
+
+### The `Var` Effect
+
+Introduces **local mutable state** to YAES programs while preserving a purely functional API. Internally it relies on `AtomicReference` for **lock-free**, thread-safe mutation—think of it as a lightweight, more ergonomic cousin to the classical `State` monad.
+
+```scala 3
+import in.rcard.yaes.Var.*
+
+// Tail-recursive stateful computation that increments the counter `n` times
+@scala.annotation.tailrec
+def incrementNTimes(n: Int)(using Var[Int]): Int =
+  if n <= 0 then
+    Var.get           // return the current state
+  else
+    Var.update(_ + 1) // mutate state
+    incrementNTimes(n - 1)
+```
+
+You run these computations by providing an initial state with either:
+
+- `Var.runShared(initial)`   — one shared `Var` instance across all threads
+- `Var.runIsolated(initial)` — a separate `Var` instance per thread
+
+```scala 3
+val sharedResult = Var.runShared(0) {
+  incrementNTimes(10)
+}
+// sharedResult == 10
+
+val isolatedResult = Var.runIsolated(0) {
+  incrementNTimes(5)
+}
+// isolatedResult == 5
+```
+
+#### Core Operations
+
+| Operation     | Signature                    | Description                                                      |
+|---------------|------------------------------|------------------------------------------------------------------|
+| `Var.get`     | `Var[S] ?=> S`               | Read the current state.                                          |
+| `Var.set`     | `(S) => (Var[S] ?=> S)`      | Atomically replace the state, returning the previous value.      |
+| `Var.update`  | `(S => S) => (Var[S] ?=> S)` | Atomically transform the state with a pure function.             |
+
+All mutations are confined to the dynamic scope of your `runShared` or `runIsolated` block—outside of it, the state is completely hidden. Under the hood, using `AtomicReference` (or `ThreadLocal`) guarantees that concurrent updates never get lost and incur minimal synchronization overhead.
+
+> **Tip** – For most everyday stateful logic, combining `Var.get` and `Var.update` is sufficient. By requiring an implicit `Var[S]` in your signature, you keep your API surface explicit and clearly mark stateful functions.
 
 ## Contributing
 
