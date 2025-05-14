@@ -3,18 +3,10 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
 
-import java.util.concurrent.CancellationException
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Future
-import java.util.concurrent.Semaphore
-import java.util.concurrent.StructuredTaskScope
+import java.util.concurrent.{CancellationException, CompletableFuture, ExecutionException, Future, StructuredTaskScope, SynchronousQueue}
 import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
 import java.util.concurrent.StructuredTaskScope.Subtask
 import java.util.function.Consumer
-import scala.collection.immutable.Stream.Cons
-import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import Async.Cancelled
 
@@ -298,48 +290,20 @@ object Async {
       *   A new flow emitting elements resulting from applying the function `f` to pairs of elements
       *   from both flows.
       */
-    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] = {
-      Flow.flow {
-        val canEmitPair  = new Semaphore(0)
-        val aCanContinue = new Semaphore(0)
-        val bCanContinue = new Semaphore(0)
-        var a: Option[A] = None
-        var b: Option[B] = None
-        Async.race(
-          {
-            Async.race(
-              {
-                flow.collect { value =>
-                  a = Some(value)
-                  canEmitPair.release()
-                  aCanContinue.acquire()
-                }
-                a = None // shutdown
-                canEmitPair.release(2)
-              }, {
-                other.collect { value =>
-                  b = Some(value)
-                  canEmitPair.release()
-                  bCanContinue.acquire()
-                }
-                b = None // shutdown
-                canEmitPair.release(2)
-              }
-            )
-          },
-          {
-            var continue = true
-            while (continue) {
-              canEmitPair.acquire(2)
-              (a, b) match
-                case (Some(a), Some(b)) => Flow.emit(f(a, b))
-                case _ => continue = false
-              aCanContinue.release()
-              bCanContinue.release()
-            }
+    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] = Flow.flow {
+      val second: SynchronousQueue[B] = new SynchronousQueue()
+      Async.race(
+        {
+          other.collect { b =>
+            second.put(b)
           }
-        )
-      }
+        }, {
+          flow.collect { a =>
+            val b = second.take()
+            Flow.emit(f(a, b))
+          }
+        }
+      )
     }
   }
 
