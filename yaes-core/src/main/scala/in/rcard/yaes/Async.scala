@@ -3,7 +3,14 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
 
-import java.util.concurrent.{CancellationException, CompletableFuture, ExecutionException, Future, StructuredTaskScope, SynchronousQueue}
+import java.util.concurrent.{
+  CancellationException,
+  CompletableFuture,
+  ExecutionException,
+  Future,
+  StructuredTaskScope,
+  SynchronousQueue
+}
 import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
 import java.util.concurrent.StructuredTaskScope.Subtask
 import java.util.function.Consumer
@@ -291,16 +298,19 @@ object Async {
       *   from both flows.
       */
     def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] = Flow.flow {
-      val second: SynchronousQueue[B] = new SynchronousQueue()
+      val second: SynchronousQueue[Option[B]] = new SynchronousQueue()
       Async.race(
         {
           other.collect { b =>
-            second.put(b)
+            second.put(Some(b))
           }
+          second.put(None)
         }, {
           flow.collect { a =>
-            val b = second.take()
-            Flow.emit(f(a, b))
+            second.take() match {
+              case Some(b) => Flow.emit(f(a, b))
+              case None    => ()
+            }
           }
         }
       )
