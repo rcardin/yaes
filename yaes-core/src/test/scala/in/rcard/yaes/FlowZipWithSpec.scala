@@ -28,15 +28,19 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       }
     }
 
+  private def zipToArray[A, B](left: Flow[A], right: Flow[B])(using async: Async): Array[(A, B)] = {
+    val queue  = new ConcurrentLinkedQueue[(A, B)]()
+    val zipped = left.zipWith(right)((_, _))
+    zipped.collect {
+      queue.add(_)
+    }
+    queue.toArray(Array.empty[(A, B)])
+  }
+
   "zipWith" should "zip two empty flows" in {
     Async.run {
       forAll(genFlow(), genFlow()) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Any, Any)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue shouldBe empty
+        zipToArray(flow1, flow2) shouldBe empty
       }
     }
   }
@@ -44,12 +48,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "zip one empty flow with one non empty" in {
     Async.run {
       forAll(genFlow(), genFlow('A')) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Any, Char)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue shouldBe empty
+        zipToArray(flow1, flow2) shouldBe empty
       }
     }
   }
@@ -57,12 +56,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "zip one non empty with one empty" in {
     Async.run {
       forAll(genFlow('A'), genFlow()) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Char, Any)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue shouldBe empty
+        zipToArray(flow1, flow2) shouldBe empty
       }
     }
   }
@@ -70,12 +64,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "zip to flows of one element" in {
     Async.run {
       forAll(genFlow('A'), genFlow(1)) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Char, Int)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue.toArray should contain theSameElementsInOrderAs Seq('A' -> 1)
+        zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq('A' -> 1)
       }
     }
   }
@@ -83,12 +72,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "zip a flow with one element with another with two" in {
     Async.run {
       forAll(genFlow('A'), genFlow(1, 2)) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Char, Int)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue.toArray should contain theSameElementsInOrderAs Seq('A' -> 1)
+        zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq('A' -> 1)
       }
     }
   }
@@ -96,12 +80,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "zip a flow with two elements with another with one" in {
     Async.run {
       forAll(genFlow('A', 'B'), genFlow(1)) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Char, Int)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue.toArray should contain theSameElementsInOrderAs Seq('A' -> 1)
+        zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq('A' -> 1)
       }
     }
   }
@@ -109,12 +88,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "zip two flows with two elements each" in {
     Async.run {
       forAll(genFlow('A', 'B'), genFlow(1, 2)) { (flow1, flow2) =>
-        val actualQueue = new ConcurrentLinkedQueue[(Char, Int)]()
-        val zipped      = flow1.zipWith(flow2)((_, _))
-        zipped.collect {
-          actualQueue.add(_)
-        }
-        actualQueue.toArray should contain theSameElementsInOrderAs Seq('A' -> 1, 'B' -> 2)
+        zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq('A' -> 1, 'B' -> 2)
       }
     }
   }
