@@ -238,12 +238,37 @@ class FlowSpec extends AnyFlatSpec with Matchers {
 
     result should be(3)
   }
-  
+
   it should "return 0 if no values are emitted" in {
     val flow: Flow[Int] = Flow.flow[Int] {}
 
     val result = flow.count()
 
     result should be(0)
+  }
+
+  "zipWithIndex" should "create a flow that adds its index to the value" in {
+    val flow: Flow[String] = Flow("a", "b", "c")
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[(String, Long)]()
+    flow.zipWithIndex().collect {
+      actualResult += _
+    }
+
+    actualResult should contain theSameElementsInOrderAs Seq("a" -> 0, "b" -> 1, "c" -> 2)
+  }
+
+  "unfold" should "create a flow from a seed and a step function" in {
+    val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
+      if (a > 50) None
+      else Some((a, (b, a + b)))
+    }
+
+    val actualResult = scala.collection.mutable.ArrayBuffer[Int]()
+    fibonacciFlow.collect { value =>
+      actualResult += value
+    }
+
+    actualResult should contain theSameElementsInOrderAs Seq(0, 1, 1, 2, 3, 5, 8, 13, 21, 34)
   }
 }

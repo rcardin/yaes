@@ -392,14 +392,18 @@ object Async {
   def timeout[A](
       timeout: Duration
   )(block: => A)(using async: Async, raise: Raise[TimedOut]): A = {
-    race(
+    val raceResult: Either[TimedOut, A] = race(
       {
-        block
+        Right(block)
       }, {
         delay(timeout)
-        Raise.raise(TimedOut)
+        Left(TimedOut)
       }
     )
+    raceResult match {
+      case Right(result) => result
+      case Left(timeout) => Raise.raise(timeout)
+    }
   }
 
   /** Races two computations against each other, returning the result of the first to complete

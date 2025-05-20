@@ -518,15 +518,16 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "raise a TimedOut error and cancel the computation if the timeout is reached" in {
     val actualQueue = new ConcurrentLinkedQueue[String]()
-    val actualResult: Int | TimedOut = Raise.run {
+    val actualResult: Int | TimedOut =
       Async.run {
-        Async.timeout(500.millis) {
-          Async.delay(1.seconds)
-          actualQueue.add("fb1")
-          42
+        Raise.run {
+          Async.timeout(500.millis) {
+            Async.delay(1.seconds)
+            actualQueue.add("fb1")
+            42
+          }
         }
       }
-    }
 
     actualQueue.toArray shouldBe empty
     actualResult shouldBe TimedOut
