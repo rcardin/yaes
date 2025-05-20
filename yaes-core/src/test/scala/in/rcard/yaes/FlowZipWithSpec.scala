@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import java.util.concurrent.ConcurrentLinkedQueue
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.*
 import scala.language.postfixOps
 
 class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks {
@@ -90,6 +90,36 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       forAll(genFlow('A', 'B'), genFlow(1, 2)) { (flow1, flow2) =>
         zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq('A' -> 1, 'B' -> 2)
       }
+    }
+  }
+
+  it should "stop mixing when one flow is canceled" in {
+    Async.run {
+      val flow1 = Flow.flow {
+        Async.delay(50.millis)
+        Flow.emit(1)
+        Async.delay(50.millis)
+        Flow.emit(2)
+        Async.delay(50.millis)
+        Flow.emit(3)
+        Async.delay(50.millis)
+      }
+      val flow2 = Flow.flow {
+        Raise.withDefault(()) {
+          Async.timeout(125.millis) {
+            Flow.emit('A')
+            Async.delay(50.millis)
+            Flow.emit('B')
+            Async.delay(50.millis)
+            Flow.emit('C')
+            Async.delay(50.millis)
+            Flow.emit('D')
+            Async.delay(50.millis)
+            Flow.emit('E')
+          }
+        }
+      }
+      zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq(1 -> 'A', 2 -> 'B')
     }
   }
 }
