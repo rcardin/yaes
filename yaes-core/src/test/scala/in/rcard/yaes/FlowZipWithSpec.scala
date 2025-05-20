@@ -12,7 +12,7 @@ import scala.language.postfixOps
 
 class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks {
 
-  val genMillis: Gen[Duration] =
+  private val genMillis: Gen[Duration] =
     Gen
       .oneOf[Long](0, 50, 100, 150, 200)
       .map(_ * 1000 * 1000) // to millis
@@ -27,6 +27,24 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
         if (element != null) Flow.emit(element.nn)
       }
     }
+
+  private final case class TestFlow[A](delays: List[Duration], flow: Flow[A], killed: Duration)
+
+  private def genInterruptibleFlow[A](as: A*)(using async: Async): Gen[TestFlow[A]] =
+    for {
+      killedAt <- genMillis.map(_ * as.length / 2)
+      delays   <- Gen.listOfN(as.length + 1, genMillis)
+      flow = Flow.flow[A] {
+        Raise.withDefault(()) {
+          Async.timeout(killedAt) {
+            delays.zip(as :+ null).foreach { case (delay, element) =>
+              Async.delay(delay)
+              if (element != null) Flow.emit(element.nn)
+            }
+          }
+        }
+      }
+    } yield TestFlow(delays, flow, killedAt)
 
   private def zipToArray[A, B](left: Flow[A], right: Flow[B])(using async: Async): Array[(A, B)] = {
     val queue  = new ConcurrentLinkedQueue[(A, B)]()
