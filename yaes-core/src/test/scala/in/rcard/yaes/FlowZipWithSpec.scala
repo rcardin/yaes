@@ -15,8 +15,14 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   private val genMillis: Gen[Duration] =
     Gen
       .oneOf[Long](0, 50, 100, 150, 200)
-      .map(_ * 1000 * 1000) // to millis
-      .map(Duration.fromNanos)
+      .map(_.millis)
+
+  private def genKillTime(delays: List[Duration]): Gen[Duration] = {
+    val emissions = delays.scanLeft(delays.head)(_ + _)
+    Gen
+      .oneOf(emissions)
+      .map(_ + 25.millis)
+  }
 
   private def genFlow[A](as: A*)(using async: Async): Gen[Flow[A]] =
     for {
@@ -28,12 +34,16 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       }
     }
 
-  private final case class TestFlow[A](delays: List[Duration], flow: Flow[A], killed: Duration)
+  private final case class InterruptedFlow[A](
+    flow: Flow[A],
+    delays: List[Duration],
+    killed: Duration
+  )
 
-  private def genInterruptibleFlow[A](as: A*)(using async: Async): Gen[TestFlow[A]] =
+  private def genInterruptedFlow[A](as: A*)(using async: Async): Gen[InterruptedFlow[A]] =
     for {
-      killedAt <- genMillis.map(_ * as.length / 2)
       delays   <- Gen.listOfN(as.length + 1, genMillis)
+      killedAt <- genKillTime(delays.init) // The last delay is after last emitted
       flow = Flow.flow[A] {
         Raise.withDefault(()) {
           Async.timeout(killedAt) {
@@ -44,7 +54,7 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
           }
         }
       }
-    } yield TestFlow(delays, flow, killedAt)
+    } yield InterruptedFlow(flow, delays.init, killedAt)
 
   private def zipToArray[A, B](left: Flow[A], right: Flow[B])(using async: Async): Array[(A, B)] = {
     val queue  = new ConcurrentLinkedQueue[(A, B)]()
@@ -111,33 +121,23 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     }
   }
 
-  it should "stop mixing when one flow is canceled" in {
+  it should "stop zipping when one of the flows is interrupted" in {
     Async.run {
-      val flow1 = Flow.flow {
-        Async.delay(50.millis)
-        Flow.emit(1)
-        Async.delay(50.millis)
-        Flow.emit(2)
-        Async.delay(50.millis)
-        Flow.emit(3)
-        Async.delay(50.millis)
+      val elements1 = List('A', 'B', 'C', 'D', 'F', 'G', 'H', 'I', 'J', 'K')
+      val elements2 = 1 to 20
+      forAll(genInterruptedFlow(elements1*), genInterruptedFlow(elements2*)) {
+        case (InterruptedFlow(flow1, delays1, killed1), InterruptedFlow(flow2, delays2, killed2)) =>
+          // The delay of each pair is that of the last one
+          val mixedDelays = delays1.zip(delays2).map { case (d1, d2) => d1.max(d2) }
+          // Pairs at emitted at the accumulated delay
+          val emissions  = mixedDelays.scanLeft(Duration.Zero: Duration)(_ + _)
+          // Only those pairs emitted before the first kill are considered
+          val killTime   = killed1.min(killed2)
+          val beforeKill = emissions.count(_ < killTime) - 1  // -1: Omits first zero
+          val expected   = elements1.zip(elements2).take(beforeKill)
+
+          zipToArray(flow1, flow2) should contain theSameElementsInOrderAs expected
       }
-      val flow2 = Flow.flow {
-        Raise.withDefault(()) {
-          Async.timeout(125.millis) {
-            Flow.emit('A')
-            Async.delay(50.millis)
-            Flow.emit('B')
-            Async.delay(50.millis)
-            Flow.emit('C')
-            Async.delay(50.millis)
-            Flow.emit('D')
-            Async.delay(50.millis)
-            Flow.emit('E')
-          }
-        }
-      }
-      zipToArray(flow1, flow2) should contain theSameElementsInOrderAs Seq(1 -> 'A', 2 -> 'B')
     }
   }
 }
