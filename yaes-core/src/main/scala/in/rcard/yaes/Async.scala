@@ -3,19 +3,18 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
 
-import java.util.concurrent.CancellationException
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Future
-import java.util.concurrent.StructuredTaskScope
+import java.util.concurrent.{
+  CancellationException,
+  CompletableFuture,
+  ExecutionException,
+  Future,
+  StructuredTaskScope,
+  SynchronousQueue
+}
 import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
 import java.util.concurrent.StructuredTaskScope.Subtask
 import java.util.function.Consumer
-import scala.collection.immutable.Stream.Cons
-import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
-
 import Async.Cancelled
 
 /** Represents an asynchronous computation that can be controlled.
@@ -267,6 +266,54 @@ object Async {
       */
     def forkOn()(using async: Async): Fiber[Unit] = Async.fork {
       flow.collect { _ => () }
+    }
+
+    /** Combines the elements of this flow with another flow using the provided function.
+      *
+      * The method emits elements by applying the provided function `f` to pairs of elements from
+      * the current flow and the `other` flow. It only emits elements when both flows provide
+      * values.
+      *
+      * Example:
+      * {{{
+      * val flow1 = Flow("a", "b", "c", "d")
+      * val flow2 = Flow(1, 2, 3)
+      * val combined = flow1.zipWith(flow2)((_, _))
+      *
+      * val result = scala.collection.mutable.ArrayBuffer[(String, Int)]()
+      *
+      * combined.collect { result += _ }
+      *
+      * // Result contains the elements ("a", 1), ("b", 2), ("c", 3)
+      * }}}
+      *
+      * @param other
+      *   The other flow to combine with this flow.
+      * @param f
+      *   A function that takes a pair of elements from both flows and produces a new element.
+      * @param async
+      *   The async context
+      * @return
+      *   A new flow emitting elements resulting from applying the function `f` to pairs of elements
+      *   from both flows.
+      */
+    def zipWith[B, C](other: Flow[B])(f: (A, B) => C)(using async: Async): Flow[C] = Flow.flow {
+      val second: SynchronousQueue[Option[B]] = new SynchronousQueue()
+      Async.race(
+        {
+          other.collect { b =>
+            second.put(Some(b))
+          }
+          second.put(None)
+        }, {
+          flow.collect { a =>
+            second.take() match {
+              case Some(b) => Flow.emit(f(a, b))
+              case None    => ()
+            }
+          }
+        }
+      )
     }
   }
 
