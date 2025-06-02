@@ -46,11 +46,13 @@ lazy val yaes = (project in file("."))
 
 lazy val dependencies =
   new {
-    val scalatestVersion = "3.2.19"
-    val scalatest        = "org.scalatest" %% "scalatest" % scalatestVersion
+    val scalatestVersion  = "3.2.19"
+    val scalatest         = "org.scalatest"     %% "scalatest"       % scalatestVersion
+    val scalacheckVersion = "3.2.19.0"
+    val scalacheck        = "org.scalatestplus" %% "scalacheck-1-18" % scalacheckVersion
   }
 
-
 lazy val commonDependencies = Seq(
-  dependencies.scalatest % Test
+  dependencies.scalatest  % Test,
+  dependencies.scalacheck % Test
 )
