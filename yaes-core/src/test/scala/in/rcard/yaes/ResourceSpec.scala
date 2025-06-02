@@ -3,53 +3,54 @@ package in.rcard.yaes
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.collection.mutable.ListBuffer
+
 class ResourceSpec extends AnyFlatSpec with Matchers {
 
   "install" should "acquire and release resources correctly if no error happens" in {
-    val results = scala.collection.mutable.ListBuffer[String]()
-    val actualResource: String = Resource.run {
-      Resource.install({
-        "Acquired"
+    val actualResource = Resource.run {
+      val resource = Resource.install({
+        ListBuffer("1")
       }) { res =>
-        results += res
-        results += "Released"
+        res += "3"
       }
+      resource += "2"
+      resource
     }
 
-    actualResource shouldEqual "Acquired"
-    results shouldEqual List("Acquired", "Released")
+    actualResource shouldEqual List("1", "2", "3")
   }
 
   it should "release resources correctly if an error happens after the acquiring process" in {
 
-    val results = scala.collection.mutable.ListBuffer[String]()
+    val results = ListBuffer[String]()
     val actualException = intercept[RuntimeException] {
       Resource.run {
         val acquired = Resource.install({
-          "Acquired"
-        }) { res =>
-          results += res
-          results += "Released"
+          results += "1"
+        }) { _ =>
+          results += "3"
         }
+        results += "2"
         throw new RuntimeException("An error occurred after acquiring the resource")
       }
     }
 
     actualException shouldBe a[RuntimeException]
     actualException.getMessage shouldEqual "An error occurred after acquiring the resource"
-    results shouldEqual List("Acquired", "Released")
+    results shouldEqual List("1", "2", "3")
   }
 
-  it should "release resources correctly if an error happens during the acquiring process" in {
+  it should "not call the release function if an error happens during the acquiring process" in {
 
-    val results = scala.collection.mutable.ListBuffer[String]()
+    val results = ListBuffer[String]()
     val actualException = intercept[RuntimeException] {
       Resource.run {
         Resource.install[String]({
           throw new RuntimeException("An error occurred during acquiring the resource")
         }) { res =>
           results += res
-          results += "Released"
+          results += "1"
         }
       }
     }
@@ -57,5 +58,47 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
     actualException shouldBe a[RuntimeException]
     actualException.getMessage shouldEqual "An error occurred during acquiring the resource"
     results shouldEqual List()
+  }
+
+  it should "rethrow the exception if the resource release fails" in {
+    val results = ListBuffer[String]()
+    val actualException = intercept[RuntimeException] {
+      Resource.run {
+        Resource.install({
+          "1"
+        }) { res =>
+          results += res
+          throw new RuntimeException("An error occurred during resource release")
+        }
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "An error occurred during resource release"
+    results shouldEqual List("1")
+  }
+
+  it should "rethrow the original exception thrown during resource usage if also the release fails" in {
+    val results          = ListBuffer[String]()
+    val usageException   = new RuntimeException("Usage exception")
+    val releaseException = new RuntimeException("Release exception")
+    val actualException = intercept[RuntimeException] {
+      Resource.run {
+        Resource.install[String]({
+          results += "1"
+          "Acquired"
+        }) { _ =>
+          results += "3"
+          throw releaseException
+        }
+        results += "2"
+        throw usageException
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "Usage exception"
+
+    results shouldEqual List("1", "2", "3")
   }
 }
