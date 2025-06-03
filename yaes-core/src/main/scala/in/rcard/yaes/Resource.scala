@@ -54,7 +54,7 @@ object Resource {
 
       val acquired = acquire
       val resource = _Resource(acquired, release)
-      resourcesToRelease += resource
+      resourcesToRelease.prepend(resource)
       acquired
     }
   }

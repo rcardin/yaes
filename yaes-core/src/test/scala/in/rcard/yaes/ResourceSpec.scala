@@ -101,4 +101,26 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
 
     results shouldEqual List("1", "2", "3")
   }
+
+  it should "release resources in the reverse order of acquisition" in {
+    val results = ListBuffer[String]()
+    Resource.run {
+      val res1 = Resource.install({
+        results += "1"
+        "Resource 1"
+      }) { _ =>
+        results += "6"
+      }
+      results += "2"
+      val res2 = Resource.install({
+        results += "3"
+        "Resource 2"
+      }) { _ =>
+        results += "5"
+      }
+      results += "4"
+    }
+
+    results shouldEqual List("1", "2", "3", "4", "5", "6")
+  }
 }
