@@ -176,7 +176,9 @@ class JvmStructuredScope(
         }
       } finally {
         if (forkedThread.isDone) {
-          scopes.remove(forkedThread.get().threadId).orElse(throw new IllegalStateException("shouldn't happen"))
+          scopes
+            .remove(forkedThread.get().threadId)
+            .orElse(throw new IllegalStateException("shouldn't happen"))
         }
         innerScope.close()
       }

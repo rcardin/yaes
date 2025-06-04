@@ -1,5 +1,7 @@
 package in.rcard.yaes
 
+import scala.concurrent.duration.*
+
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -176,7 +178,7 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "integrate with the Raise effect" in {
-    val results         = ListBuffer[String]()
+    val results     = ListBuffer[String]()
     val actualError =
       Raise.run {
         Resource.run {
@@ -193,5 +195,28 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
 
     actualError shouldBe "An error occurred during resource usage"
     results shouldEqual List("1", "2", "3")
+  }
+
+  it should "release a resource even if the owner fiber is canceled" in {
+    val results = ListBuffer[String]()
+    Async.run {
+      Resource.run {
+        val fiber: Fiber[String] = Async.fork {
+          val resource = Resource.install({
+            Async.delay(200.millis)
+            results += "1"
+            "Resource 1"
+          }) { _ =>
+            results += "2"
+          }
+          Async.delay(1.second)
+          resource
+        }
+        Async.delay(500.millis)
+        fiber.cancel()
+      }
+    }
+
+    results shouldEqual List("1", "2")
   }
 }
