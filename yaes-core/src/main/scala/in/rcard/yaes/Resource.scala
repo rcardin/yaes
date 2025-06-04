@@ -25,19 +25,25 @@ object Resource {
             originalError = error
             throw error
         } finally {
+          var originalReleaseError: Throwable = null
           resourceHandler.resourcesToRelease.foreach { case _Resource(resource, release) =>
             try {
               release(resource)
             } catch {
               case releaseError: Throwable =>
+                if (originalReleaseError == null) {
+                  originalReleaseError = releaseError
+                }
                 if (originalError != null) {
                   // FIXME Should we use an effect here?
                   println(s"Error during resource release")
                   releaseError.printStackTrace()
-                  throw originalError
+                  originalReleaseError = originalError
                 }
-                throw releaseError
             }
+          }
+          if (originalReleaseError != null) {
+            throw originalReleaseError
           }
         }
       }
