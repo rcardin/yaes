@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
 import scala.collection.mutable
+import java.io.Closeable
 
 object Resource {
 
@@ -10,6 +11,10 @@ object Resource {
 
   def install[A](acquire: => A)(release: A => Unit)(using res: Resource): A = {
     res.unsafe.install(acquire)(release)
+  }
+
+  def acquire[A <: Closeable](acquire: => A)(using res: Resource): A = {
+    res.unsafe.install(acquire)(c => c.close())
   }
 
   def run[A](block: Resource ?=> A): A = {

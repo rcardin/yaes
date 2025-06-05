@@ -6,6 +6,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.mutable.ListBuffer
+import java.io.Closeable
 
 class ResourceSpec extends AnyFlatSpec with Matchers {
 
@@ -219,4 +220,67 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
 
     results shouldEqual List("1", "2")
   }
+
+  class TestResource(val results: ListBuffer[String]) extends Closeable {
+
+    results += "Acquired"
+
+    def use(): Unit = {
+      results += "Used"
+    }
+
+    override def close(): Unit = {
+      results += "Closed"
+    }
+
+  }
+
+  class FailingOnAcquireResource(val results: ListBuffer[String]) extends Closeable {
+
+    throw new RuntimeException("Error during acquiring")
+
+    override def close(): Unit = {
+      results += "Closed"
+    }
+
+  }
+
+  it should "acquire and release a Closeable resource" in {
+    val results = ListBuffer[String]()
+    Resource.run {
+      val resource = Resource.acquire(new TestResource(results))
+      resource.use()
+    }
+
+    results shouldEqual List("Acquired", "Used", "Closed")
+  }
+
+  it should "release a Closeable resource even if an error occurs during its usage" in {
+    val results         = ListBuffer[String]()
+    val actualException = intercept[RuntimeException] {
+      Resource.run {
+        val resource = Resource.acquire(new TestResource(results))
+        resource.use()
+        throw new RuntimeException("An error occurred during resource usage")
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "An error occurred during resource usage"
+    results shouldEqual List("Acquired", "Used", "Closed")
+  }
+
+  it should "not release a Closeable resource if an error occurs during its acquisition" in {
+    val results         = ListBuffer[String]()
+    val actualException = intercept[RuntimeException] {
+      Resource.run {
+        Resource.acquire(new FailingOnAcquireResource(results))
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "Error during acquiring"
+    results shouldEqual List()
+  }
+
 }
