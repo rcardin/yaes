@@ -7,6 +7,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.collection.mutable.ListBuffer
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicInteger
 
 class ResourceSpec extends AnyFlatSpec with Matchers {
 
@@ -219,6 +220,27 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
     }
 
     results shouldEqual List("1", "2")
+  }
+
+  it should "be robust to concurrent resource creation" in {
+    val numberOfAquiredResources = AtomicInteger(0)
+    val numberOfClosedResources  = AtomicInteger(0)
+    Resource.run {
+      Async.run {
+        for (i <- 1 to 1000) {
+          Async.fork {
+            Resource.install({
+              numberOfAquiredResources.incrementAndGet()
+            }) { _ =>
+              numberOfClosedResources.incrementAndGet()
+            }
+          }
+        }
+      }
+    }
+
+    numberOfAquiredResources.get() shouldEqual 1000
+    numberOfClosedResources.get() shouldEqual 1000
   }
 
   class TestResource(val results: ListBuffer[String]) extends Closeable {

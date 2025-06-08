@@ -2,6 +2,10 @@ package in.rcard.yaes
 
 import scala.collection.mutable
 import java.io.Closeable
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.Queue
+import java.util.Deque
+import java.util.concurrent.ConcurrentLinkedDeque
 
 object Resource {
 
@@ -9,11 +13,11 @@ object Resource {
 
   def apply[A](block: => A)(using res: Resource): A = block
 
-  def install[A](acquire: => A)(release: A => Unit)(using res: Resource): A = {
+  inline def install[A](inline acquire: => A)(inline release: A => Unit)(using res: Resource): A = {
     res.unsafe.install(acquire)(release)
   }
 
-  def acquire[A <: Closeable](acquire: => A)(using res: Resource): A = {
+  inline def acquire[A <: Closeable](inline acquire: => A)(using res: Resource): A = {
     res.unsafe.install(acquire)(c => c.close())
   }
 
@@ -31,9 +35,10 @@ object Resource {
             throw error
         } finally {
           var originalReleaseError: Throwable = null
-          resourceHandler.resourcesToRelease.foreach { case _Resource(resource, release) =>
+          while (!resourceHandler.resourcesToRelease.isEmpty()) {
+            val resource = resourceHandler.resourcesToRelease.pop()
             try {
-              release(resource)
+              resource.release(resource.resource)
             } catch {
               case releaseError: Throwable =>
                 if (originalReleaseError == null) {
@@ -47,6 +52,7 @@ object Resource {
                 }
             }
           }
+
           if (originalReleaseError != null) {
             throw originalReleaseError
           }
@@ -59,21 +65,21 @@ object Resource {
 
   private def unsafe: Resource.Unsafe = new Resource.Unsafe {
 
-    override val resourcesToRelease: mutable.ListBuffer[Any] = mutable.ListBuffer.empty[Any]
+    override val resourcesToRelease: Deque[_Resource[?]] = new ConcurrentLinkedDeque()
 
     override def install[A](acquire: => A)(release: A => Unit): A = {
 
       val acquired = acquire
       val resource = _Resource(acquired, release)
-      resourcesToRelease.prepend(resource)
+      resourcesToRelease.push(resource)
       acquired
     }
   }
 
-  private case class _Resource[A](val resource: A, release: A => Unit)
+  private[yaes] case class _Resource[A](val resource: A, release: A => Unit)
 
   trait Unsafe {
     def install[A](acquire: => A)(release: A => Unit): A
-    private[yaes] val resourcesToRelease: mutable.ListBuffer[Any]
+    private[yaes] val resourcesToRelease: Deque[_Resource[?]]
   }
 }
