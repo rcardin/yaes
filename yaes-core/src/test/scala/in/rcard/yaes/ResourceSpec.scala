@@ -267,7 +267,7 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
 
   }
 
-  it should "acquire and release a Closeable resource" in {
+  "acquire" should "acquire and release a Closeable resource" in {
     val results = ListBuffer[String]()
     Resource.run {
       val resource = Resource.acquire(new TestResource(results))
@@ -303,6 +303,52 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
     actualException shouldBe a[RuntimeException]
     actualException.getMessage shouldEqual "Error during acquiring"
     results shouldEqual List()
+  }
+
+  "ensuring" should "execute a finalizer after the resource usage" in {
+    val results = ListBuffer[String]()
+    Resource.run {
+      Resource.ensuring {
+        results += "2"
+      }
+      results += "1"
+    }
+
+    results shouldEqual List("1", "2")
+  }
+
+  it should "execute a finalizer even if an error occurs during the resource usage" in {
+    val results         = ListBuffer[String]()
+    val actualException = intercept[RuntimeException] {
+      Resource.run {
+        Resource.ensuring {
+          results += "2"
+        }
+        results += "1"
+        throw new RuntimeException("An error occurred during resource usage")
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "An error occurred during resource usage"
+    results shouldEqual List("1", "2")
+  }
+
+  it should "rethrow the exception thrown by the finalizer" in {
+    val results         = ListBuffer[String]()
+    val actualException = intercept[RuntimeException] {
+      Resource.run {
+        Resource.ensuring {
+          results += "2"
+          throw new RuntimeException("An error occurred during finalization")
+        }
+        results += "1"
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "An error occurred during finalization"
+    results shouldEqual List("1", "2")
   }
 
 }

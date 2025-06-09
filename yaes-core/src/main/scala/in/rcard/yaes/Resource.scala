@@ -21,6 +21,10 @@ object Resource {
     res.unsafe.install(acquire)(c => c.close())
   }
 
+  inline def ensuring(inline finalizer: => Unit)(using res: Resource): Unit = {
+    res.unsafe.install(())(_ => finalizer)
+  }
+
   def run[A](block: Resource ?=> A): A = {
     val handler = new Yaes.Handler[Resource.Unsafe, A, A] {
       override def handle(program: Resource ?=> A): A = {
@@ -35,10 +39,10 @@ object Resource {
             throw error
         } finally {
           var originalReleaseError: Throwable = null
-          while (!resourceHandler.resourcesToRelease.isEmpty()) {
-            val resource = resourceHandler.resourcesToRelease.pop()
+          while (!resourceHandler.finalizers.isEmpty()) {
+            val finalizer = resourceHandler.finalizers.pop()
             try {
-              resource.release(resource.resource)
+              finalizer.release(finalizer.resource)
             } catch {
               case releaseError: Throwable =>
                 if (originalReleaseError == null) {
@@ -65,21 +69,21 @@ object Resource {
 
   private def unsafe: Resource.Unsafe = new Resource.Unsafe {
 
-    override val resourcesToRelease: Deque[_Resource[?]] = new ConcurrentLinkedDeque()
+    override val finalizers: Deque[Finalizer[?]] = new ConcurrentLinkedDeque()
 
     override def install[A](acquire: => A)(release: A => Unit): A = {
 
       val acquired = acquire
-      val resource = _Resource(acquired, release)
-      resourcesToRelease.push(resource)
+      val finalizer = Finalizer(acquired, release)
+      finalizers.push(finalizer)
       acquired
     }
   }
 
-  private[yaes] case class _Resource[A](val resource: A, release: A => Unit)
+  private[yaes] case class Finalizer[A](val resource: A, release: A => Unit)
 
   trait Unsafe {
     def install[A](acquire: => A)(release: A => Unit): A
-    private[yaes] val resourcesToRelease: Deque[_Resource[?]]
+    private[yaes] val finalizers: Deque[Finalizer[?]]
   }
 }
