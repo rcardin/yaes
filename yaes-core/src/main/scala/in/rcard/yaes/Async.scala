@@ -3,19 +3,20 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
 
-import java.util.concurrent.{
-  CancellationException,
-  CompletableFuture,
-  ExecutionException,
-  Future,
-  StructuredTaskScope,
-  SynchronousQueue
-}
-import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
-import java.util.concurrent.StructuredTaskScope.Subtask
-import java.util.function.Consumer
+import java.util as ju
 import scala.concurrent.duration.Duration
+
+import ju.concurrent.CancellationException
+import ju.concurrent.CompletableFuture
+import ju.concurrent.ExecutionException
+import ju.concurrent.Future
+import ju.concurrent.StructuredTaskScope
+import ju.concurrent.StructuredTaskScope.ShutdownOnFailure
+import ju.concurrent.StructuredTaskScope.Subtask
+import ju.concurrent.SynchronousQueue
+import ju.function.Consumer
 import Async.Cancelled
+import ju.concurrent.ConcurrentHashMap
 
 /** Represents an asynchronous computation that can be controlled.
   *
@@ -144,7 +145,7 @@ class JvmFiber[A](
   *   mutable map tracking task scopes by thread ID
   */
 class JvmStructuredScope(
-    val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
+    val scopes: ju.Map[Long, StructuredTaskScope[Any]]
 ) extends Async.Unsafe {
 
   override def delay(duration: Duration): Unit = {
@@ -154,33 +155,36 @@ class JvmStructuredScope(
   override def fork[A](name: String)(block: => A): Fiber[A] = {
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
-    scopes(Thread.currentThread().threadId).fork(() => {
-      val innerScope = new ShutdownOnFailure()
-      try {
-        val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-          val currentThread = Thread.currentThread()
-          scopes.addOne(currentThread.threadId -> innerScope)
-          forkedThread.complete(currentThread)
-          block
-        })
-        innerScope.join()
-        if (innerTask.state() != Subtask.State.SUCCESS) {
-          innerTask.exception() match {
-            case ie: InterruptedException =>
-              promise.cancel(true)
-            case exex: ExecutionException => throw exex.getCause
-            case throwable                => throw throwable
+    scopes
+      .get(Thread.currentThread().threadId)
+      .fork(() => {
+        val innerScope = new ShutdownOnFailure()
+        try {
+          val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
+            val currentThread = Thread.currentThread()
+            scopes.put(currentThread.threadId, innerScope)
+            forkedThread.complete(currentThread)
+            block
+          })
+          innerScope.join()
+          if (innerTask.state() != Subtask.State.SUCCESS) {
+            innerTask.exception() match {
+              case ie: InterruptedException =>
+                promise.cancel(true)
+              case exex: ExecutionException => throw exex.getCause
+              case throwable                => throw throwable
+            }
+          } else {
+            promise.complete(innerTask.get())
           }
-        } else {
-          promise.complete(innerTask.get())
+        } finally {
+          if (forkedThread.isDone) {
+            scopes
+              .remove(forkedThread.get().threadId)
+          }
+          innerScope.close()
         }
-      } finally {
-        if (forkedThread.isDone) {
-          scopes.remove(forkedThread.get().threadId).orElse(throw new IllegalStateException("shouldn't happen"))
-        }
-        innerScope.close()
-      }
-    })
+      })
     new JvmFiber[A](promise, forkedThread)
   }
 }
@@ -528,11 +532,11 @@ object Async {
   def handler[A]: Yaes.Handler[Async.Unsafe, A, A] =
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-        val async     = new JvmStructuredScope(scala.collection.mutable.Map())
+        val async     = new JvmStructuredScope(ConcurrentHashMap[Long, StructuredTaskScope[Any]]())
         val loomScope = new ShutdownOnFailure()
         try {
           val mainTask = loomScope.fork(() => {
-            async.scopes.addOne(Thread.currentThread().threadId -> loomScope)
+            async.scopes.put(Thread.currentThread().threadId, loomScope)
             program(using new Yaes(async))
           })
           loomScope.join().throwIfFailed(identity)
