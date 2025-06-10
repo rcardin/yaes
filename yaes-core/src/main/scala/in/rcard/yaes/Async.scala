@@ -532,8 +532,12 @@ object Async {
         val loomScope = new ShutdownOnFailure()
         try {
           val mainTask = loomScope.fork(() => {
-            JvmAsync.scope.set(loomScope)
-            program(using new Yaes(async))
+            try {
+              JvmAsync.scope.set(loomScope)
+              program(using new Yaes(async))
+            } finally {
+              JvmAsync.scope.remove()
+            }
           })
           loomScope.join().throwIfFailed(identity)
           mainTask.get()
