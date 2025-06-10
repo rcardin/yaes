@@ -140,13 +140,8 @@ class JvmFiber[A](
   *
   * This implementation provides structured concurrency support using Java's StructuredTaskScope
   * API. It manages hierarchical relationships between concurrent tasks and ensures proper cleanup.
-  *
-  * @param scopes
-  *   mutable map tracking task scopes by thread ID
   */
-class JvmStructuredScope(
-    val scopes: ju.Map[Long, StructuredTaskScope[Any]]
-) extends Async.Unsafe {
+class JvmAsync extends Async.Unsafe {
 
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
@@ -155,14 +150,14 @@ class JvmStructuredScope(
   override def fork[A](name: String)(block: => A): Fiber[A] = {
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
-    scopes
-      .get(Thread.currentThread().threadId)
+    JvmAsync.scope
+      .get()
       .fork(() => {
         val innerScope = new ShutdownOnFailure()
         try {
           val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
             val currentThread = Thread.currentThread()
-            scopes.put(currentThread.threadId, innerScope)
+            JvmAsync.scope.set(innerScope)
             forkedThread.complete(currentThread)
             block
           })
@@ -178,15 +173,16 @@ class JvmStructuredScope(
             promise.complete(innerTask.get())
           }
         } finally {
-          if (forkedThread.isDone) {
-            scopes
-              .remove(forkedThread.get().threadId)
-          }
+          JvmAsync.scope.remove()
           innerScope.close()
         }
       })
     new JvmFiber[A](promise, forkedThread)
   }
+}
+object JvmAsync {
+
+  private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any]] = new ThreadLocal()
 }
 
 /** Companion object for [[Async]] providing utility methods and constructors.
@@ -532,12 +528,16 @@ object Async {
   def handler[A]: Yaes.Handler[Async.Unsafe, A, A] =
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-        val async     = new JvmStructuredScope(ConcurrentHashMap[Long, StructuredTaskScope[Any]]())
+        val async     = new JvmAsync()
         val loomScope = new ShutdownOnFailure()
         try {
           val mainTask = loomScope.fork(() => {
-            async.scopes.put(Thread.currentThread().threadId, loomScope)
-            program(using new Yaes(async))
+            try {
+              JvmAsync.scope.set(loomScope)
+              program(using new Yaes(async))
+            } finally {
+              JvmAsync.scope.remove()
+            }
           })
           loomScope.join().throwIfFailed(identity)
           mainTask.get()
