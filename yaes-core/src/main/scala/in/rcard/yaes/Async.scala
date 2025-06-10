@@ -139,13 +139,14 @@ class JvmFiber[A](
   *
   * This implementation provides structured concurrency support using Java's StructuredTaskScope
   * API. It manages hierarchical relationships between concurrent tasks and ensures proper cleanup.
-  *
-  * @param scopes
-  *   mutable map tracking task scopes by thread ID
   */
-class JvmStructuredScope(
-    val scopes: scala.collection.mutable.Map[Long, StructuredTaskScope[Any]]
-) extends Async.Unsafe {
+class JvmStructuredScope extends Async.Unsafe {
+  
+  private val scopeThreadLocal: ThreadLocal[StructuredTaskScope[Any]] = new ThreadLocal()
+  
+  private[yaes] def setScope(scope: StructuredTaskScope[Any]): Unit = {
+    scopeThreadLocal.set(scope)
+  }
 
   override def delay(duration: Duration): Unit = {
     Thread.sleep(duration.toMillis)
@@ -154,31 +155,33 @@ class JvmStructuredScope(
   override def fork[A](name: String)(block: => A): Fiber[A] = {
     val promise      = CompletableFuture[A]()
     val forkedThread = CompletableFuture[Thread]()
-    scopes(Thread.currentThread().threadId).fork(() => {
-      val innerScope = new ShutdownOnFailure()
-      try {
-        val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-          val currentThread = Thread.currentThread()
-          scopes.addOne(currentThread.threadId -> innerScope)
-          forkedThread.complete(currentThread)
-          block
-        })
-        innerScope.join()
-        if (innerTask.state() != Subtask.State.SUCCESS) {
-          innerTask.exception() match {
-            case ie: InterruptedException =>
-              promise.cancel(true)
-            case exex: ExecutionException => throw exex.getCause
-            case throwable                => throw throwable
+    scopeThreadLocal
+      .get()
+      .fork(() => {
+        val innerScope = new ShutdownOnFailure()
+        try {
+          val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
+            val currentThread = Thread.currentThread()
+            scopeThreadLocal.set(innerScope)
+            forkedThread.complete(currentThread)
+            block
+          })
+          innerScope.join()
+          if (innerTask.state() != Subtask.State.SUCCESS) {
+            innerTask.exception() match {
+              case ie: InterruptedException =>
+                promise.cancel(true)
+              case exex: ExecutionException => throw exex.getCause
+              case throwable                => throw throwable
+            }
+          } else {
+            promise.complete(innerTask.get())
           }
-        } else {
-          promise.complete(innerTask.get())
+        } finally {
+          scopeThreadLocal.remove()
+          innerScope.close()
         }
-      } finally {
-        scopes.remove(Thread.currentThread().threadId)
-        innerScope.close()
-      }
-    })
+      })
     new JvmFiber[A](promise, forkedThread)
   }
 }
@@ -526,11 +529,11 @@ object Async {
   def handler[A]: Yaes.Handler[Async.Unsafe, A, A] =
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-        val async     = new JvmStructuredScope(scala.collection.mutable.Map())
+        val async     = new JvmStructuredScope()
         val loomScope = new ShutdownOnFailure()
         try {
           val mainTask = loomScope.fork(() => {
-            async.scopes.addOne(Thread.currentThread().threadId -> loomScope)
+            async.setScope(loomScope)
             program(using new Yaes(async))
           })
           loomScope.join().throwIfFailed(identity)
