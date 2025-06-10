@@ -3,19 +3,20 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Raise.Raise
 
-import java.util.concurrent.{
-  CancellationException,
-  CompletableFuture,
-  ExecutionException,
-  Future,
-  StructuredTaskScope,
-  SynchronousQueue
-}
-import java.util.concurrent.StructuredTaskScope.ShutdownOnFailure
-import java.util.concurrent.StructuredTaskScope.Subtask
-import java.util.function.Consumer
+import java.util as ju
 import scala.concurrent.duration.Duration
+
+import ju.concurrent.CancellationException
+import ju.concurrent.CompletableFuture
+import ju.concurrent.ExecutionException
+import ju.concurrent.Future
+import ju.concurrent.StructuredTaskScope
+import ju.concurrent.StructuredTaskScope.ShutdownOnFailure
+import ju.concurrent.StructuredTaskScope.Subtask
+import ju.concurrent.SynchronousQueue
+import ju.function.Consumer
 import Async.Cancelled
+import ju.concurrent.ConcurrentHashMap
 
 /** Represents an asynchronous computation that can be controlled.
   *

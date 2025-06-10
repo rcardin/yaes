@@ -90,6 +90,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`IO`](#the-io-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
+- [`Resource`](#the-resource-effect): Allows for automatic resource management with guaranteed cleanup.
 - [`Input`](#the-input-effect): Allows for reading input from the console.
 - [`Output`](#the-output-effect): Allows for printing output to the console.
 - [`Random`](#the-random-effect): Allows for generating random content.
@@ -367,6 +368,72 @@ val divisionByZeroResult: Int | Null = Raise.nullable {
   divide(10, 0)
 }
 ```
+
+### The `Resource` Effect
+
+The `Resource` effect provides automatic resource management with guaranteed cleanup. It ensures that all acquired resources are properly released in LIFO (Last In, First Out) order, even when exceptions occur. This is particularly useful for managing files, database connections, network connections, and other resources that need explicit cleanup.
+
+```scala 3
+import in.rcard.yaes.Resource.*
+import java.io.{FileInputStream, FileOutputStream}
+
+def copyFile(source: String, target: String)(using Resource): Unit = {
+  val input = Resource.acquire(new FileInputStream(source))
+  val output = Resource.acquire(new FileOutputStream(target))
+  
+  // Copy file contents
+  val buffer = new Array[Byte](1024)
+  var bytesRead = input.read(buffer)
+  while (bytesRead != -1) {
+    output.write(buffer, 0, bytesRead)
+    bytesRead = input.read(buffer)
+  }
+}
+```
+
+The `Resource` effect provides several methods for resource management:
+
+- `Resource.acquire`: For resources that implement `Closeable`, automatically calling `close()` when the scope ends
+- `Resource.install`: For custom resource management with explicit acquisition and release functions
+- `Resource.ensuring`: For registering cleanup actions that don't involve specific resources
+
+Here's an example using custom resource management:
+
+```scala 3
+import in.rcard.yaes.Resource.*
+
+def processWithConnection()(using Resource): String = {
+  val connection = Resource.install(openDatabaseConnection()) { conn =>
+    conn.close()
+    println("Database connection closed")
+  }
+  
+  Resource.ensuring {
+    println("Processing completed")
+  }
+  
+  // Use connection safely
+  connection.executeQuery("SELECT * FROM users")
+}
+```
+
+To execute resource-managed code, use the `Resource.run` handler:
+
+```scala 3
+import in.rcard.yaes.Resource.*
+
+val result = Resource.run {
+  copyFile("source.txt", "target.txt")
+  processWithConnection()
+}
+// All resources are automatically cleaned up here, even if exceptions occurred
+```
+
+The `Resource` effect guarantees that:
+- Resources are cleaned up in reverse order of acquisition (LIFO)
+- Cleanup occurs even if exceptions are thrown
+- Resource cleanup exceptions are handled appropriately
+- Original exceptions from the main program are preserved
 
 ### The `Input` Effect
 
