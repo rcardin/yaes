@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <title>{% if page.title %}{{ page.title | escape }} | {% endif %}{{ site.title | escape }}</title>
+  <meta name="description" content="{{ page.excerpt | default: site.description | strip_html | normalize_whitespace | truncate: 160 | escape }}">
+  
+  <link rel="stylesheet" href="{{ '/assets/main.css' | relative_url }}">
+  <link rel="canonical" href="{{ page.url | replace:'index.html','' | absolute_url }}">
+  
+  {% seo %}
+  
+  <style>
+    /* Custom styles for YÆS documentation */
+    .site-header {
+      background-color: #2c3e50;
+      border-bottom: 3px solid #3498db;
+    }
+    
+    .site-title {
+      color: #ecf0f1 !important;
+      font-weight: bold;
+    }
+    
+    .site-nav .page-link {
+      color: #bdc3c7;
+    }
+    
+    .site-nav .page-link:hover {
+      color: #3498db;
+    }
+    
+    .highlight {
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 0.375rem;
+      padding: 1rem;
+      margin: 1rem 0;
+    }
+    
+    .effect-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+    
+    .effect-card {
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      background-color: #f8f9fa;
+    }
+    
+    .effect-card h3 {
+      margin-top: 0;
+      color: #2c3e50;
+    }
+    
+    /* Scala syntax highlighting improvements */
+    .language-scala .k { color: #007acc; }
+    .language-scala .s { color: #d73a49; }
+    .language-scala .nc { color: #6f42c1; }
+  </style>
+</head>
+
+<body>
+  <header class="site-header" role="banner">
+    <div class="wrapper">
+      <a class="site-title" rel="author" href="{{ '/' | relative_url }}">{{ site.title | escape }}</a>
+      
+      <nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.484C18,14.303,17.335,14.969,16.516,14.969H1.484 C0.665,14.969,0,14.303,0,13.484l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.001,18,12.665,18,13.484L18,13.484z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+          <a class="page-link" href="{{ '/' | relative_url }}">Home</a>
+          <a class="page-link" href="{{ '/getting-started.html' | relative_url }}">Getting Started</a>
+          <a class="page-link" href="{{ '/effects/' | relative_url }}">Effects</a>
+          <a class="page-link" href="{{ '/examples.html' | relative_url }}">Examples</a>
+          <a class="page-link" href="{{ '/contributing.html' | relative_url }}">Contributing</a>
+          <a class="page-link" href="https://github.com/rcardin/yaes">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-content" aria-label="Content">
+    <div class="wrapper">
+      {{ content }}
+    </div>
+  </main>
+
+  <footer class="site-footer h-card">
+    <data class="u-url" href="{{ '/' | relative_url }}"></data>
+    <div class="wrapper">
+      <div class="footer-col-wrapper">
+        <div class="footer-col footer-col-1">
+          <ul class="contact-list">
+            <li class="p-name">YÆS - Yet Another Effect System</li>
+            <li><a class="u-email" href="mailto:riccardo.cardin@gmail.com">riccardo.cardin@gmail.com</a></li>
+          </ul>
+        </div>
+        <div class="footer-col footer-col-2">
+          <ul class="social-media-list">
+            <li>
+              <a href="https://github.com/rcardin/yaes">
+                <svg class="svg-icon"><use xlink:href="{{ '/assets/minima-social-icons.svg#github' | relative_url }}"></use></svg>
+                <span class="username">rcardin/yaes</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div class="footer-col footer-col-3">
+          <p>{{ site.description | escape }}</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
