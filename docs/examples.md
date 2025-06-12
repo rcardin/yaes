@@ -210,3 +210,126 @@ result match {
   case Left(DatabaseError(msg)) => println(s"Database error: $msg")
 }
 ```
+
+## Flow Data Processing
+
+Using Flow from the yaes-data module for stream processing:
+
+```scala
+import in.rcard.yaes.Flow
+import in.rcard.yaes.Random.*
+import in.rcard.yaes.Output.*
+import in.rcard.yaes.Log.*
+
+case class SensorReading(id: Int, temperature: Double, humidity: Double)
+
+def processSensorData(readings: List[SensorReading])(using Log, Output): List[String] = {
+  val logger = Log.getLogger("SensorProcessor")
+  val results = scala.collection.mutable.ArrayBuffer[String]()
+  
+  readings.asFlow()
+    .onStart {
+      logger.info("Starting sensor data processing")
+      Output.printLn("Processing sensor readings...")
+    }
+    .filter(_.temperature > 25.0) // Hot readings only
+    .filter(_.humidity < 60.0)    // Not too humid
+    .map { reading =>
+      s"Alert: Sensor ${reading.id} - Temp: ${reading.temperature}°C, Humidity: ${reading.humidity}%"
+    }
+    .onEach { alert =>
+      Output.printLn(alert)
+    }
+    .take(5) // Limit alerts
+    .collect { alert =>
+      results += alert
+    }
+  
+  logger.info(s"Generated ${results.length} alerts")
+  results.toList
+}
+
+// Generate sample data and process
+def generateSensorReadings(using Random): List[SensorReading] = {
+  (1 to 20).map { id =>
+    SensorReading(
+      id = id,
+      temperature = Random.nextDouble * 40.0, // 0-40°C
+      humidity = Random.nextDouble * 100.0     // 0-100%
+    )
+  }.toList
+}
+
+val alerts = Log.run {
+  Output.run {
+    Random.run {
+      val readings = generateSensorReadings
+      processSensorData(readings)
+    }
+  }
+}
+
+println(s"Total alerts generated: ${alerts.length}")
+```
+
+## Real-time Data Pipeline
+
+Combining Flow with async processing:
+
+```scala
+import in.rcard.yaes.Flow
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Log.*
+
+case class LogEntry(timestamp: Long, level: String, message: String)
+
+def processLogStream(logs: List[LogEntry])(using Async, Log): Map[String, Int] = {
+  val logger = Log.getLogger("LogProcessor")
+  val levelCounts = scala.collection.mutable.Map[String, Int]()
+  
+  // Process logs asynchronously using Flow
+  val processingFiber = Async.fork("log-processor") {
+    logs.asFlow()
+      .onStart {
+        logger.info("Starting log analysis")
+      }
+      .filter(_.level != "TRACE") // Skip trace logs
+      .transform { log =>
+        // Simulate async processing time
+        Async.delay(10.millis)
+        Flow.emit(log)
+      }
+      .onEach { log =>
+        logger.debug(s"Processing ${log.level} log: ${log.message}")
+      }
+      .collect { log =>
+        levelCounts.updateWith(log.level) {
+          case Some(count) => Some(count + 1)
+          case None => Some(1)
+        }
+      }
+  }
+  
+  // Wait for processing to complete
+  processingFiber.join()
+  
+  logger.info(s"Processed logs by level: $levelCounts")
+  levelCounts.toMap
+}
+
+// Usage
+val sampleLogs = List(
+  LogEntry(System.currentTimeMillis(), "INFO", "Application started"),
+  LogEntry(System.currentTimeMillis(), "DEBUG", "Loading configuration"),
+  LogEntry(System.currentTimeMillis(), "WARN", "Deprecated API used"),
+  LogEntry(System.currentTimeMillis(), "ERROR", "Database connection failed"),
+  LogEntry(System.currentTimeMillis(), "INFO", "Retrying connection"),
+  LogEntry(System.currentTimeMillis(), "TRACE", "Method entered")
+)
+
+val results = Log.run {
+  Async.run {
+    processLogStream(sampleLogs)
+  }
+}
+```

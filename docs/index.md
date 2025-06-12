@@ -21,14 +21,29 @@ Watch the talk from **Scalar 2025** about the main concepts behind the library:
 ## 📦 Available Modules
 
 - **`yaes-core`**: The main effects of the YÆS library
-- **`yaes-data`**: A set of data structures that can be used with the YÆS library
+- **`yaes-data`**: Functional data structures that complement the YÆS effects system
+
+### YÆS Core
+The core module provides a comprehensive set of effects for functional programming:
+- IO operations and side effect management
+- Structured concurrency with async computations
+- Typed error handling and resource management  
+- Console I/O, logging, and system integration
+
+### YÆS Data
+The data module provides functional data structures optimized for use with effects:
+- **Flow**: Cold asynchronous data streams with rich transformation operators
+- Future additions: Immutable collections, persistent data structures
 
 ## 🚀 Quick Start
 
-Add the following dependency to your `build.sbt`:
+Add the dependencies to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.2.0"
+libraryDependencies ++= Seq(
+  "in.rcard.yaes" %% "yaes-core" % "0.2.0",
+  "in.rcard.yaes" %% "yaes-data" % "0.2.0"  // Optional: for Flow and other data structures
+)
 ```
 
 ## ✨ What's New in YÆS?
@@ -100,6 +115,11 @@ val result: String = Raise.run {
 - [**Clock**](effects/clock.html) - Time management
 - [**System**](effects/system.html) - System properties and environment variables
 - [**Log**](effects/log.html) - Logging at different levels
+
+## 🗃 Data Structures
+
+- [**Flow**](data-structures.html#flow) - Cold asynchronous data streams with rich operators
+- [**More data structures**](data-structures.html) - Additional functional data structures
 
 ## 🤝 Contributing
 

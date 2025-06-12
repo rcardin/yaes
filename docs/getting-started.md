@@ -7,13 +7,21 @@ title: "Getting Started"
 
 ## Installation
 
-The library is available on Maven Central. Add the following dependency to your `build.sbt`:
+The library is available on Maven Central. Add the following dependencies to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.2.0"
+libraryDependencies ++= Seq(
+  "in.rcard.yaes" %% "yaes-core" % "0.2.0",
+  "in.rcard.yaes" %% "yaes-data" % "0.2.0"  // Optional: for Flow and data structures
+)
 ```
 
 The library is only available for **Scala 3** and is currently in an experimental stage. The API is subject to change.
+
+### Modules
+
+- **yaes-core**: Essential effects for functional programming (IO, Async, Raise, etc.)
+- **yaes-data**: Functional data structures that work with effects (Flow, etc.)
 
 ## Your First Effect
 
@@ -62,5 +70,6 @@ Handlers are the tools that execute deferred effects. They can be composed and a
 ## Next Steps
 
 - Explore the [available effects](effects/)
+- Learn about [functional data structures](data-structures.html)
 - Check out [practical examples](examples.html)
 - Read about [contributing](contributing.html)
