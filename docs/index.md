@@ -1,16 +1,16 @@
 ---
 layout: default
-title: "YÆS - Yet Another Effect System"
+title: "λÆS - Yet Another Effect System"
 ---
 
-# Yet Another Effect System (yæs)
+# Yet Another Effect System (λÆS)
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)
 ![Maven Central](https://img.shields.io/maven-central/v/in.rcard.yaes/yaes-core_3)
 ![GitHub release](https://img.shields.io/github/v/release/rcardin/yaes)
 [![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-core_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-core_3)
 
-YÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner.
+λÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner.
 
 ## 🎥 Featured Talk
 
@@ -20,17 +20,17 @@ Watch the talk from **Scalar 2025** about the main concepts behind the library:
 
 ## 📦 Available Modules
 
-- **`yaes-core`**: The main effects of the YÆS library
-- **`yaes-data`**: Functional data structures that complement the YÆS effects system
+- **`yaes-core`**: The main effects of the λÆS library
+- **`yaes-data`**: Functional data structures that complement the λÆS effects system
 
-### YÆS Core
+### λÆS Core
 The core module provides a comprehensive set of effects for functional programming:
 - IO operations and side effect management
 - Structured concurrency with async computations
 - Typed error handling and resource management  
 - Console I/O, logging, and system integration
 
-### YÆS Data
+### λÆS Data
 The data module provides functional data structures optimized for use with effects:
 - **Flow**: Cold asynchronous data streams with rich transformation operators
 - Future additions: Immutable collections, persistent data structures
@@ -46,7 +46,7 @@ libraryDependencies ++= Seq(
 )
 ```
 
-## ✨ What's New in YÆS?
+## ✨ What's New in λÆS?
 
 You can choose between **monadic style**:
 
@@ -80,13 +80,13 @@ def drunkFlip(using Random, Raise[String]): String = {
 
 ## 🎯 Core Concepts
 
-In YÆS, types like `Random` and `Raise` are **Effects**:
+In λÆS, types like `Random` and `Raise` are **Effects**:
 
 - A **Side Effect** is an unpredictable interaction, usually with an external system
 - An **Effect System** manages Side Effects by tracking and wrapping them into Effects
 - An **Effect** describes the type of the Side Effect and the return type of an effectful computation
 
-YÆS uses **deferred execution** - calling effectful functions returns a value that represents something that can be run but hasn't yet.
+λÆS uses **deferred execution** - calling effectful functions returns a value that represents something that can be run but hasn't yet.
 
 ## 🛠 Effect Management
 

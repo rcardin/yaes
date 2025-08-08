@@ -1,4 +1,4 @@
-title: "YÆS - Yet Another Effect System"
+title: "λÆS - Yet Another Effect System"
 description: "An experimental effect system in Scala inspired by Algebraic Effects, with functional data structures"
 baseurl: "/yaes"
 url: "https://rcardin.github.io"

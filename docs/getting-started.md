@@ -3,7 +3,7 @@ layout: default
 title: "Getting Started"
 ---
 
-# Getting Started with YÆS
+# Getting Started with λÆS
 
 ## Installation
 
@@ -57,7 +57,7 @@ val result: String = Raise.run {
 ### Effects vs Side Effects
 
 - **Side Effect**: An unpredictable interaction, usually with an external system
-- **Effect**: A managed side effect wrapped in the YÆS system
+- **Effect**: A managed side effect wrapped in the λÆS system
 
 ### Deferred Execution
 

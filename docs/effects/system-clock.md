@@ -167,7 +167,7 @@ case class AppInfo(
 def initializeApp(using System, Clock, Output, Raise[String]): AppInfo = {
   val startTime = Clock.now()
   
-  val name = System.property[String]("app.name", "YÆS Application")
+  val name = System.property[String]("app.name", "λÆS Application")
   val version = System.property[String]("app.version", "1.0.0")
   val environment = System.env[String]("ENVIRONMENT", "development")
   

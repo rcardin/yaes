@@ -1,11 +1,11 @@
 ---
 layout: default
-title: "YÆS Data Structures"
+title: "λÆS Data Structures"
 ---
 
-# YÆS Data Structures
+# λÆS Data Structures
 
-The `yaes-data` module provides a collection of functional data structures that complement the YÆS effects system. These data structures are designed to work seamlessly with YÆS effects and provide efficient, functional alternatives to traditional imperative data structures.
+The `yaes-data` module provides a collection of functional data structures that complement the λÆS effects system. These data structures are designed to work seamlessly with λÆS effects and provide efficient, functional alternatives to traditional imperative data structures.
 
 ![Maven Central](https://img.shields.io/maven-central/v/in.rcard.yaes/yaes-data_3)
 [![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-data_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-data_3)
@@ -388,9 +388,9 @@ result match {
 }
 ```
 
-## Integration with YÆS Effects
+## Integration with λÆS Effects
 
-Flow works seamlessly with YÆS effects:
+Flow works seamlessly with λÆS effects:
 
 ```scala
 import in.rcard.yaes.Flow
@@ -501,13 +501,13 @@ The `yaes-data` module is actively developed. Future versions may include:
 
 - More data structures (immutable collections, persistent data structures)
 - Parallel flow processing
-- Integration with more YÆS effects
+- Integration with more λÆS effects
 - Performance optimizations
 - Additional operators and combinators
 
 ## Contributing
 
-Contributions to the YÆS Data module are welcome! Areas where help is needed:
+Contributions to the λÆS Data module are welcome! Areas where help is needed:
 
 - Additional data structures
 - Performance improvements

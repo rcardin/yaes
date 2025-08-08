@@ -1,6 +1,6 @@
-# YÆS Documentation Site
+# λÆS Documentation Site
 
-This directory contains the Jekyll-based documentation site for YÆS (Yet Another Effect System).
+This directory contains the Jekyll-based documentation site for λÆS (Yet Another Effect System).
 
 ## Local Development
 

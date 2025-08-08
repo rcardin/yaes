@@ -3,9 +3,9 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)
 [![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-data_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-data_3)
 
-# YÆS Data
+# λÆS Data
 
-The `yaes-data` module provides a collection of functional data structures that complement the YÆS effects system. Currently, it includes:
+The `yaes-data` module provides a collection of functional data structures that complement the λÆS effects system. Currently, it includes:
 
 * `Flow`: A cold asynchronous data stream that sequentially emits values
 
@@ -201,4 +201,4 @@ The library is only available for Scala 3 and is currently in an experimental st
 
 ## Contributing
 
-Contributions to the YÆS project are welcome! Please feel free to submit pull requests or open issues if you find bugs or have feature requests.
+Contributions to the λÆS project are welcome! Please feel free to submit pull requests or open issues if you find bugs or have feature requests.

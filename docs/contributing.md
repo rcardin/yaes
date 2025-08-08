@@ -3,9 +3,9 @@ layout: default
 title: "Contributing"
 ---
 
-# Contributing to YÆS
+# Contributing to λÆS
 
-Thank you for your interest in contributing to YÆS! 🙏 Any help is welcome.
+Thank you for your interest in contributing to λÆS! 🙏 Any help is welcome.
 
 ## Getting Started
 
@@ -40,7 +40,7 @@ sbt ~test
 
 ### Code Style
 
-YÆS follows standard Scala conventions:
+λÆS follows standard Scala conventions:
 
 - Use 2 spaces for indentation
 - Line length should not exceed 120 characters
@@ -78,7 +78,7 @@ YÆS follows standard Scala conventions:
 
 ### New Effects
 
-YÆS is always looking for new effects! Consider adding:
+λÆS is always looking for new effects! Consider adding:
 
 - Database effects (SQL, NoSQL)
 - HTTP client effects
@@ -138,7 +138,7 @@ All contributions go through code review:
 
 ## Acknowledgments
 
-YÆS has been influenced by many great engineers and projects. Special thanks to:
+λÆS has been influenced by many great engineers and projects. Special thanks to:
 
 - **Daniel Ciocîrlan** - Mentor and inspiration
 - **Simon Vergauwen** - Arrow Kt library insights
@@ -146,4 +146,4 @@ YÆS has been influenced by many great engineers and projects. Special thanks to
 - **Noel Welsh** - Functional error handling insights
 - **Flavio Brasil** - Kyo library inspiration
 
-Thank you for helping make YÆS better! 🚀
+Thank you for helping make λÆS better! 🚀

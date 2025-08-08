@@ -3,19 +3,21 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)
 [![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-core_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-core_3)
 
-# Yet Another Effect System (yæs)
+![logo](./logo.svg)
 
-YÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner. 
+# Yet Another Effect System (λÆS)
+
+λÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner. 
 
 Here is the talk I gave at the **Scalar 2025** about the main concepts behind the library: 
 
 [![Watch the video](https://img.youtube.com/vi/TXUxCsPpZp0/maxresdefault.jpg)](https://youtu.be/TXUxCsPpZp0)
 
 Available modules are:
- * `yaes-core`: The main effects of the YÆS library.
- * `yaes-data`: A set of data structures that can be used with the YÆS library.
+ * `yaes-core`: The main effects of the λÆS library.
+ * `yaes-data`: A set of data structures that can be used with the λÆS library.
 
-What's new in YÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
+What's new in λÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
 ```scala 3
 import in.rcard.yaes.Random.*
@@ -45,10 +47,10 @@ def drunkFlip(using Random, Raise[String]): String = {
 }
 ```
 
-In YÆS types like `Random` and `Raise` are *Effects*. A *Side Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Side Effects* by tracking and wrapping them into *Effects*. An *Effect* describes the type of the *Side Effect* and the return type of an effectful computation. We manage *Side Effect* behavior by putting them in a kind of box.
+In λÆS types like `Random` and `Raise` are *Effects*. A *Side Effect* is an unpredictable interaction, usually with an external system. An Effect System manages *Side Effects* by tracking and wrapping them into *Effects*. An *Effect* describes the type of the *Side Effect* and the return type of an effectful computation. We manage *Side Effect* behavior by putting them in a kind of box.
 Calling the above `drunkFlip` function will not execute the effects. Instead, it will return a value that represents something that can be run but hasn’t yet. This is called deferred execution. 
 
-An Effect System provides all the tools to manage and execute Effectful computations in a deferred manner. In YÆS, such tools are called *Handlers*.
+An Effect System provides all the tools to manage and execute Effectful computations in a deferred manner. In λÆS, such tools are called *Handlers*.
 
 ```scala 3
 import in.rcard.yaes.Random.*
@@ -190,7 +192,7 @@ val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
   }
 ```
 
-The above code shows another important aspect of the YÆS library. We can handle an effect eliminating it from the list of effects one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
+The above code shows another important aspect of the λÆS library. We can handle an effect eliminating it from the list of effects one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
 
 The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
 
@@ -634,10 +636,10 @@ If you want to contribute to the project, please do it 🙏! Any help is welcome
 Many smart engineers helped me with thei ideas and suggestions. I want to thank them all. In particular, I want to thank:
 
 - [Daniel Ciocîrlan](https://rockthejvm.com/): He's the first that saw something in me and gave me the opportunity to work with him. He's a great mentor and a great friend.
-- [Simon Vergauwen](https://github.com/nomisRev): He's a great engineer. Now, he's focused on Kotlin and the Arrow Kt library, which drove many of the ideas behind the YÆS library.
+- [Simon Vergauwen](https://github.com/nomisRev): He's a great engineer. Now, he's focused on Kotlin and the Arrow Kt library, which drove many of the ideas behind the λÆS library.
 - [Jon Pretty](https://github.com/propensive): We shared some great ideas about the [Raise] effect. I love the way he thinks about programming.
 - [Noel Welsh](https://noelwelsh.com/): We chat about the `Raise` effect and the way to handle errors in a functional way. He's a great engineer and a great person.
-- [Flavio Brasil](https://github.com/fwbrasil): He creates the Kyo library, which is a great inspiration for the YÆS library. He helped me a lot with good suggestions and ideas.
+- [Flavio Brasil](https://github.com/fwbrasil): He creates the Kyo library, which is a great inspiration for the λÆS library. He helped me a lot with good suggestions and ideas.
 
 Thanks guys! 🙏
 

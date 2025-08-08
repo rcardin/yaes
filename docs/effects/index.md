@@ -5,7 +5,7 @@ title: "Available Effects"
 
 # Available Effects
 
-YÆS provides a comprehensive set of effects for different use cases:
+λÆS provides a comprehensive set of effects for different use cases:
 
 ## Core Effects
 
