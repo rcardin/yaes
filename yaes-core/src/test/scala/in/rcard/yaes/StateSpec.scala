@@ -36,4 +36,12 @@ class StateSpec extends AnyFlatSpec with Matchers {
     initialState shouldBe 42
     updatedState shouldBe 100
   }
+
+  it should "update the state" in {
+    val (_, actualUpdatedResult) = State.run(42) {
+      State.update[Int](10 + _)
+    }
+
+    actualUpdatedResult shouldBe 52
+  }
 }

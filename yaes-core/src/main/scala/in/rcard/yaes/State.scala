@@ -14,9 +14,14 @@ object State {
     interpreter.unsafe.run(StateOp.Set(value))
   }
 
+  def update[S](f: S => S)(using interpreter: State[S]): S = {
+    interpreter.unsafe.run(StateOp.Update(f))
+  }
+
   enum StateOp[S, A] {
-    case Get()         extends StateOp[S, S]
-    case Set(value: S) extends StateOp[S, S]
+    case Get()             extends StateOp[S, S]
+    case Set(value: S)     extends StateOp[S, S]
+    case Update(f: S => S) extends StateOp[S, S]
   }
 
   def run[S, A](initialState: S)(block: State[S] ?=> A): (S, A) = {
@@ -34,6 +39,9 @@ object State {
               val oldState = innerState
               innerState = value
               oldState
+            case StateOp.Update(f) =>
+              innerState = f(innerState)
+              innerState
           }
         }
         val result = program(using Yaes(interpreter))
