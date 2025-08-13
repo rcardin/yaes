@@ -3,6 +3,10 @@ layout: default
 title: "λÆS - Yet Another Effect System"
 ---
 
+<div style="text-align: center; margin: 2rem 0;">
+  <img src="logo.svg" alt="λÆS - Yet Another Effect System" style="max-width: 400px; height: auto;">
+</div>
+
 # Yet Another Effect System (λÆS)
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)

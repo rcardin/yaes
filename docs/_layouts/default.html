@@ -23,6 +23,14 @@
     .site-title {
       color: #ecf0f1 !important;
       font-weight: bold;
+      display: flex;
+      align-items: center;
+      text-decoration: none;
+    }
+    
+    .site-title:hover {
+      color: #3498db !important;
+      text-decoration: none;
     }
     
     .site-nav .page-link {
@@ -70,7 +78,10 @@
 <body>
   <header class="site-header" role="banner">
     <div class="wrapper">
-      <a class="site-title" rel="author" href="{{ '/' | relative_url }}">{{ site.title | escape }}</a>
+      <a class="site-title" rel="author" href="{{ '/' | relative_url }}">
+        <img src="{{ '/logo.svg' | relative_url }}" alt="λÆS Logo" style="height: 40px; vertical-align: middle; margin-right: 10px;">
+        {{ site.title | escape }}
+      </a>
       
       <nav class="site-nav">
         <input type="checkbox" id="nav-trigger" class="nav-trigger" />
