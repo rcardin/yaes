@@ -25,31 +25,32 @@ object State {
   }
 
   def run[S, A](initialState: S)(block: State[S] ?=> A): (S, A) = {
-    val handler = new Yaes.Handler[State.Unsafe[S], A, (S, A)] {
 
-      var innerState = initialState
+    var currentState = initialState
 
-      override def handle(program: State[S] ?=> A): (S, A) = {
+    val handler = new Yaes.Handler[State.Unsafe[S], A, A] {
+
+      override def handle(program: State[S] ?=> A): A = {
         val interpreter = new Unsafe[S] {
 
           override def run[A](op: StateOp[S, A]): A = op match {
             case StateOp.Get() =>
-              innerState
+              currentState
             case StateOp.Set(value) =>
-              val oldState = innerState
-              innerState = value
+              val oldState = currentState
+              currentState = value
               oldState
             case StateOp.Update(f) =>
-              innerState = f(innerState)
-              innerState
+              currentState = f(currentState)
+              currentState
           }
         }
-        val result = program(using Yaes(interpreter))
-        (innerState, result)
+        program(using Yaes(interpreter))
       }
     }
 
-    Yaes.handle(block)(using handler)
+    val result = Yaes.handle(block)(using handler)
+    (currentState, result)
   }
 
   trait Unsafe[S] {
