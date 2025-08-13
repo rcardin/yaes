@@ -15,14 +15,14 @@ class StateSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe 42
   }
 
-  it should "set and get the state" in {
-    val (actualState, actualResult) = State.run(42) {
-      State.set(100)
-      State.get
+  it should "set returns the old state" in {
+    val (_, actualResult) = State.run(42) {
+      val oldState = State.set(100)
+      val newState = State.get
+      (oldState, newState)
     }
 
-    actualResult shouldBe 100
-    actualState shouldBe 100
+    actualResult shouldBe (42, 100)
   }
 
   it should "get, set, and get the state" in {
