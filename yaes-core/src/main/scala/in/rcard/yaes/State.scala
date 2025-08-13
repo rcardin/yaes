@@ -21,20 +21,22 @@ object State {
 
   def run[S, A](initialState: S)(block: State[S] ?=> A): (S, A) = {
     val handler = new Yaes.Handler[State.Unsafe[S], A, (S, A)] {
+
+      var innerState = initialState
+
       override def handle(program: State[S] ?=> A): (S, A) = {
         val interpreter = new Unsafe[S] {
-          private var state: S = initialState
 
           override def run[A](op: StateOp[S, A]): A = op match {
             case StateOp.Get() =>
-              state
-              ().asInstanceOf[A]
+              innerState
             case StateOp.Set(value) =>
-              state = value
+              innerState = value
               ().asInstanceOf[A]
           }
         }
-        program(using Yaes(interpreter))
+        val result = program(using Yaes(interpreter))
+        (innerState, result)
       }
     }
 
