@@ -15,10 +15,6 @@ inThisBuild(
   )
 )
 
-ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
-sonatypeRepository                 := "https://s01.oss.sonatype.org/service/local"
-sonatypeProfileName                := "in.rcard"
-
 name := "yaes"
 val scala3Version = "3.7.2"
 scalaVersion := scala3Version
