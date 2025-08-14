@@ -18,6 +18,9 @@ Enables asynchronous computations and structured concurrency with fibers.
 ### [Raise Effect](raise.html)
 Provides typed error handling and propagation.
 
+### [State Effect](state.html)
+Enables stateful computations and mutable state management in a functional way.
+
 ## Resource Management
 
 ### [Resource Effect](resource.html)

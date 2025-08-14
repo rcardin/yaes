@@ -31,7 +31,8 @@ Watch the talk from **Scalar 2025** about the main concepts behind the library:
 The core module provides a comprehensive set of effects for functional programming:
 - IO operations and side effect management
 - Structured concurrency with async computations
-- Typed error handling and resource management  
+- Typed error handling and resource management
+- Stateful computations with the State effect
 - Console I/O, logging, and system integration
 
 ### λÆS Data
@@ -112,6 +113,7 @@ val result: String = Raise.run {
 - [**IO**](effects/io.html) - Side-effecting operations
 - [**Async**](effects/async.html) - Asynchronous computations and fiber management
 - [**Raise**](effects/raise.html) - Error handling and propagation
+- [**State**](effects/state.html) - Stateful computations and mutable state management
 - [**Resource**](effects/resource.html) - Automatic resource management
 - [**Input**](effects/input.html) - Console input operations
 - [**Output**](effects/output.html) - Console output operations
