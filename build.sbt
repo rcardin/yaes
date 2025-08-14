@@ -15,8 +15,6 @@ inThisBuild(
   )
 )
 
-ThisBuild / sonatypeProfileName := "in.rcard"
-
 name := "yaes"
 val scala3Version = "3.7.2"
 scalaVersion := scala3Version
