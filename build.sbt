@@ -20,7 +20,7 @@ sonatypeRepository                 := "https://s01.oss.sonatype.org/service/loca
 sonatypeProfileName                := "in.rcard"
 
 name := "yaes"
-val scala3Version = "3.6.4"
+val scala3Version = "3.7.2"
 scalaVersion := scala3Version
 
 lazy val `yaes-data` = project
