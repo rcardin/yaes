@@ -54,7 +54,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   //   } yield actualResult shouldBe "Boom!"
   // }
 
-  it should "be able to provide a default value if an error is risen" in {
+  "withDefault" should "be able to provide a default value if an error is risen" in {
     val actualResult = Raise.withDefault(42) {
       Raise.raise("Error")
       43
@@ -71,7 +71,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe 24
   }
 
-  it should "be able to recover from an error" in {
+  "recover" should "be able to recover from an error" in {
     val actualResult = Raise.recover {
       Raise.raise("Error")
       43
@@ -96,7 +96,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe 42
   }
 
-  it should "be able to return an Either with the error as the Left value" in {
+  "Raise.either" should "be able to return an Either with the error as the Left value" in {
     val actualResult: Either[String, Int] = Raise.either {
       Raise.raise("Error")
       42
@@ -113,7 +113,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe Right(42)
   }
 
-  it should "be able to return an Option with the result as a Some" in {
+  "Raise.option" should "be able to return an Option with the result as a Some" in {
     val actualResult: Option[Int] = Raise.option {
       42
     }
@@ -130,7 +130,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe None
   }
 
-  it should "be able to return a nullable value with the result" in {
+  "Raise.nullable" should "be able to return a nullable value with the result" in {
     val actualResult: Int | Null = Raise.nullable {
       42
     }
@@ -147,7 +147,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe null.asInstanceOf[Int | Null]
   }
 
-  it should "raise an error if a condition is not met" in {
+  "ensure" should "raise an error if a condition is not met" in {
     val meaningOfLife = 42
     val actualResult  = Raise.run {
       Raise.ensure(meaningOfLife == 43)("Error")
@@ -180,7 +180,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult should be(43)
   }
 
-  it should "be able to catch an exception and raise a typed error" in {
+  "Raise.catching" should "be able to catch an exception and raise a typed error" in {
     val actualResult = Raise.run {
       Raise.catching {
         throw new RuntimeException("Boom!")
