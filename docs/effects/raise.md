@@ -49,6 +49,33 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int = {
 }
 ```
 
+### Ensuring Non-Null Values
+
+Ensure that a value is not null and raise an error if it is:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+object NullError
+type NullError = NullError.type
+
+def processName(name: String | Null)(using Raise[NullError]): String = {
+  val validName = Raise.ensureNotNull(name) { NullError }
+  validName.toUpperCase
+}
+
+// Usage example
+val result = Raise.either {
+  processName(null)
+}
+// result will be Left(NullError)
+
+val result2 = Raise.either {
+  processName("John")
+}
+// result2 will be Right("JOHN")
+```
+
 ### Catching Exceptions
 
 Transform exceptions into typed errors:
