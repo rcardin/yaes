@@ -240,4 +240,20 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
       }
     }
   }
+
+  "withError" should "return the value if it is not an error" in {
+    val actual = Raise.either {
+      Raise.withError[Int, String, Int](s => s.length) { 42 }
+    }
+
+    actual should be(Right(42))
+  }
+
+  it should "return the transformed error if the value is an error" in {
+    val actual = Raise.either {
+      Raise.withError[Int, String, Int](s => s.length) { Raise.raise("error") }
+    }
+
+    actual should be(Left(5))
+  }
 }

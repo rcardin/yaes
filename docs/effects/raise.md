@@ -76,6 +76,44 @@ val result2 = Raise.either {
 // result2 will be Right("JOHN")
 ```
 
+### Transforming Error Types
+
+Transform errors from one type to another using `withError`:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+// Define different error types
+sealed trait NetworkError
+case object ConnectionTimeout extends NetworkError
+case object InvalidResponse extends NetworkError
+
+sealed trait ServiceError
+case object ServiceUnavailable extends ServiceError
+case object InvalidData extends ServiceError
+
+// Function that raises NetworkError
+def fetchData(url: String)(using Raise[NetworkError]): String =
+  if (url.isEmpty) Raise.raise(InvalidResponse)
+  else "data"
+
+// Transform NetworkError to ServiceError
+def processData(url: String)(using Raise[ServiceError]): String = {
+  Raise.withError[ServiceError, NetworkError, String] {
+    case ConnectionTimeout => ServiceUnavailable
+    case InvalidResponse => InvalidData
+  } {
+    fetchData(url)
+  }
+}
+
+// Usage example
+val result = Raise.either {
+  processData("")  // Will raise InvalidResponse, transformed to InvalidData
+}
+// result will be Left(InvalidData)
+```
+
 ### Catching Exceptions
 
 Transform exceptions into typed errors:

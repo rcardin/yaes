@@ -373,6 +373,38 @@ object Raise {
       case ex => throw ex
     }
 
+  /** Execute the [[Raise]] context function resulting in `A` or any _logical error_ of type
+    * `OtherError`, and transform any raised `OtherError` into `Error`, which is raised to the outer
+    * [[Raise]].
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val actual = either {
+    *   withError[Int, String, Int](s => s.length) { raise("error") }
+    * }
+    * actual should be(Left(5))
+    * }}}
+    *
+    * @param transform
+    *   The function to transform the `OtherError` into `Error`
+    * @param block
+    *   The block to execute
+    * @param r
+    *   The Raise context
+    * @tparam ToError
+    *   The type of the transformed logical error
+    * @tparam FromError
+    *   The type of the logical error that can be raised and transformed
+    * @tparam A
+    *   The type of the result of the `block`
+    * @return
+    *   The result of the `block`
+    */
+  def withError[ToError, FromError, A](transform: FromError => ToError)(
+      block: Raise[FromError] ?=> A
+  )(using Raise[ToError]): A =
+    recover(block) { otherError => Raise.raise(transform(otherError)) }
+
   /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
 
