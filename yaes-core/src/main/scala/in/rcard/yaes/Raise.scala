@@ -279,6 +279,36 @@ object Raise {
   def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
     if !condition then Raise.raise(error)
 
+  /** Ensures that the `value` is not null; otherwise, [[Raise.raise]]s a logical failure of type
+    * `Error`.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val actual: Int = fold(
+    *   { ensureNotNull(null) { "error" } },
+    *   error => 43,
+    *   value => 42
+    * )
+    * actual should be(43)
+    * }}}
+    *
+    * @param value
+    *   The value that must be non-null.
+    * @param raise
+    *   A lambda that produces an error of type `Error` when the `value` is null.
+    * @param r
+    *   The Raise context
+    * @tparam B
+    *   The type of the value
+    * @tparam Error
+    *   The type of the logical error
+    * @return
+    *   The value if it is not null
+    */
+  def ensureNotNull[E, A](value: A | Null)(error: => E)(using r: Raise[E]): A =
+    if value == null then Raise.raise(error)
+    else value.asInstanceOf[A]
+
   /** Catches an exception and raises an error of type `E`. For other exceptions, the exception is
     * rethrown.
     *

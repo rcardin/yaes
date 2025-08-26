@@ -149,7 +149,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "raise an error if a condition is not met" in {
     val meaningOfLife = 42
-    val actualResult = Raise.run {
+    val actualResult  = Raise.run {
       Raise.ensure(meaningOfLife == 43)("Error")
     }
 
@@ -158,12 +158,26 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "not raise an error if a condition is met" in {
     val meaningOfLife = 42
-    val actualResult = Raise.run {
+    val actualResult  = Raise.run {
       Raise.ensure(meaningOfLife == 42)("Error")
       42
     }
 
     actualResult shouldBe 42
+  }
+
+  "ensureNotNull" should "return the value if it is not null" in {
+    val actualResult = Raise.run {
+      Raise.ensureNotNull(42) { "error" }
+    }
+    actualResult should be(42)
+  }
+
+  it should "return the error if the value is null" in {
+    val actualResult = Raise.run {
+      Raise.ensureNotNull(null) { 43 }
+    }
+    actualResult should be(43)
   }
 
   it should "be able to catch an exception and raise a typed error" in {
