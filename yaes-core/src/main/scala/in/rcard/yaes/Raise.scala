@@ -405,6 +405,56 @@ object Raise {
   )(using Raise[ToError]): A =
     recover(block) { otherError => Raise.raise(transform(otherError)) }
 
+  /** Utility type alias for mapping errors. */
+  type MapError[From, To] = Yaes[Raise.UnsafeMapError[From, To]]
+
+  /** A strategy that allows to map an error to another one. As a strategy, it should be used as a
+    * `given` instance. Its behavior is comparable to the [[Raise.withError]] method.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val finalLambda: Raise[Int] ?=> String = {
+    *   given MapError[String, Int] = MapError { _.length }
+    *   Raise.raise("Oops!")
+    * }
+    * val result: Int | String = Raise.run(finalLambda)
+    * result shouldBe 5
+    * }}}
+    *
+    * @tparam From
+    *   The original error type
+    * @tparam To
+    *   The error type to map to
+    */
+  trait UnsafeMapError[From, To] extends Unsafe[From] {
+    def map(error: From): To
+  }
+
+  /** Creates a mapping strategy for errors. */
+  object MapError {
+
+    /** Creates a mapping strategy for errors.
+      *
+      * @param mapper
+      *   The function to map the original error to the new error
+      * @param outer
+      *   The new Raise context
+      * @tparam From
+      *   The original error type
+      * @tparam To
+      *   The new error type
+      * @return
+      *   The mapping strategy
+      */
+    def apply[From, To](mapper: From => To)(using outer: Raise[To]): MapError[From, To] =
+      new Yaes(new UnsafeMapError[From, To] {
+
+        override def raise(error: => From): Nothing = outer.unsafe.raise(map(error))
+
+        override def map(error: From): To = mapper(error)
+      })
+  }
+
   /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
 

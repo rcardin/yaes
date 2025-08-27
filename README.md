@@ -371,6 +371,48 @@ val divisionByZeroResult: Int | Null = Raise.nullable {
 }
 ```
 
+#### Error Mapping with `MapError`
+
+The `Raise` effect provides a powerful `MapError` strategy that allows you to automatically map errors from one type to another using a `given` instance. This is particularly useful when you need to transform errors in a compositional way across different layers of your application.
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+// Define different error types for different layers
+sealed trait DatabaseError
+case object ConnectionTimeout extends DatabaseError
+case object RecordNotFound extends DatabaseError
+
+sealed trait ServiceError
+case class ValidationFailed(message: String) extends ServiceError
+case class OperationFailed(cause: String) extends ServiceError
+
+// A function that raises DatabaseError
+def findUserInDatabase(id: Int)(using Raise[DatabaseError]): User =
+  if (id < 0) Raise.raise(RecordNotFound)
+  else User(s"User$id")
+
+// Use MapError to automatically transform DatabaseError to ServiceError
+def findUser(id: Int)(using Raise[ServiceError]): User = {
+  // Define the mapping strategy as a given instance
+  given MapError[DatabaseError, ServiceError] = MapError {
+    case ConnectionTimeout => OperationFailed("Database unavailable")
+    case RecordNotFound => ValidationFailed("User not found")
+  }
+  
+  // The error will be automatically mapped from DatabaseError to ServiceError
+  findUserInDatabase(id)
+}
+
+// Usage
+val result: ServiceError | User = Raise.run {
+  findUser(-1)
+}
+// result will be ValidationFailed("User not found")
+```
+
+The `MapError` strategy is particularly useful when working with layered architectures where different layers define their own error types, allowing for clean separation of concerns while maintaining composability.
+
 ### The `Resource` Effect
 
 The `Resource` effect provides automatic resource management with guaranteed cleanup. It ensures that all acquired resources are properly released in LIFO (Last In, First Out) order, even when exceptions occur. This is particularly useful for managing files, database connections, network connections, and other resources that need explicit cleanup.

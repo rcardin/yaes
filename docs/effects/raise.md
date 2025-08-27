@@ -197,6 +197,53 @@ def validateUser(email: String, age: Int)(using Raise[ValidationError]): User = 
 }
 ```
 
+## Error Mapping Strategy
+
+The `MapError` strategy provides automatic error transformation using `given` instances. This allows for compositional error handling across different application layers:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+// Define different error types for different layers
+sealed trait DatabaseError
+case object ConnectionTimeout extends DatabaseError
+case object RecordNotFound extends DatabaseError
+
+sealed trait ServiceError
+case class ValidationFailed(message: String) extends ServiceError
+case class OperationFailed(cause: String) extends ServiceError
+
+// A function that raises DatabaseError
+def findUserInDatabase(id: Int)(using Raise[DatabaseError]): User =
+  if (id < 0) Raise.raise(RecordNotFound)
+  else User(s"User$id")
+
+// Use MapError to automatically transform DatabaseError to ServiceError
+def findUser(id: Int)(using Raise[ServiceError]): User = {
+  // Define the mapping strategy as a given instance
+  given MapError[DatabaseError, ServiceError] = MapError {
+    case ConnectionTimeout => OperationFailed("Database unavailable")
+    case RecordNotFound => ValidationFailed("User not found")
+  }
+  
+  // The error will be automatically mapped from DatabaseError to ServiceError
+  findUserInDatabase(id)
+}
+
+// Usage example
+val result: ServiceError | User = Raise.run {
+  findUser(-1)
+}
+// result will be ValidationFailed("User not found")
+```
+
+### Advantages of MapError
+
+- **Composability**: Errors are automatically transformed without explicit handling
+- **Layer separation**: Each layer can define its own error types
+- **Type safety**: Compile-time guarantees that error mappings are complete
+- **Flexibility**: Multiple mapping strategies can be defined and composed
+
 ## Best Practices
 
 - Use specific error types rather than generic exceptions

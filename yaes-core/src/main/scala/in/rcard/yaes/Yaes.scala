@@ -8,7 +8,7 @@ package in.rcard.yaes
   * @tparam F
   *   The effect type
   */
-class Yaes[F](val unsafe: F)
+class Yaes[+F](val unsafe: F)
 
 object Yaes {
 

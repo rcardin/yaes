@@ -8,6 +8,7 @@ import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
+import in.rcard.yaes.Raise.*
 
 class RaiseSpec extends AsyncFlatSpec with Matchers {
 
@@ -255,5 +256,23 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
 
     actual should be(Left(5))
+  }
+
+  "MapError" should "allow defining a strategy that map an error to another one" in {
+    val finalLambda: Raise[Int] ?=> String = {
+      given MapError[String, Int] = MapError { _.length }
+      Raise.raise("Oops!")
+    }
+    val result: Int | String = Raise.run(finalLambda)
+    result shouldBe 5
+  }
+
+  it should "return the happy path value if no error is raised" in {
+    val finalLambda: Raise[Int] ?=> String = {
+      given MapError[String, Int] = MapError { _.length }
+      "Hello"
+    }
+    val result: Int | String = Raise.run(finalLambda)
+    result shouldBe "Hello"
   }
 }
