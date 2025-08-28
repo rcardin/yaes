@@ -6,6 +6,9 @@ import scala.util.boundary.break
 import scala.util.control.ControlThrowable
 import scala.util.control.NoStackTrace
 import scala.util.control.NonFatal
+import scala.util.Try
+import scala.util.Success
+import scala.util.Failure
 
 /** An effect that represents the ability to raise an error of type `E`.
   *
@@ -453,6 +456,68 @@ object Raise {
 
         override def map(error: From): To = mapper(error)
       })
+  }
+  
+  extension [Error, A](either: Either[Error, A]) {
+
+    /** Lifts an [[Either]] into the [[Raise]] context, and returns the value if the Either is a
+      * [[Right]], otherwise raises the error contained in the [[Left]].
+      *
+      * @param either
+      *   The Either to extract the value from
+      * @param using
+      *   The Raise context
+      * @tparam Error
+      *   The type of the error contained in the Left
+      * @tparam A
+      *   The type of the value contained in the Right
+      * @return
+      *   The value contained in the Right
+      */
+    inline def value(using Raise[Error]): A = either match {
+      case Right(value) => value
+      case Left(error)  => Raise.raise(error)
+    }
+  }
+
+  extension [A](option: Option[A]) {
+
+    /** Lifts an [[Option]] into the [[Raise]] context, and returns the value if the [[Option]] is a
+      * [[Some]], otherwise raises the error contained in the [[None]].
+      *
+      * @param option
+      *   The Option to extract the value from
+      * @param using
+      *   The Raise context
+      * @tparam A
+      *   The type of the value contained in the Some
+      * @return
+      *   The value contained in the Some
+      */
+    inline def value(using Raise[None.type]): A = option match {
+      case Some(value) => value
+      case None        => Raise.raise(None)
+    }
+  }
+
+  extension [A](tryValue: Try[A]) {
+
+    /** Lifts a [[Try]] into the [[Raise]] context, and returns the value if the Try is a
+      * [[Success]], otherwise raises the error contained in the [[Failure]].
+      *
+      * @param tryValue
+      *   The Try to extract the value from
+      * @param using
+      *   The Raise context
+      * @tparam A
+      *   The type of the value contained in the Success
+      * @return
+      *   The value contained in the Success
+      */
+    inline def value(using Raise[Throwable]): A = tryValue match {
+      case Success(value)     => value
+      case Failure(throwable) => Raise.raise(throwable)
+    }
   }
 
   /** An effect that represents the ability to raise an error of type `E`. */

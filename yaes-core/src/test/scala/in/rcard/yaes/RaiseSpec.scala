@@ -9,6 +9,9 @@ import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
 import in.rcard.yaes.Raise.*
+import scala.util.Try
+import scala.util.Success
+import scala.util.Failure
 
 class RaiseSpec extends AsyncFlatSpec with Matchers {
 
@@ -274,5 +277,66 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
     val result: Int | String = Raise.run(finalLambda)
     result shouldBe "Hello"
+  }
+
+  "Either.value" should "return the value for a Right instance" in {
+    val one: Either[Nothing, Int] = Right(1)
+
+    val actualResult = Raise.run {
+      one.value
+    }
+
+    actualResult should be(1)
+  }
+
+  it should "raise an error for a Left instance" in {
+    val left: Either[String, Int] = Left("Error")
+
+    val actualResult = Raise.run {
+      left.value
+    }
+
+    actualResult should be("Error")
+  }
+
+  "Option.value" should "return the value for a Some instance" in {
+    val some: Option[Int] = Some(1)
+
+    val actualResult = Raise.run {
+      some.value
+    }
+
+    actualResult should be(1)
+  }
+
+  it should "raise an error for a None instance" in {
+    val none: Option[Int] = None
+
+    val actualResult = Raise.run {
+      none.value
+    }
+
+    actualResult should be(None)
+  }
+
+  "Try.value" should "return the value for a Success instance" in {
+    val one: Try[Int]     = Success(1)
+
+    val actualResult = Raise.run {
+      one.value
+    }
+
+    actualResult should be(1)
+  }
+
+  it should "raise an error for a Failure instance" in {
+    val exception = new RuntimeException("Error")
+    val failure: Try[Int] = Failure(exception)
+
+    val actualResult = Raise.run {
+      failure.value
+    }
+
+    actualResult should be(exception)
   }
 }
