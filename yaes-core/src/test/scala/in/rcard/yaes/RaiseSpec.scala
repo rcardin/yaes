@@ -9,6 +9,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
 import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Raise.given
 import scala.util.Try
 import scala.util.Success
 import scala.util.Failure
@@ -320,7 +321,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   }
 
   "Try.value" should "return the value for a Success instance" in {
-    val one: Try[Int]     = Success(1)
+    val one: Try[Int] = Success(1)
 
     val actualResult = Raise.run {
       one.value
@@ -330,7 +331,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   }
 
   it should "raise an error for a Failure instance" in {
-    val exception = new RuntimeException("Error")
+    val exception         = new RuntimeException("Error")
     val failure: Try[Int] = Failure(exception)
 
     val actualResult = Raise.run {
@@ -338,5 +339,70 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
 
     actualResult should be(exception)
+  }
+
+  "accumulate" should "combine different values" in {
+
+    val actualResult = Raise.run {
+      Raise.accumulate[String, List[Int]] {
+        val a = accumulating { 1 }
+        val b = accumulating { 2 }
+        val c = accumulating { 3 }
+
+        List(a, b, c)
+      }
+    }
+
+    actualResult should be(List(1, 2, 3))
+  }
+
+  it should "accumulate errors" in {
+
+    val actualResult = Raise.run {
+      Raise.accumulate[String, List[Int]] {
+        val a = accumulating { int(1) }
+        val b = accumulating { int(2) }
+        val c = accumulating { int(3) }
+
+        List(a, b, c)
+      }
+    }
+
+    actualResult should be(List("2", "3"))
+  }
+
+  "it" should "map all the element of the list" in {
+    val actualResult = Raise.run {
+      accumulate[String, List[Int]] {
+        List(1, 2, 3, 4, 5).map { i =>
+          accumulating { i + 1 }
+        }
+      }
+    }
+
+    actualResult shouldBe List(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors" in {
+    val actualResult = Raise.run {
+      accumulate[String, List[Int]] {
+        List(1, 2, 3, 4, 5).map { i =>
+          accumulating {
+            if (i % 2 == 0) {
+              Raise.raise(i.toString)
+            } else {
+              i
+            }
+          }
+        }
+      }
+    }
+
+    actualResult shouldBe List("2", "4")
+  }
+
+  private def int(value: Int): Raise[String] ?=> Int = {
+    if value >= 2 then Raise.raise(value.toString)
+    else value
   }
 }

@@ -76,6 +76,30 @@ val result2 = Raise.either {
 // result2 will be Right("JOHN")
 ```
 
+### Accumulating Errors
+
+Use `accumulate` and `accumulating` to collect multiple errors instead of short-circuiting on the first one:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+def validateName(name: String)(using Raise[String]): String =
+  if (name.nonEmpty) name else Raise.raise("Name cannot be empty")
+
+def validateAge(age: Int)(using Raise[String]): Int =
+  if (age >= 0) age else Raise.raise("Age cannot be negative")
+
+// Accumulate validation errors
+val result = Raise.either {
+  Raise.accumulate {
+    val name = accumulating { validateName("") }
+    val age = accumulating { validateAge(-1) }
+    (name, age)
+  }
+}
+// result will be Left(List("Name cannot be empty", "Age cannot be negative"))
+```
+
 ### Transforming Error Types
 
 Transform errors from one type to another using `withError`:
@@ -197,182 +221,9 @@ def validateUser(email: String, age: Int)(using Raise[ValidationError]): User = 
 }
 ```
 
-## Error Mapping Strategy
-
-The `MapError` strategy provides automatic error transformation using `given` instances. This allows for compositional error handling across different application layers:
-
-```scala
-import in.rcard.yaes.Raise.*
-
-// Define different error types for different layers
-sealed trait DatabaseError
-case object ConnectionTimeout extends DatabaseError
-case object RecordNotFound extends DatabaseError
-
-sealed trait ServiceError
-case class ValidationFailed(message: String) extends ServiceError
-case class OperationFailed(cause: String) extends ServiceError
-
-// A function that raises DatabaseError
-def findUserInDatabase(id: Int)(using Raise[DatabaseError]): User =
-  if (id < 0) Raise.raise(RecordNotFound)
-  else User(s"User$id")
-
-// Use MapError to automatically transform DatabaseError to ServiceError
-def findUser(id: Int)(using Raise[ServiceError]): User = {
-  // Define the mapping strategy as a given instance
-  given MapError[DatabaseError, ServiceError] = MapError {
-    case ConnectionTimeout => OperationFailed("Database unavailable")
-    case RecordNotFound => ValidationFailed("User not found")
-  }
-  
-  // The error will be automatically mapped from DatabaseError to ServiceError
-  findUserInDatabase(id)
-}
-
-// Usage example
-val result: ServiceError | User = Raise.run {
-  findUser(-1)
-}
-// result will be ValidationFailed("User not found")
-```
-
-### Advantages of MapError
-
-- **Composability**: Errors are automatically transformed without explicit handling
-- **Layer separation**: Each layer can define its own error types
-- **Type safety**: Compile-time guarantees that error mappings are complete
-- **Flexibility**: Multiple mapping strategies can be defined and composed
-
-## Extension Methods
-
-The `Raise` effect provides convenient extension methods to lift common Scala types into the `Raise` context:
-
-### Either.value
-
-Extract the value from an `Either`, raising the left value as an error if present:
-
-```scala
-import in.rcard.yaes.Raise.*
-
-sealed trait ParseError
-case class InvalidFormat(message: String) extends ParseError
-
-def parseInt(input: String): Either[ParseError, Int] =
-  try Right(input.toInt)
-  catch case _: NumberFormatException => Left(InvalidFormat(s"'$input' is not a valid number"))
-
-def processNumber(input: String)(using Raise[ParseError]): String = {
-  val number = parseInt(input).value  // Extracts Int or raises ParseError
-  s"The number is: $number"
-}
-
-// Usage example
-val result = Raise.either {
-  processNumber("abc")  // Will raise InvalidFormat error
-}
-// result will be Left(InvalidFormat("'abc' is not a valid number"))
-
-val result2 = Raise.either {
-  processNumber("42")   // Will extract the value 42
-}
-// result2 will be Right("The number is: 42")
-```
-
-### Option.value
-
-Extract the value from an `Option`, raising `None` as an error if the option is empty:
-
-```scala
-import in.rcard.yaes.Raise.*
-
-def findUser(id: Int): Option[User] =
-  if (id > 0) Some(User(s"User$id")) else None
-
-def getUserName(id: Int)(using Raise[None.type]): String = {
-  val user = findUser(id).value  // Extracts User or raises None
-  user.name
-}
-
-// Usage example
-val result = Raise.either {
-  getUserName(0)  // Will raise None
-}
-// result will be Left(None)
-
-val result2 = Raise.either {
-  getUserName(1)  // Will extract User(1)
-}
-// result2 will be Right("User1")
-```
-
-### Try.value
-
-Extract the value from a `Try`, raising the contained `Throwable` as an error if the `Try` is a `Failure`:
-
-```scala
-import in.rcard.yaes.Raise.*
-import scala.util.Try
-
-def parseIntSafe(input: String): Try[Int] = Try(input.toInt)
-
-def doubleNumber(input: String)(using Raise[Throwable]): Int = {
-  val number = parseIntSafe(input).value  // Extracts Int or raises Throwable
-  number * 2
-}
-
-// Usage example  
-val result = Raise.either {
-  doubleNumber("abc")  // Will raise NumberFormatException
-}
-// result will be Left(NumberFormatException)
-
-val result2 = Raise.either {
-  doubleNumber("21")   // Will extract 21 and double it
-}
-// result2 will be Right(42)
-```
-
-### Combining Extension Methods
-
-These extension methods can be combined with other `Raise` operations for powerful error handling:
-
-```scala
-import in.rcard.yaes.Raise.*
-import scala.util.Try
-
-sealed trait ValidationError  
-case class InvalidInput(message: String) extends ValidationError
-case class ProcessingError(cause: Throwable) extends ValidationError
-
-def processInputs(input1: String, input2: String)(using Raise[ValidationError]): Int = {
-  // Transform Throwable to ValidationError using withError
-  val num1 = Raise.withError[ValidationError, Throwable, Int](ProcessingError(_)) {
-    Try(input1.toInt).value
-  }
-  
-  // Use Either.value with custom error type  
-  val parseResult = if (input2.nonEmpty) Right(input2.toInt) 
-                   else Left(InvalidInput("Input cannot be empty"))
-  
-  val num2 = Raise.withError[ValidationError, InvalidInput, Int](identity) {
-    parseResult.value
-  }
-  
-  num1 + num2
-}
-
-// Usage example
-val result = Raise.either {
-  processInputs("10", "")  // Will raise InvalidInput
-}
-// result will be Left(InvalidInput("Input cannot be empty"))
-```
-
 ## Best Practices
 
 - Use specific error types rather than generic exceptions
 - Combine with other effects like `IO` for comprehensive error handling
 - Handle errors at appropriate boundaries in your application
 - Use union types for simple error handling, `Either` for more complex scenarios
-- Use extension methods to seamlessly integrate existing Scala types with the `Raise` effect

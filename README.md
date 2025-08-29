@@ -413,6 +413,29 @@ val result: ServiceError | User = Raise.run {
 
 The `MapError` strategy is particularly useful when working with layered architectures where different layers define their own error types, allowing for clean separation of concerns while maintaining composability.
 
+#### Error Accumulation
+
+The `Raise` effect allows you to accumulate multiple errors instead of short-circuiting on the first one using `accumulate` and `accumulating`:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+def validateName(name: String)(using Raise[String]): String =
+  if (name.nonEmpty) name else Raise.raise("Name cannot be empty")
+
+def validateAge(age: Int)(using Raise[String]): Int =
+  if (age >= 0) age else Raise.raise("Age cannot be negative")
+
+val result = Raise.either {
+  Raise.accumulate {
+    val name = accumulating { validateName("") }
+    val age = accumulating { validateAge(-1) }
+    (name, age)
+  }
+}
+// result will be Left(List("Name cannot be empty", "Age cannot be negative"))
+```
+
 ### The `Resource` Effect
 
 The `Resource` effect provides automatic resource management with guaranteed cleanup. It ensures that all acquired resources are properly released in LIFO (Last In, First Out) order, even when exceptions occur. This is particularly useful for managing files, database connections, network connections, and other resources that need explicit cleanup.
