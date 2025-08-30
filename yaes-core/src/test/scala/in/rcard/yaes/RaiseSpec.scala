@@ -364,6 +364,8 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
         val b = accumulating { int(2) }
         val c = accumulating { int(3) }
 
+        val d = a + b + c
+
         List(a, b, c)
       }
     }
@@ -371,7 +373,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult should be(List("2", "3"))
   }
 
-  "it" should "map all the element of the list" in {
+  it should "map all the element of the list" in {
     val actualResult = Raise.run {
       accumulate[String, List[Int]] {
         List(1, 2, 3, 4, 5).map { i =>
