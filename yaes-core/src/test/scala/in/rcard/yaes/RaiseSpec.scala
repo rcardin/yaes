@@ -387,7 +387,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     val actualResult = Raise.run {
       accumulate[String, List[Int]] {
         List(1, 2, 3, 4, 5).map { i =>
-          accumulating {
+          accumulating[String, Int] {
             if (i % 2 == 0) {
               Raise.raise(i.toString)
             } else {

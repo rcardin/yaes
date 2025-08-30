@@ -546,7 +546,7 @@ object Raise {
     private[yaes] val _errors        = ArrayBuffer.empty[Error]
     def errors: List[Error]          = _errors.toList
     def addError(error: Error): Unit = _errors += error
-    def hasErrors: Boolean           = _errors.nonEmpty
+    def hasErrors: Boolean = _errors.nonEmpty
   }
 
   /** Conversion from a [[Value]] to its contained value. If the [[Value]] contains errors, it will
@@ -554,7 +554,10 @@ object Raise {
     * [[AccumulateScope]] scope.
     */
   given valueConversion[Error: RaiseAcc, A]: Conversion[Value[Error, A], A] with
-    def apply(toConvert: Value[Error, A]): A = toConvert.value
+    def apply(toConvert: Value[Error, A]): A = {
+      // Don't raise errors here, just return the raw value
+      toConvert.rawValue
+    }
 
   /** Accumulates the errors of the executions in the `block` lambda and raises all of them if any
     * error is found. In detail, the `block` lambda must be a series of statements using the
@@ -593,30 +596,16 @@ object Raise {
   inline def accumulate[Error, A](block: AccumulateScope[Error] ?=> A): RaiseAcc[Error] ?=> A = {
 
     import scala.language.implicitConversions
-    
+
     given acc: AccumulateScope[Error] = AccumulateScope()
     val result: A                     = block(using acc)
-    result
     
-    // def impl(using raiseAcc: RaiseAcc[Error]): A = {
-    //   given acc: AccumulateScope[Error] = AccumulateScope()
-    //   val result: A = block(using acc)
-      
-    //   // Workaround for Scala 3.7+ implicit conversion restrictions:
-    //   // Since the compiler no longer automatically applies List[Value[Error, B]] => List[B]
-    //   // conversions during list construction, we handle this conversion explicitly.
-    //   result match {
-    //     case list: List[?] if list.nonEmpty => 
-    //       list.head match {
-    //         case _: Value[?, ?] =>
-    //           list.asInstanceOf[List[Value[Error, Any]]].map(_.value).asInstanceOf[A]
-    //         case _ => result
-    //       }
-    //     case _ => result
-    //   }
-    // }
-    
-    // impl
+    // Check if we accumulated any errors and raise them if so
+    if (acc.hasErrors) {
+      Raise.raise(acc.errors)
+    } else {
+      result
+    }
   }
 
   /** Represents a value that can be either a value or a list of errors raised inside an
@@ -627,19 +616,23 @@ object Raise {
     */
   class Value[Error, A](
       private val _value: A,
-      private val accumulateScope: AccumulateScope[Error]
   ) {
-    inline def value: RaiseAcc[Error] ?=> A =
-      if (accumulateScope.hasErrors) raise(accumulateScope.errors)
-      else _value
+    inline def value: RaiseAcc[Error] ?=> A = {
+      // Don't raise errors here, just return the raw value
+      // The accumulate function will handle raising all errors at once
+      _value
+    }
+    
+    // Provide access methods for accumulate function
+    private[Raise] def rawValue: A = _value
   }
 
   object Value {
     inline def apply[Error, A](value: A)(using scope: AccumulateScope[Error]): Value[Error, A] =
-      new Value(value: A, scope)
+      new Value(value)
 
     inline def apply[Error, A](using scope: AccumulateScope[Error]): Value[Error, A] =
-      new Value(null.asInstanceOf[A], scope)
+      new Value(null.asInstanceOf[A])
   }
 
   /** Accumulates the errors of the executions in the `block` lambda and returns a [[Value]] that
@@ -695,10 +688,9 @@ object Raise {
   /** Implicit conversion between a container `M[Value[Error, A]]` and a container `M[A]`
     * accumulating errors into a [[RaiseAcc]] container.
     *
-    * NOTE: Due to changes in Scala 3.7+ implicit resolution (specifically the restriction
-    * of implicit args to using clauses), these conversions don't work reliably during
-    * collection construction. The [[accumulate]] function now handles this conversion
-    * explicitly at runtime.
+    * NOTE: Due to changes in Scala 3.7+ implicit resolution (specifically the restriction of
+    * implicit args to using clauses), these conversions don't work reliably during collection
+    * construction. The [[accumulate]] function now handles this conversion explicitly at runtime.
     *
     * <h2>Example</h2>
     * {{{
