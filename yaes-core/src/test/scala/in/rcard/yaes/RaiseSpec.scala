@@ -403,6 +403,40 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe List("2", "4")
   }
 
+  "TraceWith" should "allow defining a strategy that trace the error and then raise it" in {
+    val queue = collection.mutable.ListBuffer.empty[String]
+    given TraceWith[String] = trace => {
+      queue += trace.original
+      trace.printStackTrace()
+    }
+
+    val lambda: Raise[String] ?=> Int = traced {
+      raise("Oops!")
+    }
+
+    val actual: String | Int = Raise.run(lambda)
+
+    actual shouldBe "Oops!"
+    queue should contain("Oops!")
+  }
+
+  it should "return the happy path value if no error is raised" in {
+    val queue = collection.mutable.ListBuffer.empty[String]
+    given TraceWith[String] = trace => {
+      queue += trace.original
+      trace.printStackTrace()
+    }
+
+    val lambda: Raise[String] ?=> Int = traced {
+      42
+    }
+
+    val actual: Int | String = Raise.run(lambda)
+
+    actual shouldBe 42
+    queue shouldBe empty
+  }
+
   private def int(value: Int): Raise[String] ?=> Int = {
     if value >= 2 then Raise.raise(value.toString)
     else value
