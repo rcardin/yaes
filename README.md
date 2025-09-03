@@ -436,6 +436,47 @@ val result = Raise.either {
 // result will be Left(List("Name cannot be empty", "Age cannot be negative"))
 ```
 
+#### Error Tracing
+
+The `traced` function adds debugging capabilities by capturing stack traces when errors occur:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+// Define custom tracing behavior
+given TraceWith[String] = trace => {
+  println(s"Error: ${trace.original}")
+  trace.printStackTrace()
+}
+
+def riskyOperation(value: Int)(using Raise[String]): Int =
+  if (value < 0) Raise.raise("Negative value not allowed")
+  else value * 2
+
+val result = Raise.either {
+  traced {
+    riskyOperation(-5)
+  }
+}
+// Prints error details and stack trace, then returns Left("Negative value not allowed")
+```
+
+You can also use the default tracing strategy:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Raise.given  // Import default tracing
+
+val result = Raise.either {
+  traced {
+    Raise.raise("Something went wrong")
+  }
+}
+// Automatically prints stack trace
+```
+
+**Note**: Tracing has performance implications since it creates full stack traces.
+
 ### The `Resource` Effect
 
 The `Resource` effect provides automatic resource management with guaranteed cleanup. It ensures that all acquired resources are properly released in LIFO (Last In, First Out) order, even when exceptions occur. This is particularly useful for managing files, database connections, network connections, and other resources that need explicit cleanup.

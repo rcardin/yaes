@@ -201,6 +201,81 @@ val result: Int | Null = Raise.nullable {
 }
 ```
 
+## Error Tracing
+
+The `traced` function adds tracing capabilities to error handling, capturing stack traces when errors occur. This is useful for debugging and logging error contexts:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+// Define a custom tracing strategy
+given TraceWith[String] = trace => {
+  println(s"Error occurred: ${trace.original}")
+  trace.printStackTrace()
+}
+
+def riskyOperation(value: Int)(using Raise[String]): Int =
+  if (value < 0) Raise.raise("Negative value not allowed")
+  else value * 2
+
+// Use traced to capture stack traces
+val result = Raise.either {
+  traced {
+    riskyOperation(-5)
+  }
+}
+// Prints error details and stack trace, then returns Left("Negative value not allowed")
+```
+
+### Default Tracing
+
+A default tracing strategy is provided that simply prints the stack trace:
+
+```scala
+import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Raise.given  // Import default tracing
+
+val result = Raise.either {
+  traced {
+    Raise.raise("Something went wrong")
+  }
+}
+// Automatically prints stack trace, then returns Left("Something went wrong")
+```
+
+### Custom Tracing Strategies
+
+You can define custom tracing strategies for different error types:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+sealed trait AppError
+case class DatabaseError(message: String) extends AppError
+case class NetworkError(message: String) extends AppError
+
+// Different tracing strategies for different error types
+given TraceWith[DatabaseError] = trace => {
+  // Log to database error system
+  println(s"DB Error: ${trace.original.message}")
+  trace.printStackTrace()
+}
+
+given TraceWith[NetworkError] = trace => {
+  // Log to network monitoring system
+  println(s"Network Error: ${trace.original.message}")
+}
+
+// Usage with specific error types
+val dbResult = Raise.either {
+  traced {
+    Raise.raise(DatabaseError("Connection timeout"))
+  }
+}
+```
+
+**Note**: Tracing has performance implications since it creates full stack traces. Use it judiciously in production code.
+
 ## Error Composition
 
 Combine multiple error types:
