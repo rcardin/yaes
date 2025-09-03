@@ -36,6 +36,29 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
   else a / b
 ```
 
+### Using the `raises` Infix Type
+
+For more concise syntax, you can use the `raises` infix type instead of `using Raise[E]`:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+// Using the raises infix type
+def divide(a: Int, b: Int): Int raises DivisionByZero =
+  if (b == 0) Raise.raise(DivisionByZero)
+  else a / b
+
+// Equivalent to using Raise[E] explicitly
+def divideExplicit(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
+  if (b == 0) Raise.raise(DivisionByZero) 
+  else a / b
+
+// Usage is the same
+val result: Int | DivisionByZero = Raise.run {
+  divide(10, 0)
+}
+```
+
 ## Utility Functions
 
 ### Ensuring Conditions

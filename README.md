@@ -310,6 +310,22 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
   else a / b
 ```
 
+For more concise syntax, you can use the `raises` infix type:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+// Using the raises infix type  
+def divide(a: Int, b: Int): Int raises DivisionByZero =
+  if (b == 0) Raise.raise(DivisionByZero)
+  else a / b
+
+// Equivalent to using Raise[E] explicitly
+def divideExplicit(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
+  if (b == 0) Raise.raise(DivisionByZero)
+  else a / b
+```
+
 The effect offers some functions to lift an program into an effectful computation that uses the `Raise[E]` effect. For example, we can rewrite the above example using the `ensure` utility function:
 
 ```scala 3
