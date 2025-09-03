@@ -8,6 +8,11 @@ import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
+import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Raise.given
+import scala.util.Try
+import scala.util.Success
+import scala.util.Failure
 
 class RaiseSpec extends AsyncFlatSpec with Matchers {
 
@@ -54,7 +59,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   //   } yield actualResult shouldBe "Boom!"
   // }
 
-  it should "be able to provide a default value if an error is risen" in {
+  "withDefault" should "be able to provide a default value if an error is risen" in {
     val actualResult = Raise.withDefault(42) {
       Raise.raise("Error")
       43
@@ -71,7 +76,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe 24
   }
 
-  it should "be able to recover from an error" in {
+  "recover" should "be able to recover from an error" in {
     val actualResult = Raise.recover {
       Raise.raise("Error")
       43
@@ -96,7 +101,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe 42
   }
 
-  it should "be able to return an Either with the error as the Left value" in {
+  "Raise.either" should "be able to return an Either with the error as the Left value" in {
     val actualResult: Either[String, Int] = Raise.either {
       Raise.raise("Error")
       42
@@ -113,7 +118,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe Right(42)
   }
 
-  it should "be able to return an Option with the result as a Some" in {
+  "Raise.option" should "be able to return an Option with the result as a Some" in {
     val actualResult: Option[Int] = Raise.option {
       42
     }
@@ -130,7 +135,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe None
   }
 
-  it should "be able to return a nullable value with the result" in {
+  "Raise.nullable" should "be able to return a nullable value with the result" in {
     val actualResult: Int | Null = Raise.nullable {
       42
     }
@@ -147,9 +152,9 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe null.asInstanceOf[Int | Null]
   }
 
-  it should "raise an error if a condition is not met" in {
+  "ensure" should "raise an error if a condition is not met" in {
     val meaningOfLife = 42
-    val actualResult = Raise.run {
+    val actualResult  = Raise.run {
       Raise.ensure(meaningOfLife == 43)("Error")
     }
 
@@ -158,7 +163,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "not raise an error if a condition is met" in {
     val meaningOfLife = 42
-    val actualResult = Raise.run {
+    val actualResult  = Raise.run {
       Raise.ensure(meaningOfLife == 42)("Error")
       42
     }
@@ -166,7 +171,21 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe 42
   }
 
-  it should "be able to catch an exception and raise a typed error" in {
+  "ensureNotNull" should "return the value if it is not null" in {
+    val actualResult = Raise.run {
+      Raise.ensureNotNull(42) { "error" }
+    }
+    actualResult should be(42)
+  }
+
+  it should "return the error if the value is null" in {
+    val actualResult = Raise.run {
+      Raise.ensureNotNull(null) { 43 }
+    }
+    actualResult should be(43)
+  }
+
+  "Raise.catching" should "be able to catch an exception and raise a typed error" in {
     val actualResult = Raise.run {
       Raise.catching {
         throw new RuntimeException("Boom!")
@@ -225,5 +244,224 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
         }
       }
     }
+  }
+
+  "withError" should "return the value if it is not an error" in {
+    val actual = Raise.either {
+      Raise.withError[Int, String, Int](s => s.length) { 42 }
+    }
+
+    actual should be(Right(42))
+  }
+
+  it should "return the transformed error if the value is an error" in {
+    val actual = Raise.either {
+      Raise.withError[Int, String, Int](s => s.length) { Raise.raise("error") }
+    }
+
+    actual should be(Left(5))
+  }
+
+  "MapError" should "allow defining a strategy that map an error to another one" in {
+    val finalLambda: Raise[Int] ?=> String = {
+      given MapError[String, Int] = MapError { _.length }
+      Raise.raise("Oops!")
+    }
+    val result: Int | String = Raise.run(finalLambda)
+    result shouldBe 5
+  }
+
+  it should "return the happy path value if no error is raised" in {
+    val finalLambda: Raise[Int] ?=> String = {
+      given MapError[String, Int] = MapError { _.length }
+      "Hello"
+    }
+    val result: Int | String = Raise.run(finalLambda)
+    result shouldBe "Hello"
+  }
+
+  "Either.value" should "return the value for a Right instance" in {
+    val one: Either[Nothing, Int] = Right(1)
+
+    val actualResult = Raise.run {
+      one.value
+    }
+
+    actualResult should be(1)
+  }
+
+  it should "raise an error for a Left instance" in {
+    val left: Either[String, Int] = Left("Error")
+
+    val actualResult = Raise.run {
+      left.value
+    }
+
+    actualResult should be("Error")
+  }
+
+  "Option.value" should "return the value for a Some instance" in {
+    val some: Option[Int] = Some(1)
+
+    val actualResult = Raise.run {
+      some.value
+    }
+
+    actualResult should be(1)
+  }
+
+  it should "raise an error for a None instance" in {
+    val none: Option[Int] = None
+
+    val actualResult = Raise.run {
+      none.value
+    }
+
+    actualResult should be(None)
+  }
+
+  "Try.value" should "return the value for a Success instance" in {
+    val one: Try[Int] = Success(1)
+
+    val actualResult = Raise.run {
+      one.value
+    }
+
+    actualResult should be(1)
+  }
+
+  it should "raise an error for a Failure instance" in {
+    val exception         = new RuntimeException("Error")
+    val failure: Try[Int] = Failure(exception)
+
+    val actualResult = Raise.run {
+      failure.value
+    }
+
+    actualResult should be(exception)
+  }
+
+  "accumulate" should "combine different values" in {
+
+    val actualResult = Raise.run {
+      Raise.accumulate[String, List[Int]] {
+        val a = accumulating { 1 }
+        val b = accumulating { 2 }
+        val c = accumulating { 3 }
+
+        List(a, b, c)
+      }
+    }
+
+    actualResult should be(List(1, 2, 3))
+  }
+
+  it should "accumulate errors" in {
+
+    val actualResult = Raise.run {
+      Raise.accumulate[String, List[Int]] {
+        val a = accumulating { int(1) }
+        val b = accumulating { int(2) }
+        val c = accumulating { int(3) }
+
+        val d = a + b + c
+
+        List(a, b, c)
+      }
+    }
+
+    actualResult should be(List("2", "3"))
+  }
+
+  it should "map all the element of the list" in {
+    val actualResult = Raise.run {
+      accumulate[String, List[Int]] {
+        List(1, 2, 3, 4, 5).map { i =>
+          accumulating { i + 1 }
+        }
+      }
+    }
+
+    actualResult shouldBe List(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors" in {
+    val actualResult = Raise.run {
+      accumulate[String, List[Int]] {
+        List(1, 2, 3, 4, 5).map { i =>
+          accumulating[String, Int] {
+            if (i % 2 == 0) {
+              Raise.raise(i.toString)
+            } else {
+              i
+            }
+          }
+        }
+      }
+    }
+
+    actualResult shouldBe List("2", "4")
+  }
+
+  "TraceWith" should "allow defining a strategy that trace the error and then raise it" in {
+    val queue = collection.mutable.ListBuffer.empty[String]
+    given TraceWith[String] = trace => {
+      queue += trace.original
+      trace.printStackTrace()
+    }
+
+    val lambda: Raise[String] ?=> Int = traced {
+      raise("Oops!")
+    }
+
+    val actual: String | Int = Raise.run(lambda)
+
+    actual shouldBe "Oops!"
+    queue should contain("Oops!")
+  }
+
+  it should "return the happy path value if no error is raised" in {
+    val queue = collection.mutable.ListBuffer.empty[String]
+    given TraceWith[String] = trace => {
+      queue += trace.original
+      trace.printStackTrace()
+    }
+
+    val lambda: Raise[String] ?=> Int = traced {
+      42
+    }
+
+    val actual: Int | String = Raise.run(lambda)
+
+    actual shouldBe 42
+    queue shouldBe empty
+  }
+
+  it should "use the default tracing strategy" in {
+    import in.rcard.yaes.Raise.given
+
+    val lambda: Raise[String] ?=> Int = traced {
+      raise("Oops!")
+    }
+
+    val actual: String | Int = Raise.run(lambda)
+
+    actual shouldBe "Oops!"
+  }
+
+  "infix type" should "allow tracking errors in a more concise way" in {
+
+    val lambda: Int raises String = {
+      Raise.raise("Oops!")
+    }
+
+    val actual: String | Int = Raise.run(lambda)
+
+    actual shouldBe "Oops!"
+  }
+
+  private def int(value: Int): Raise[String] ?=> Int = {
+    if value >= 2 then Raise.raise(value.toString)
+    else value
   }
 }
