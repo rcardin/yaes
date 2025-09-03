@@ -437,6 +437,18 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     queue shouldBe empty
   }
 
+  it should "use the default tracing strategy" in {
+    import in.rcard.yaes.Raise.given
+
+    val lambda: Raise[String] ?=> Int = traced {
+      raise("Oops!")
+    }
+
+    val actual: String | Int = Raise.run(lambda)
+
+    actual shouldBe "Oops!"
+  }
+
   private def int(value: Int): Raise[String] ?=> Int = {
     if value >= 2 then Raise.raise(value.toString)
     else value

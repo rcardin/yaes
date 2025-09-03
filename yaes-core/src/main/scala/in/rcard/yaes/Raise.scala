@@ -761,6 +761,10 @@ object Raise {
     def trace(traced: Traced[Error]): Unit
   }
 
+  given defaultTracing[Error]: TraceWith[Error] with
+    def trace(traced: Traced[Error]): Unit =
+      traced.printStackTrace()
+
   /** Add tracing to a block of code that can raise a logical error. In detail, the logical error is
     * wrapped inside a [[Traced]] exception and processed by the [[TraceWith]] strategy instance.
     * Please, be aware that adding tracing to an error can have a performance impact since a fat
