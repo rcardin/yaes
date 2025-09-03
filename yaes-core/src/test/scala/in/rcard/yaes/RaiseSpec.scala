@@ -449,6 +449,17 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actual shouldBe "Oops!"
   }
 
+  "infix type" should "allow tracking errors in a more concise way" in {
+
+    val lambda: Int raises String = {
+      Raise.raise("Oops!")
+    }
+
+    val actual: String | Int = Raise.run(lambda)
+
+    actual shouldBe "Oops!"
+  }
+
   private def int(value: Int): Raise[String] ?=> Int = {
     if value >= 2 then Raise.raise(value.toString)
     else value

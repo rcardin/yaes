@@ -38,6 +38,8 @@ object Raise {
 
   type Raise[E] = Yaes[Raise.Unsafe[E]]
 
+  infix type raises[A, Error] = Raise[Error] ?=> A
+
   /** Lifts a block of code that may use the Raise effect.
     *
     * @param block
