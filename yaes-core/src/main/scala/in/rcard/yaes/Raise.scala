@@ -556,10 +556,7 @@ object Raise {
     * [[AccumulateScope]] scope.
     */
   given valueConversion[Error: RaiseAcc, A]: Conversion[Value[Error, A], A] with
-    def apply(toConvert: Value[Error, A]): A = {
-      // Don't raise errors here, just return the raw value
-      toConvert.rawValue
-    }
+    def apply(toConvert: Value[Error, A]): A = toConvert.rawValue
 
   /** Accumulates the errors of the executions in the `block` lambda and raises all of them if any
     * error is found. In detail, the `block` lambda must be a series of statements using the
@@ -602,7 +599,6 @@ object Raise {
     given acc: AccumulateScope[Error] = AccumulateScope()
     val result: A                     = block(using acc)
 
-    // Check if we accumulated any errors and raise them if so
     if (acc.hasErrors) {
       Raise.raise(acc.errors)
     } else {
@@ -619,13 +615,8 @@ object Raise {
   class Value[Error, A](
       private val _value: A
   ) {
-    inline def value: RaiseAcc[Error] ?=> A = {
-      // Don't raise errors here, just return the raw value
-      // The accumulate function will handle raising all errors at once
-      _value
-    }
+    inline def value: RaiseAcc[Error] ?=> A =_value
 
-    // Provide access methods for accumulate function
     private[Raise] def rawValue: A = _value
   }
 
