@@ -262,7 +262,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actual should be(Left(5))
   }
 
-  "MapError" should "allow defining a strategy that map an error to another one" in {
+  "MapError" should "allow defining a strategy that maps an error to another one" in {
     val finalLambda: Raise[Int] ?=> String = {
       given MapError[String, Int] = MapError { _.length }
       Raise.raise("Oops!")
