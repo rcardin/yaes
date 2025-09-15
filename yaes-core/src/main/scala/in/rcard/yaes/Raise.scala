@@ -10,6 +10,7 @@ import scala.util.Try
 import scala.util.Success
 import scala.util.Failure
 import scala.collection.mutable.ArrayBuffer
+import scala.util.boundary.Label
 
 /** An effect that represents the ability to raise an error of type `E`.
   *
@@ -551,12 +552,18 @@ object Raise {
     def hasErrors: Boolean           = _errors.nonEmpty
   }
 
-  /** Conversion from a [[Value]] to its contained value. If the [[Value]] contains errors, it will
-    * raise them. There is no need to import this conversion as it is provided by default inside the
-    * [[AccumulateScope]] scope.
+  /** Conversion from a [[LazyValue]] to its contained value. If the [[LazyValue]] contains errors,
+    * it will raise them. There is no need to import this conversion as it is provided by default
+    * inside the [[AccumulateScope]] scope.
     */
-  given valueConversion[Error: RaiseAcc, A]: Conversion[Value[Error, A], A] with
-    def apply(toConvert: Value[Error, A]): A = toConvert.rawValue
+  private[yaes] case object AccumulationError extends ControlThrowable with NoStackTrace
+  given lazyValueConversion[A]: Conversion[LazyValue[A], A] with
+    def apply(toConvert: LazyValue[A]): A = {
+      toConvert match {
+        case LazyValue.Value(value) => value
+        case LazyValue.Empty        => throw AccumulationError
+      }
+    }
 
   /** Accumulates the errors of the executions in the `block` lambda and raises all of them if any
     * error is found. In detail, the `block` lambda must be a series of statements using the
@@ -592,17 +599,19 @@ object Raise {
     * @return
     *   The value of the block if no errors are raised
     */
-  inline def accumulate[Error, A](block: AccumulateScope[Error] ?=> A): RaiseAcc[Error] ?=> A = {
+  inline def accumulate[Error, A](
+      block: AccumulateScope[Error] ?=> A
+  ): RaiseAcc[Error] ?=> A = {
 
     import scala.language.implicitConversions
 
-    given acc: AccumulateScope[Error] = AccumulateScope()
-    val result: A                     = block(using acc)
-
-    if (acc.hasErrors) {
-      Raise.raise(acc.errors)
-    } else {
+    val accScope: AccumulateScope[Error] = AccumulateScope()
+    try {
+      val result: A = block(using accScope)
       result
+    } catch {
+      case AccumulationError =>
+        Raise.raise(accScope.errors)
     }
   }
 
@@ -610,25 +619,15 @@ object Raise {
     * [[accumulate]] block by the [[accumulating]] function.
     *
     * @see
-    *   [[valueConversion]]
+    *   [[lazyValueConversion]]
     */
-  class Value[Error, A](
-      private val _value: A
-  ) {
-    inline def value: RaiseAcc[Error] ?=> A =_value
-
-    private[Raise] def rawValue: A = _value
+  sealed trait LazyValue[+A]
+  object LazyValue {
+    case class Value[A](value: A) extends LazyValue[A]
+    case object Empty             extends LazyValue[Nothing]
   }
 
-  object Value {
-    inline def apply[Error, A](value: A)(using scope: AccumulateScope[Error]): Value[Error, A] =
-      new Value(value)
-
-    inline def apply[Error, A](using scope: AccumulateScope[Error]): Value[Error, A] =
-      new Value(null.asInstanceOf[A])
-  }
-
-  /** Accumulates the errors of the executions in the `block` lambda and returns a [[Value]] that
+  /** Accumulates the errors of the executions in the `block` lambda and returns a [[LazyValue]] that
     * can be either a value or a list of errors. The function is intended to be used inside an
     * [[accumulate]] block.
     *
@@ -637,48 +636,53 @@ object Raise {
     */
   inline def accumulating[Error, A](
       inline block: Raise[Error] ?=> A
-  )(using scope: AccumulateScope[Error]): Value[Error, A] = {
+  )(using scope: AccumulateScope[Error]): LazyValue[A] = {
     Raise.recover({
       val a = block
-      Value(value = a)
+      LazyValue.Value(value = a)
     }) { error =>
       scope.addError(error)
-      Value(using scope)
+      LazyValue.Empty
     }
   }
 
-  /** A type class to convert a container `MV[_]` of [[Value]]s to a container of values. The error
+  /** A type class to convert a container `MV[_]` of [[LazyValue]]s to a container of values. The error
     * raised during the conversion must be accumulated into a container `ME[_]` of errors.
     * @tparam ME
     *   The type of the container of errors
     * @tparam MV
-    *   The type of the container of [[Value]]s
+    *   The type of the container of [[LazyValue]]s
     */
-  trait ValuesConverter[ME[_], MV[_]] {
+  trait LazyValuesConverter[ME[_], MV[_]] {
     private type RaiseM[Error] = Raise[ME[Error]]
-    def convert[Error: RaiseM, A](convertible: MV[Value[Error, A]]): MV[A]
+    def convert[Error: RaiseM, A](convertible: MV[LazyValue[A]]): MV[A]
   }
 
-  /** A type class to convert a container `M[_]` of [[Value]]s to a container of values accumulating
+  /** A type class to convert a container `M[_]` of [[LazyValue]]s to a container of values accumulating
     * errors into a [[RaiseAcc]] container.
     * @tparam M
-    *   The type of the container of [[Value]]s
+    *   The type of the container of [[LazyValue]]s
     */
-  trait RaiseAccValuesConverter[M[_]] extends ValuesConverter[List, M] {
-    def convert[Error: RaiseAcc, A](convertible: M[Value[Error, A]]): M[A]
+  trait RaiseAccLazyValuesConverter[M[_]] extends LazyValuesConverter[List, M] {
+    def convert[Error: RaiseAcc, A](convertible: M[LazyValue[A]]): M[A]
   }
 
-  /** A type class instance to convert a container `List[Value[Error, A]]` to a container `List[A]`
+  /** A type class instance to convert a container `List[LazyValue[Error, A]]` to a container `List[A]`
     * accumulating errors into a [[RaiseAcc]] container.
     *
     * @see
-    *   [[Value]]
+    *   [[LazyValue]]
     */
-  given listRaiseAccValuesConverter: RaiseAccValuesConverter[List] with
-    def convert[Error: RaiseAcc, A](convertible: List[Value[Error, A]]): List[A] =
-      convertible.map(_.value)
+  given listRaiseAccLazyValuesConverter: RaiseAccLazyValuesConverter[List] with
+    def convert[Error: RaiseAcc, A](convertible: List[LazyValue[A]]): List[A] = {
+      println("listRaiseAccLazyValuesConverter")
+      convertible.map {
+        case LazyValue.Value(value) => value
+        case LazyValue.Empty        => throw AccumulationError
+      }
+    }
 
-  /** Implicit conversion between a container `M[Value[Error, A]]` and a container `M[A]`
+  /** Implicit conversion between a container `M[LazyValue[Error, A]]` and a container `M[A]`
     * accumulating errors into a [[RaiseAcc]] container.
     *
     * NOTE: Due to changes in Scala 3.7+ implicit resolution (specifically the restriction of
@@ -709,12 +713,14 @@ object Raise {
     * }}}
     *
     * @see
-    *   [[Value]]
+    *   [[LazyValue]]
     */
-  given raiseAccValuesConversion[Error: RaiseAcc, A, M[_]: RaiseAccValuesConverter]
-      : Conversion[M[Value[Error, A]], M[A]] with
-    def apply(convertible: M[Value[Error, A]]): M[A] =
-      summon[RaiseAccValuesConverter[M]].convert(convertible)
+  given raiseAccLazyValuesConversion[Error: RaiseAcc, A, M[_]: RaiseAccLazyValuesConverter]
+      : Conversion[M[LazyValue[A]], M[A]] with
+    def apply(convertible: M[LazyValue[A]]): M[A] = {
+      println("raiseAccLazyValuesConversion")
+      summon[RaiseAccLazyValuesConverter[M]].convert(convertible)
+    }
 
   /** Implement the `raise` method to throw a [[Traced]] exception with the original error to trace.
     */

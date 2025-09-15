@@ -358,19 +358,27 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "accumulate errors" in {
 
+    case class Person(name: String, age: Int)
+
+    def validatePerson(name: String, age: Int): Raise[String] ?=> Person = {
+      if (name.isEmpty) Raise.raise("Empty name")
+      else if (age < 0) Raise.raise("Negative age")
+      else Person(name, age)
+    }
+
     val actualResult = Raise.run {
-      Raise.accumulate[String, List[Int]] {
-        val a = accumulating { int(1) }
-        val b = accumulating { int(2) }
-        val c = accumulating { int(3) }
+      Raise.accumulate[String, String] {
+        val p1 = accumulating { validatePerson("Alice", 30) }
+        val p2 = accumulating { validatePerson("", 25) } // Will raise error, p2 becomes null
+        val p3 = accumulating {
+          validatePerson("Charlie", -5)
+        } // Will raise error, p3 becomes null
 
-        val d = a + b + c
-
-        List(a, b, c)
+        s"People: ${p1.name}, ${p2.name}, ${p3.name}"
       }
     }
 
-    actualResult should be(List("2", "3"))
+    actualResult should be(List("Empty name", "Negative age"))
   }
 
   it should "map all the element of the list" in {
@@ -386,10 +394,10 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   }
 
   it should "accumulate all the errors" in {
-    val actualResult = Raise.run {
-      accumulate[String, List[Int]] {
-        List(1, 2, 3, 4, 5).map { i =>
-          accumulating[String, Int] {
+    val actualResult = Raise.run[List[String], List[Int]] {
+      accumulate {
+        val result = List(1, 2, 3, 4, 5).map { i =>
+          accumulating {
             if (i % 2 == 0) {
               Raise.raise(i.toString)
             } else {
@@ -397,6 +405,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
             }
           }
         }
+        result
       }
     }
 
@@ -404,7 +413,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   }
 
   "TraceWith" should "allow defining a strategy that trace the error and then raise it" in {
-    val queue = collection.mutable.ListBuffer.empty[String]
+    val queue               = collection.mutable.ListBuffer.empty[String]
     given TraceWith[String] = trace => {
       queue += trace.original
       trace.printStackTrace()
@@ -421,7 +430,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   }
 
   it should "return the happy path value if no error is raised" in {
-    val queue = collection.mutable.ListBuffer.empty[String]
+    val queue               = collection.mutable.ListBuffer.empty[String]
     given TraceWith[String] = trace => {
       queue += trace.original
       trace.printStackTrace()
