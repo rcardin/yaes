@@ -100,6 +100,8 @@
       margin-left: 1rem;
       border-radius: 0.25rem;
       transition: color 0.3s ease, background-color 0.3s ease;
+      display: inline-block;
+      vertical-align: middle;
     }
 
     .theme-toggle:hover {
@@ -110,6 +112,30 @@
     .theme-toggle:focus {
       outline: 2px solid var(--nav-link-hover);
       outline-offset: 2px;
+    }
+
+    /* Ensure navigation items stay on same line */
+    .site-nav .trigger {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+
+    .site-nav .page-link {
+      white-space: nowrap;
+      margin-right: 1rem;
+    }
+
+    /* Responsive navigation adjustments */
+    @media screen and (max-width: 768px) {
+      .site-nav .trigger {
+        flex-wrap: wrap;
+      }
+      
+      .theme-toggle {
+        margin-left: 0;
+        margin-top: 0.5rem;
+      }
     }
     
     /* Syntax highlighting for light theme */
