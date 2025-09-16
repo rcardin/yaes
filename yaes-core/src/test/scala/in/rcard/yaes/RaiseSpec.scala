@@ -422,10 +422,10 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     val actualResult = Raise.run {
       Raise.accumulate[String, String] {
         val p1 = accumulating { validatePerson("Alice", 30) }
-        val p2 = accumulating { validatePerson("", 25) } // Will raise error, p2 becomes null
+        val p2 = accumulating { validatePerson("", 25) }
         val p3 = accumulating {
           validatePerson("Charlie", -5)
-        } // Will raise error, p3 becomes null
+        }
 
         s"People: ${p1.name}, ${p2.name}, ${p3.name}"
       }
