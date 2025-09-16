@@ -115,11 +115,11 @@ val result: String = Raise.run {
 - [**Raise**](effects/raise.html) - Error handling and propagation
 - [**State**](effects/state.html) - Stateful computations and mutable state management
 - [**Resource**](effects/resource.html) - Automatic resource management
-- [**Input**](effects/input.html) - Console input operations
-- [**Output**](effects/output.html) - Console output operations
+- [**Input**](effects/io-effects.html) - Console input operations
+- [**Output**](effects/io-effects.html) - Console output operations
 - [**Random**](effects/random.html) - Random content generation
-- [**Clock**](effects/clock.html) - Time management
-- [**System**](effects/system.html) - System properties and environment variables
+- [**Clock**](effects/system-clock.html) - Time management
+- [**System**](effects/system-clock.html) - System properties and environment variables
 - [**Log**](effects/log.html) - Logging at different levels
 
 ## 🗃 Data Structures
