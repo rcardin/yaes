@@ -557,15 +557,13 @@ object Raise {
   inline def mapAccumulating[E, A, B](iterable: Iterable[A])(
       transform: A => (Raise[E] ?=> B)
   )(using RaiseAcc[E]): List[B] = {
-    val errors  = collection.mutable.ArrayBuffer.empty[E]
-    val results = collection.mutable.ArrayBuffer.empty[B]
-    iterable.foreach { a =>
+    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) { case ((errs, res), a) =>
       Raise.fold(
         transform(a)
-      )(error => errors += error)(result => results += result)
+      )(error => (error :: errs, res))(result => (errs, result :: res))
     }
-    if errors.isEmpty then results.toList
-    else Raise.raise(errors.toList)
+    if errors.isEmpty then results.reverse
+    else Raise.raise(errors.reverse)
   }
 
   /** Transform every element of `iterable` using the given `transform`, or accumulate all the
