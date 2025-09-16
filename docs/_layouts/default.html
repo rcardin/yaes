@@ -112,6 +112,7 @@
       outline-offset: 2px;
     }
     
+    /* Syntax highlighting for light theme */
     .highlight {
       background-color: var(--code-bg);
       border: 1px solid var(--code-border);
@@ -119,7 +120,54 @@
       padding: 1rem;
       margin: 1rem 0;
     }
-    
+
+    /* Light theme syntax colors */
+    .highlight .c { color: #6a737d; } /* Comment */
+    .highlight .k { color: #d73a49; } /* Keyword */
+    .highlight .kt { color: #d73a49; } /* Keyword.Type */
+    .highlight .s { color: #032f62; } /* String */
+    .highlight .s1 { color: #032f62; } /* String.Single */
+    .highlight .s2 { color: #032f62; } /* String.Double */
+    .highlight .nc { color: #6f42c1; } /* Name.Class */
+    .highlight .nf { color: #6f42c1; } /* Name.Function */
+    .highlight .n { color: #24292e; } /* Name */
+    .highlight .o { color: #d73a49; } /* Operator */
+    .highlight .p { color: #24292e; } /* Punctuation */
+    .highlight .m { color: #005cc5; } /* Number */
+    .highlight .mi { color: #005cc5; } /* Number.Integer */
+    .highlight .mf { color: #005cc5; } /* Number.Float */
+
+    /* Dark theme syntax colors */
+    [data-theme="dark"] .highlight .c { color: #8b949e; } /* Comment */
+    [data-theme="dark"] .highlight .k { color: #ff7b72; } /* Keyword */
+    [data-theme="dark"] .highlight .kt { color: #ff7b72; } /* Keyword.Type */
+    [data-theme="dark"] .highlight .s { color: #a5d6ff; } /* String */
+    [data-theme="dark"] .highlight .s1 { color: #a5d6ff; } /* String.Single */
+    [data-theme="dark"] .highlight .s2 { color: #a5d6ff; } /* String.Double */
+    [data-theme="dark"] .highlight .nc { color: #d2a8ff; } /* Name.Class */
+    [data-theme="dark"] .highlight .nf { color: #d2a8ff; } /* Name.Function */
+    [data-theme="dark"] .highlight .n { color: #c9d1d9; } /* Name */
+    [data-theme="dark"] .highlight .o { color: #ff7b72; } /* Operator */
+    [data-theme="dark"] .highlight .p { color: #c9d1d9; } /* Punctuation */
+    [data-theme="dark"] .highlight .m { color: #79c0ff; } /* Number */
+    [data-theme="dark"] .highlight .mi { color: #79c0ff; } /* Number.Integer */
+    [data-theme="dark"] .highlight .mf { color: #79c0ff; } /* Number.Float */
+
+    /* Scala-specific syntax highlighting for light theme */
+    .language-scala .k { color: #d73a49; } /* Keywords like val, def, class */
+    .language-scala .s { color: #032f62; } /* Strings */
+    .language-scala .nc { color: #6f42c1; } /* Class names */
+    .language-scala .nf { color: #6f42c1; } /* Function names */
+    .language-scala .kt { color: #d73a49; } /* Types like Int, String */
+
+    /* Scala-specific syntax highlighting for dark theme */
+    [data-theme="dark"] .language-scala .k { color: #ff7b72; } /* Keywords */
+    [data-theme="dark"] .language-scala .s { color: #a5d6ff; } /* Strings */
+    [data-theme="dark"] .language-scala .nc { color: #d2a8ff; } /* Class names */
+    [data-theme="dark"] .language-scala .nf { color: #d2a8ff; } /* Function names */
+    [data-theme="dark"] .language-scala .kt { color: #ff7b72; } /* Types */
+
+    /* Layout styles */
     .effect-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -154,11 +202,6 @@
       background-color: var(--footer-bg);
       border-top: 1px solid var(--footer-border);
     }
-    
-    /* Scala syntax highlighting improvements */
-    .language-scala .k { color: #007acc; }
-    .language-scala .s { color: #d73a49; }
-    .language-scala .nc { color: #6f42c1; }
   </style>
 </head>
 
