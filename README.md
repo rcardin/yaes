@@ -310,6 +310,22 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
   else a / b
 ```
 
+For more concise syntax, you can use the `raises` infix type:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+// Using the raises infix type  
+def divide(a: Int, b: Int): Int raises DivisionByZero =
+  if (b == 0) Raise.raise(DivisionByZero)
+  else a / b
+
+// Equivalent to using Raise[E] explicitly
+def divideExplicit(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
+  if (b == 0) Raise.raise(DivisionByZero)
+  else a / b
+```
+
 The effect offers some functions to lift an program into an effectful computation that uses the `Raise[E]` effect. For example, we can rewrite the above example using the `ensure` utility function:
 
 ```scala 3
@@ -370,6 +386,193 @@ val divisionByZeroResult: Int | Null = Raise.nullable {
   divide(10, 0)
 }
 ```
+
+#### Error Mapping with `MapError`
+
+The `Raise` effect provides a powerful `MapError` strategy that allows you to automatically map errors from one type to another using a `given` instance. This is particularly useful when you need to transform errors in a compositional way across different layers of your application.
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+// Define different error types for different layers
+sealed trait DatabaseError
+case object ConnectionTimeout extends DatabaseError
+case object RecordNotFound extends DatabaseError
+
+sealed trait ServiceError
+case class ValidationFailed(message: String) extends ServiceError
+case class OperationFailed(cause: String) extends ServiceError
+
+// A function that raises DatabaseError
+def findUserInDatabase(id: Int)(using Raise[DatabaseError]): User =
+  if (id < 0) Raise.raise(RecordNotFound)
+  else User(s"User$id")
+
+// Use MapError to automatically transform DatabaseError to ServiceError
+def findUser(id: Int)(using Raise[ServiceError]): User = {
+  // Define the mapping strategy as a given instance
+  given MapError[DatabaseError, ServiceError] = MapError {
+    case ConnectionTimeout => OperationFailed("Database unavailable")
+    case RecordNotFound => ValidationFailed("User not found")
+  }
+  
+  // The error will be automatically mapped from DatabaseError to ServiceError
+  findUserInDatabase(id)
+}
+
+// Usage
+val result: ServiceError | User = Raise.run {
+  findUser(-1)
+}
+// result will be ValidationFailed("User not found")
+```
+
+The `MapError` strategy is particularly useful when working with layered architectures where different layers define their own error types, allowing for clean separation of concerns while maintaining composability.
+
+#### Error Accumulation
+
+The `Raise` effect allows you to accumulate multiple errors instead of short-circuiting on the first one using `accumulate` and `accumulating`:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+def validateName(name: String)(using Raise[String]): String =
+  if (name.nonEmpty) name else Raise.raise("Name cannot be empty")
+
+def validateAge(age: Int)(using Raise[String]): Int =
+  if (age >= 0) age else Raise.raise("Age cannot be negative")
+
+val result = Raise.either {
+  Raise.accumulate {
+    val name = accumulating { validateName("") }
+    val age = accumulating { validateAge(-1) }
+    (name, age)
+  }
+}
+// result will be Left(List("Name cannot be empty", "Age cannot be negative"))
+```
+
+⚠️ **Important**: When using the `accumulate` function with lists or other collections, you **must** assign the result to a variable before returning it. Direct return of accumulated collections may not work correctly.
+
+```scala 3
+// ✅ CORRECT - Assign to variable first
+val result = Raise.either {
+  Raise.accumulate {
+    val processedItems = List(1, 2, 3, 4, 5).map { i =>
+      accumulating {
+        if (i % 2 == 0) Raise.raise(i.toString)
+        else i
+      }
+    }
+    processedItems  // Return the assigned variable
+  }
+}
+
+// ❌ INCORRECT - Direct return may not work
+val result = Raise.either {
+  Raise.accumulate {
+    List(1, 2, 3, 4, 5).map { i =>
+      accumulating {
+        if (i % 2 == 0) Raise.raise(i.toString)
+        else i
+      }
+    }  // Direct return without assignment
+  }
+}
+```
+
+The `mapAccumulating` function allows you to transform collections while accumulating any errors that occur during the transformation. This is useful when you want to process all elements and collect all errors rather than stopping at the first failure.
+
+**Simple Error Accumulation:**
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+def validateNumber(n: Int)(using Raise[String]): Int =
+  if (n > 0) n else Raise.raise(s"$n is not positive")
+
+// Transform all elements, accumulating errors
+val result = Raise.either {
+  Raise.mapAccumulating(List(1, -2, 3, -4, 5)) { number =>
+    validateNumber(number)
+  }
+}
+// result will be Left(List("-2 is not positive", "-4 is not positive"))
+
+// With all valid inputs
+val successResult = Raise.either {
+  Raise.mapAccumulating(List(1, 2, 3, 4, 5)) { number =>
+    validateNumber(number)
+  }
+}
+// successResult will be Right(List(1, 2, 3, 4, 5))
+```
+
+**Custom Error Combination:**
+
+For more complex error types, you can provide a custom error combination function:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+case class ValidationErrors(errors: List[String])
+
+def combineErrors(error1: ValidationErrors, error2: ValidationErrors): ValidationErrors =
+  ValidationErrors(error1.errors ++ error2.errors)
+
+def validateUserData(data: String)(using Raise[ValidationErrors]): String =
+  if (data.isEmpty) Raise.raise(ValidationErrors(List("Data cannot be empty")))
+  else if (data.length < 3) Raise.raise(ValidationErrors(List("Data too short")))
+  else data
+
+val result = Raise.either {
+  Raise.mapAccumulating(List("Alice", "", "Bo", "Charlie"), combineErrors) { userData =>
+    validateUserData(userData)
+  }
+}
+// result will be Left(ValidationErrors(List("Data cannot be empty", "Data too short")))
+```
+
+#### Error Tracing
+
+The `traced` function adds debugging capabilities by capturing stack traces when errors occur:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+
+// Define custom tracing behavior
+given TraceWith[String] = trace => {
+  println(s"Error: ${trace.original}")
+  trace.printStackTrace()
+}
+
+def riskyOperation(value: Int)(using Raise[String]): Int =
+  if (value < 0) Raise.raise("Negative value not allowed")
+  else value * 2
+
+val result = Raise.either {
+  traced {
+    riskyOperation(-5)
+  }
+}
+// Prints error details and stack trace, then returns Left("Negative value not allowed")
+```
+
+You can also use the default tracing strategy:
+
+```scala 3
+import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Raise.given  // Import default tracing
+
+val result = Raise.either {
+  traced {
+    Raise.raise("Something went wrong")
+  }
+}
+// Automatically prints stack trace
+```
+
+**Note**: Tracing has performance implications since it creates full stack traces.
 
 ### The `Resource` Effect
 

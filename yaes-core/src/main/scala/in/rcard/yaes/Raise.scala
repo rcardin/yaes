@@ -6,6 +6,11 @@ import scala.util.boundary.break
 import scala.util.control.ControlThrowable
 import scala.util.control.NoStackTrace
 import scala.util.control.NonFatal
+import scala.util.Try
+import scala.util.Success
+import scala.util.Failure
+import scala.collection.mutable.ArrayBuffer
+import scala.util.boundary.Label
 
 /** An effect that represents the ability to raise an error of type `E`.
   *
@@ -33,6 +38,8 @@ import scala.util.control.NonFatal
 object Raise {
 
   type Raise[E] = Yaes[Raise.Unsafe[E]]
+
+  infix type raises[A, Error] = Raise[Error] ?=> A
 
   /** Lifts a block of code that may use the Raise effect.
     *
@@ -279,6 +286,36 @@ object Raise {
   def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
     if !condition then Raise.raise(error)
 
+  /** Ensures that the `value` is not null; otherwise, [[Raise.raise]]s a logical failure of type
+    * `Error`.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val actual: Int = fold(
+    *   { ensureNotNull(null) { "error" } },
+    *   error => 43,
+    *   value => 42
+    * )
+    * actual should be(43)
+    * }}}
+    *
+    * @param value
+    *   The value that must be non-null.
+    * @param raise
+    *   A lambda that produces an error of type `Error` when the `value` is null.
+    * @param r
+    *   The Raise context
+    * @tparam B
+    *   The type of the value
+    * @tparam Error
+    *   The type of the logical error
+    * @return
+    *   The value if it is not null
+    */
+  def ensureNotNull[E, A](value: A | Null)(error: => E)(using r: Raise[E]): A =
+    if value == null then Raise.raise(error)
+    else value.asInstanceOf[A]
+
   /** Catches an exception and raises an error of type `E`. For other exceptions, the exception is
     * rethrown.
     *
@@ -343,6 +380,254 @@ object Raise {
       case ex => throw ex
     }
 
+  /** Execute the [[Raise]] context function resulting in `A` or any _logical error_ of type
+    * `OtherError`, and transform any raised `OtherError` into `Error`, which is raised to the outer
+    * [[Raise]].
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val actual = either {
+    *   withError[Int, String, Int](s => s.length) { raise("error") }
+    * }
+    * actual should be(Left(5))
+    * }}}
+    *
+    * @param transform
+    *   The function to transform the `OtherError` into `Error`
+    * @param block
+    *   The block to execute
+    * @param r
+    *   The Raise context
+    * @tparam ToError
+    *   The type of the transformed logical error
+    * @tparam FromError
+    *   The type of the logical error that can be raised and transformed
+    * @tparam A
+    *   The type of the result of the `block`
+    * @return
+    *   The result of the `block`
+    */
+  def withError[ToError, FromError, A](transform: FromError => ToError)(
+      block: Raise[FromError] ?=> A
+  )(using Raise[ToError]): A =
+    recover(block) { otherError => Raise.raise(transform(otherError)) }
+
+  /** Utility type alias for mapping errors. */
+  type MapError[From, To] = Yaes[Raise.UnsafeMapError[From, To]]
+
+  /** A strategy that allows to map an error to another one. As a strategy, it should be used as a
+    * `given` instance. Its behavior is comparable to the [[Raise.withError]] method.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val finalLambda: Raise[Int] ?=> String = {
+    *   given MapError[String, Int] = MapError { _.length }
+    *   Raise.raise("Oops!")
+    * }
+    * val result: Int | String = Raise.run(finalLambda)
+    * result shouldBe 5
+    * }}}
+    *
+    * @tparam From
+    *   The original error type
+    * @tparam To
+    *   The error type to map to
+    */
+  trait UnsafeMapError[From, To] extends Unsafe[From] {
+    def map(error: From): To
+  }
+
+  /** Creates a mapping strategy for errors. */
+  object MapError {
+
+    /** Creates a mapping strategy for errors.
+      *
+      * @param mapper
+      *   The function to map the original error to the new error
+      * @param outer
+      *   The new Raise context
+      * @tparam From
+      *   The original error type
+      * @tparam To
+      *   The new error type
+      * @return
+      *   The mapping strategy
+      */
+    def apply[From, To](mapper: From => To)(using outer: Raise[To]): MapError[From, To] =
+      new Yaes(new UnsafeMapError[From, To] {
+
+        override def raise(error: => From): Nothing = outer.unsafe.raise(map(error))
+
+        override def map(error: From): To = mapper(error)
+      })
+  }
+
+  extension [Error, A](either: Either[Error, A]) {
+
+    /** Lifts an [[Either]] into the [[Raise]] context, and returns the value if the Either is a
+      * [[Right]], otherwise raises the error contained in the [[Left]].
+      *
+      * @param either
+      *   The Either to extract the value from
+      * @param using
+      *   The Raise context
+      * @tparam Error
+      *   The type of the error contained in the Left
+      * @tparam A
+      *   The type of the value contained in the Right
+      * @return
+      *   The value contained in the Right
+      */
+    inline def value(using Raise[Error]): A = either match {
+      case Right(value) => value
+      case Left(error)  => Raise.raise(error)
+    }
+  }
+
+  extension [A](option: Option[A]) {
+
+    /** Lifts an [[Option]] into the [[Raise]] context, and returns the value if the [[Option]] is a
+      * [[Some]], otherwise raises the error contained in the [[None]].
+      *
+      * @param option
+      *   The Option to extract the value from
+      * @param using
+      *   The Raise context
+      * @tparam A
+      *   The type of the value contained in the Some
+      * @return
+      *   The value contained in the Some
+      */
+    inline def value(using Raise[None.type]): A = option match {
+      case Some(value) => value
+      case None        => Raise.raise(None)
+    }
+  }
+
+  extension [A](tryValue: Try[A]) {
+
+    /** Lifts a [[Try]] into the [[Raise]] context, and returns the value if the Try is a
+      * [[Success]], otherwise raises the error contained in the [[Failure]].
+      *
+      * @param tryValue
+      *   The Try to extract the value from
+      * @param using
+      *   The Raise context
+      * @tparam A
+      *   The type of the value contained in the Success
+      * @return
+      *   The value contained in the Success
+      */
+    inline def value(using Raise[Throwable]): A = tryValue match {
+      case Success(value)     => value
+      case Failure(throwable) => Raise.raise(throwable)
+    }
+  }
+
+  /** Accumulate the errors obtained by executing the `transform` over every element of `iterable`.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val block: List[Int] raises List[String] = Raise.mapAccumulating(List(1, 2, 3, 4, 5)) {
+    *   _ + 1
+    * }
+    * val actual = Raise.fold(
+    *   block,
+    *   error => fail(s"An error occurred: $error"),
+    *   identity
+    * )
+    * actual shouldBe List(2, 3, 4, 5, 6)
+    * }}}
+    *
+    * @param iterable
+    *   The collection of elements to transform
+    * @param transform
+    *   The transformation to apply to each element that can raise an error of type `Error`
+    * @param r
+    *   The Raise context
+    * @tparam Error
+    *   The type of the logical error that can be raised
+    * @tparam A
+    *   The type of the elements in the `iterable`
+    * @tparam B
+    *   The type of the transformed elements
+    * @return
+    *   A list of transformed elements
+    */
+  inline def mapAccumulating[E, A, B](iterable: Iterable[A])(
+      transform: A => (Raise[E] ?=> B)
+  )(using RaiseAcc[E]): List[B] = {
+    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) { case ((errs, res), a) =>
+      Raise.fold(
+        transform(a)
+      )(error => (error :: errs, res))(result => (errs, result :: res))
+    }
+    if errors.isEmpty then results.reverse
+    else Raise.raise(errors.reverse)
+  }
+
+  /** Transform every element of `iterable` using the given `transform`, or accumulate all the
+    * occurred errors using `combine`.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * case class Errors(val errors: List[String])
+    *   def combineErrors(error1: Errors, error2: Errors): Errors =
+    *     Errors(error1.errors ++ error2.errors)
+    *
+    * val block: List[Int] raises Errors =
+    *   Raise.mapAccumulating(List(1, 2, 3, 4, 5), combineErrors) { value =>
+    *       if (value % 2 == 0) {
+    *         Raise.raise(Errors(List(value.toString)))
+    *       } else {
+    *         value
+    *       }
+    *     }
+    *
+    * val actual = Raise.fold(
+    *   block,
+    *   identity,
+    *   identity
+    * )
+    *
+    * actual shouldBe Errors(List("2", "4"))
+    * }}}
+    *
+    * @param iterable
+    *   The collection of elements to transform
+    * @param combine
+    *   The function to combine the errors
+    * @param transform
+    *   The transformation to apply to each element that can raise an error of type `Error`
+    * @param r
+    *   The Raise context
+    * @tparam Error
+    *   The type of the logical error that can be raised
+    * @tparam A
+    *   The type of the elements in the `iterable`
+    * @tparam B
+    *   The type of the transformed elements
+    * @return
+    *   A list of transformed elements
+    */
+  inline def mapAccumulating[E, A, B](
+      iterable: Iterable[A],
+      inline combine: (E, E) => E
+  )(
+      inline transform: A => (Raise[E] ?=> B)
+  )(using Raise[E]): List[B] = {
+    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) {
+      case ((errs, res), a) =>
+        Raise.fold(transform(a))(
+          error => (error :: errs, res)
+        )(
+          result => (errs, result :: res)
+        )
+    }
+    if errors.isEmpty then results.reverse
+    else Raise.raise(errors.reverse.reduce(combine))
+  }
+
   /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
 
@@ -352,5 +637,272 @@ object Raise {
       *   the error to raise
       */
     def raise(error: => E): Nothing
+  }
+
+  // --- ACCUMULATION ----
+
+  /** A type alias for accumulating errors into a list.
+    */
+  type RaiseAcc[Error] = Raise[List[Error]]
+
+  /** The scope needed to accumulate errors using the [[accumulate]] function
+    * @tparam Error
+    *   The type of the errors to accumulate
+    */
+  class AccumulateScope[Error] {
+    private[yaes] val _errors        = ArrayBuffer.empty[Error]
+    def errors: List[Error]          = _errors.toList
+    def addError(error: Error): Unit = _errors += error
+    def hasErrors: Boolean           = _errors.nonEmpty
+  }
+
+  /** Conversion from a [[LazyValue]] to its contained value. If the [[LazyValue]] contains errors,
+    * it will raise them. There is no need to import this conversion as it is provided by default
+    * inside the [[AccumulateScope]] scope.
+    */
+  private[yaes] case object AccumulationError extends ControlThrowable with NoStackTrace
+  given lazyValueConversion[A]: Conversion[LazyValue[A], A] with
+    def apply(toConvert: LazyValue[A]): A = {
+      toConvert match {
+        case LazyValue.Value(value) => value
+        case LazyValue.Empty        => throw AccumulationError
+      }
+    }
+
+  /** Accumulates the errors of the executions in the `block` lambda and raises all of them if any
+    * error is found. In detail, the `block` lambda must be a series of statements using the
+    * [[accumulating]] function to accumulate possible raised errors.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * def validateName(name: String): String raises String = {
+    *   ensure(name.nonEmpty)("Name cannot be empty")
+    *   name
+    * }
+    * def validateAge(age: Int): Int raises String = {
+    *   ensure(age >= 0)("Age cannot be negative")
+    *   age
+    * }
+    *
+    * val person: Person raises List[String] = accumulate {
+    *   val name = accumulating { validateName("") }
+    *   val age  = accumulating { validateAge(-1) }
+    *   Person(name, age)
+    * }
+    * }}}
+    *
+    * Errors are accumulated in the order they are raised the first time one of the accumulated
+    * values is accessed.
+    *
+    * @param block
+    *   The block of code that can raise multiple errors
+    * @tparam Error
+    *   The type of the errors to accumulate
+    * @tparam A
+    *   The type of the value to return if no errors are raised
+    * @return
+    *   The value of the block if no errors are raised
+    */
+  inline def accumulate[Error, A](
+      block: AccumulateScope[Error] ?=> A
+  ): RaiseAcc[Error] ?=> A = {
+
+    import scala.language.implicitConversions
+
+    val accScope: AccumulateScope[Error] = AccumulateScope()
+    try {
+      val result: A = block(using accScope)
+      result
+    } catch {
+      case AccumulationError =>
+        Raise.raise(accScope.errors)
+    }
+  }
+
+  /** Represents a value that can be either a value or a list of errors raised inside an
+    * [[accumulate]] block by the [[accumulating]] function.
+    *
+    * @see
+    *   [[lazyValueConversion]]
+    */
+  sealed trait LazyValue[+A]
+  object LazyValue {
+    case class Value[A](value: A) extends LazyValue[A]
+    case object Empty             extends LazyValue[Nothing]
+  }
+
+  /** Accumulates the errors of the executions in the `block` lambda and returns a [[LazyValue]]
+    * that can be either a value or a list of errors. The function is intended to be used inside an
+    * [[accumulate]] block.
+    *
+    * @see
+    *   [[accumulate]]
+    */
+  inline def accumulating[Error, A](
+      inline block: Raise[Error] ?=> A
+  )(using scope: AccumulateScope[Error]): LazyValue[A] = {
+    Raise.recover({
+      val a = block
+      LazyValue.Value(value = a)
+    }) { error =>
+      scope.addError(error)
+      LazyValue.Empty
+    }
+  }
+
+  /** A type class to convert a container `MV[_]` of [[LazyValue]]s to a container of values. The
+    * error raised during the conversion must be accumulated into a container `ME[_]` of errors.
+    * @tparam ME
+    *   The type of the container of errors
+    * @tparam MV
+    *   The type of the container of [[LazyValue]]s
+    */
+  trait LazyValuesConverter[ME[_], MV[_]] {
+    private type RaiseM[Error] = Raise[ME[Error]]
+    def convert[Error: RaiseM, A](convertible: MV[LazyValue[A]]): MV[A]
+  }
+
+  /** A type class to convert a container `M[_]` of [[LazyValue]]s to a container of values
+    * accumulating errors into a [[RaiseAcc]] container.
+    * @tparam M
+    *   The type of the container of [[LazyValue]]s
+    */
+  trait RaiseAccLazyValuesConverter[M[_]] extends LazyValuesConverter[List, M] {
+    def convert[Error: RaiseAcc, A](convertible: M[LazyValue[A]]): M[A]
+  }
+
+  /** A type class instance to convert a container `List[LazyValue[Error, A]]` to a container
+    * `List[A]` accumulating errors into a [[RaiseAcc]] container.
+    *
+    * @see
+    *   [[LazyValue]]
+    */
+  given listRaiseAccLazyValuesConverter: RaiseAccLazyValuesConverter[List] with
+    def convert[Error: RaiseAcc, A](convertible: List[LazyValue[A]]): List[A] = {
+      convertible.map {
+        case LazyValue.Value(value) => value
+        case LazyValue.Empty        => throw AccumulationError
+      }
+    }
+
+  /** Implicit conversion between a container `M[LazyValue[Error, A]]` and a container `M[A]`
+    * accumulating errors into a [[RaiseAcc]] container.
+    *
+    * NOTE: Due to changes in Scala 3.7+ implicit resolution (specifically the restriction of
+    * implicit args to using clauses), these conversions don't work reliably during collection
+    * construction. The [[accumulate]] function now handles this conversion explicitly at runtime.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val block: List[Int] raises List[String] = accumulate {
+    *   List(1, 2, 3, 4, 5).map[Accumulation.Value[String, Int]] { i =>
+    *     accumulating {
+    *       if (i % 2 == 0) {
+    *         Raise.raise(i.toString)
+    *       } else {
+    *         i
+    *       }
+    *     }
+    *   }
+    * }
+    *
+    * val actual = Raise.fold(
+    *   block,
+    *   identity,
+    *   identity
+    * )
+    *
+    * actual shouldBe List("2", "4")
+    * }}}
+    *
+    * @see
+    *   [[LazyValue]]
+    */
+  given raiseAccLazyValuesConversion[Error: RaiseAcc, A, M[_]: RaiseAccLazyValuesConverter]
+      : Conversion[M[LazyValue[A]], M[A]] with
+    def apply(convertible: M[LazyValue[A]]): M[A] = {
+      summon[RaiseAccLazyValuesConverter[M]].convert(convertible)
+    }
+
+  /** Implement the `raise` method to throw a [[Traced]] exception with the original error to trace.
+    */
+  private[yaes] class UnsafeTrace[E] extends Unsafe[E] {
+
+    override def raise(error: => E): Nothing = throw Traced(error)
+  }
+
+  /** The exception that wraps the original error in case of tracing. It contains a full stack
+    * trace.
+    * @param original
+    *   The original error to trace
+    * @tparam E
+    *   The type of the error to trace
+    */
+  case class Traced[E](original: E) extends RuntimeException
+
+  /** Defines how to trace an error. The [[trace]] method represent the behavior to trace the error.
+    * Use the type class instance with the [[Raise.traced]] DSL.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * given TraceWith[String] = trace => {
+    *   trace.printStackTrace()
+    * }
+    * val lambda: Int raises String = traced {
+    *   raise("Oops!")
+    * }
+    * val actual: String | Int = Raise.run(lambda)
+    * actual shouldBe "Oops!"
+    * }}}
+    *
+    * @tparam Error
+    *   The type of the error to trace
+    */
+  trait TraceWith[Error] {
+    def trace(traced: Traced[Error]): Unit
+  }
+
+  given defaultTracing[Error]: TraceWith[Error] with
+    def trace(traced: Traced[Error]): Unit =
+      traced.printStackTrace()
+
+  /** Add tracing to a block of code that can raise a logical error. In detail, the logical error is
+    * wrapped inside a [[Traced]] exception and processed by the [[TraceWith]] strategy instance.
+    * Please, be aware that adding tracing to an error can have a performance impact since a fat
+    * exception with a full stack trace is created.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * given TraceWith[String] = trace => {
+    *   trace.printStackTrace()
+    * }
+    * val lambda: Int raises String = traced {
+    *   raise("Oops!")
+    * }
+    * val actual: String | Int = Raise.run(lambda)
+    * actual shouldBe "Oops!"
+    * }}}
+    *
+    * @param block
+    *   The block of code to execute that can raise an error
+    * @param tracing
+    *   The strategy to process the traced error
+    * @tparam Error
+    *   The type of the logical error that can be raised by the `block` lambda
+    * @tparam A
+    *   The type of the result of the execution of `block` lambda
+    * @return
+    *   The original block wrapped into a traced block
+    */
+  inline def traced[Error, A](
+      inline block: Raise[Error] ?=> A
+  )(using inline tracing: TraceWith[Error]): Raise[Error] ?=> A = {
+    try {
+      given tracedRaise: Raise[Error] = new Yaes(new UnsafeTrace[Error])
+      block
+    } catch
+      case traced: Traced[_] =>
+        tracing.trace(traced.asInstanceOf[Traced[Error]])
+        Raise.raise(traced.original.asInstanceOf[Error])
   }
 }
