@@ -147,6 +147,35 @@
       margin: 1rem 0;
     }
 
+    /* Dark mode code block background override */
+    [data-theme="dark"] .highlight {
+      background-color: var(--code-bg) !important;
+      border-color: var(--code-border) !important;
+    }
+
+    /* Also target Rouge's generated pre and code elements */
+    [data-theme="dark"] pre.highlight {
+      background-color: var(--code-bg) !important;
+    }
+
+    [data-theme="dark"] .highlighter-rouge .highlight {
+      background-color: var(--code-bg) !important;
+    }
+
+    /* Inline code styling */
+    code {
+      background-color: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 0.25rem;
+      padding: 0.125rem 0.25rem;
+    }
+
+    [data-theme="dark"] code {
+      background-color: var(--code-bg) !important;
+      border-color: var(--code-border) !important;
+      color: var(--text-color);
+    }
+
     /* Light theme syntax colors */
     .highlight .c { color: #6a737d; } /* Comment */
     .highlight .k { color: #d73a49; } /* Keyword */
