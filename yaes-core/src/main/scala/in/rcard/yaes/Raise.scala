@@ -820,7 +820,6 @@ object Raise {
   given raiseAccLazyValuesConversion[Error: RaiseAcc, A, M[_]: RaiseAccLazyValuesConverter]
       : Conversion[M[LazyValue[A]], M[A]] with
     def apply(convertible: M[LazyValue[A]]): M[A] = {
-      println("raiseAccLazyValuesConversion")
       summon[RaiseAccLazyValuesConverter[M]].convert(convertible)
     }
 
