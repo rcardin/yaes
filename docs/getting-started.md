@@ -11,8 +11,8 @@ The library is available on Maven Central. Add the following dependencies to you
 
 ```scala
 libraryDependencies ++= Seq(
-  "in.rcard.yaes" %% "yaes-core" % "0.5.0",
-  "in.rcard.yaes" %% "yaes-data" % "0.5.0"  // Optional: for Flow and data structures
+  "in.rcard.yaes" %% "yaes-core" % "0.6.0",
+  "in.rcard.yaes" %% "yaes-data" % "0.6.0"  // Optional: for Flow and data structures
 )
 ```
 
