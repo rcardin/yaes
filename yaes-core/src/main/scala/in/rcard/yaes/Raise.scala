@@ -616,14 +616,16 @@ object Raise {
   )(
       inline transform: A => (Raise[E] ?=> B)
   )(using Raise[E]): List[B] = {
-    val errors  = collection.mutable.ArrayBuffer.empty[E]
-    val results = collection.mutable.ArrayBuffer.empty[B]
-    iterable.foreach { a =>
-      Raise.fold(transform(a))(error => errors += error)(result => results += result)
+    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) {
+      case ((errs, res), a) =>
+        Raise.fold(transform(a))(
+          error => (error :: errs, res)
+        )(
+          result => (errs, result :: res)
+        )
     }
-    if errors.isEmpty then results.toList
+    if errors.isEmpty then results.reverse
     else Raise.raise(errors.reduce(combine))
-  }
 
   /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
