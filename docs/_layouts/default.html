@@ -147,30 +147,35 @@
       margin: 1rem 0;
     }
 
+    /* Remove inner borders/backgrounds to prevent double frames */
+    .highlight pre {
+      background: none !important;
+      border: none !important;
+      margin: 0;
+      padding: 0;
+    }
+
+    .highlight code {
+      background: none !important;
+      border: none !important;
+      padding: 0;
+    }
+
     /* Dark mode code block background override */
     [data-theme="dark"] .highlight {
       background-color: var(--code-bg) !important;
       border-color: var(--code-border) !important;
     }
 
-    /* Also target Rouge's generated pre and code elements */
-    [data-theme="dark"] pre.highlight {
-      background-color: var(--code-bg) !important;
-    }
-
-    [data-theme="dark"] .highlighter-rouge .highlight {
-      background-color: var(--code-bg) !important;
-    }
-
-    /* Inline code styling */
-    code {
+    /* Inline code styling (only for code NOT inside .highlight) */
+    code:not(.highlight code) {
       background-color: var(--code-bg);
       border: 1px solid var(--code-border);
       border-radius: 0.25rem;
       padding: 0.125rem 0.25rem;
     }
 
-    [data-theme="dark"] code {
+    [data-theme="dark"] code:not(.highlight code) {
       background-color: var(--code-bg) !important;
       border-color: var(--code-border) !important;
       color: var(--text-color);
