@@ -16,7 +16,7 @@ inThisBuild(
 )
 
 name := "yaes"
-val scala3Version = "3.7.2"
+val scala3Version = "3.7.3"
 scalaVersion := scala3Version
 
 lazy val `yaes-data` = project
