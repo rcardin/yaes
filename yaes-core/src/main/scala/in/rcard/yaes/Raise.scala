@@ -902,8 +902,8 @@ object Raise {
       given tracedRaise: Raise[Error] = new Yaes(new UnsafeTrace[Error])
       block
     } catch
-      case traced: Traced[Error] =>
-        tracing.trace(traced)
-        Raise.raise(traced.original)
+      case traced: Traced[_] =>
+        tracing.trace(traced.asInstanceOf[Traced[Error]])
+        Raise.raise(traced.original.asInstanceOf[Error])
   }
 }
