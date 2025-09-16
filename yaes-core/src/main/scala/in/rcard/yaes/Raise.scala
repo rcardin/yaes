@@ -778,7 +778,6 @@ object Raise {
     */
   given listRaiseAccLazyValuesConverter: RaiseAccLazyValuesConverter[List] with
     def convert[Error: RaiseAcc, A](convertible: List[LazyValue[A]]): List[A] = {
-      println("listRaiseAccLazyValuesConverter")
       convertible.map {
         case LazyValue.Value(value) => value
         case LazyValue.Empty        => throw AccumulationError
