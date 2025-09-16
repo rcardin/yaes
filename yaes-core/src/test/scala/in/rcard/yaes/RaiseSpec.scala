@@ -368,7 +368,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   def combineErrors(error1: TestError, error2: TestError): TestError =
     TestError(error1.errors ++ error2.errors)
 
-  "mapOrAccumulate with combine function" should "map all the element of the iterable" in {
+  "mapAccumulating with combine function" should "map all the element of the iterable" in {
 
     val actualResult = Raise.run {
       Raise.mapAccumulating(List(1, 2, 3, 4, 5), combineErrors) { value1 =>

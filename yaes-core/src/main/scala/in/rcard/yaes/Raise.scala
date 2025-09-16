@@ -625,7 +625,8 @@ object Raise {
         )
     }
     if errors.isEmpty then results.reverse
-    else Raise.raise(errors.reduce(combine))
+    else Raise.raise(errors.reverse.reduce(combine))
+  }
 
   /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
