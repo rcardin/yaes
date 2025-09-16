@@ -1,5 +1,7 @@
 package in.rcard.yaes
 
+import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Raise.given
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Yaes.*
 import org.scalatest.TryValues.*
@@ -8,11 +10,9 @@ import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
-import in.rcard.yaes.Raise.*
-import in.rcard.yaes.Raise.given
-import scala.util.Try
-import scala.util.Success
 import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 class RaiseSpec extends AsyncFlatSpec with Matchers {
 
@@ -339,6 +339,59 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
 
     actualResult should be(exception)
+  }
+
+  "mapAccumulating" should "map all the element of the iterable" in {
+
+    val actualResult = Raise.run {
+      Raise.mapAccumulating(List(1, 2, 3, 4, 5)) { _ + 1 }
+    }
+
+    actualResult shouldBe List(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors" in {
+    val actual = Raise.run {
+      Raise.mapAccumulating(List(1, 2, 3, 4, 5)) { value =>
+        if (value % 2 == 0) {
+          Raise.raise(value.toString)
+        } else {
+          value
+        }
+      }
+    }
+
+    actual shouldBe List("2", "4")
+  }
+
+  case class TestError(errors: List[String])
+  def combineErrors(error1: TestError, error2: TestError): TestError =
+    TestError(error1.errors ++ error2.errors)
+
+  "mapOrAccumulate with combine function" should "map all the element of the iterable" in {
+
+    val actualResult = Raise.run {
+      Raise.mapAccumulating(List(1, 2, 3, 4, 5), combineErrors) { value1 =>
+        value1 + 1
+      }
+    }
+
+    actualResult shouldBe List(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors using the combine function" in {
+
+    val actualResult = Raise.run {
+      Raise.mapAccumulating(List(1, 2, 3, 4, 5), combineErrors) { value =>
+        if (value % 2 == 0) {
+          Raise.raise(TestError(List(value.toString)))
+        } else {
+          value
+        }
+      }
+    }
+
+    actualResult shouldBe TestError(List("2", "4"))
   }
 
   "accumulate" should "combine different values" in {

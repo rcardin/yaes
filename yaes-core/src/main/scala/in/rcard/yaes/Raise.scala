@@ -524,6 +524,109 @@ object Raise {
     }
   }
 
+  /** Accumulate the errors obtained by executing the `transform` over every element of `iterable`.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * val block: List[Int] raises List[String] = Raise.mapAccumulating(List(1, 2, 3, 4, 5)) {
+    *   _ + 1
+    * }
+    * val actual = Raise.fold(
+    *   block,
+    *   error => fail(s"An error occurred: $error"),
+    *   identity
+    * )
+    * actual shouldBe List(2, 3, 4, 5, 6)
+    * }}}
+    *
+    * @param iterable
+    *   The collection of elements to transform
+    * @param transform
+    *   The transformation to apply to each element that can raise an error of type `Error`
+    * @param r
+    *   The Raise context
+    * @tparam Error
+    *   The type of the logical error that can be raised
+    * @tparam A
+    *   The type of the elements in the `iterable`
+    * @tparam B
+    *   The type of the transformed elements
+    * @return
+    *   A list of transformed elements
+    */
+  inline def mapAccumulating[E, A, B](iterable: Iterable[A])(
+      transform: A => (Raise[E] ?=> B)
+  )(using RaiseAcc[E]): List[B] = {
+    val errors  = collection.mutable.ArrayBuffer.empty[E]
+    val results = collection.mutable.ArrayBuffer.empty[B]
+    iterable.foreach { a =>
+      Raise.fold(
+        transform(a)
+      )(error => errors += error)(result => results += result)
+    }
+    if errors.isEmpty then results.toList
+    else Raise.raise(errors.toList)
+  }
+
+  /** Transform every element of `iterable` using the given `transform`, or accumulate all the
+    * occurred errors using `combine`.
+    *
+    * <h2>Example</h2>
+    * {{{
+    * case class Errors(val errors: List[String])
+    *   def combineErrors(error1: Errors, error2: Errors): Errors =
+    *     Errors(error1.errors ++ error2.errors)
+    *
+    * val block: List[Int] raises Errors =
+    *   Raise.mapAccumulating(List(1, 2, 3, 4, 5), combineErrors) { value =>
+    *       if (value % 2 == 0) {
+    *         Raise.raise(Errors(List(value.toString)))
+    *       } else {
+    *         value
+    *       }
+    *     }
+    *
+    * val actual = Raise.fold(
+    *   block,
+    *   identity,
+    *   identity
+    * )
+    *
+    * actual shouldBe Errors(List("2", "4"))
+    * }}}
+    *
+    * @param iterable
+    *   The collection of elements to transform
+    * @param combine
+    *   The function to combine the errors
+    * @param transform
+    *   The transformation to apply to each element that can raise an error of type `Error`
+    * @param r
+    *   The Raise context
+    * @tparam Error
+    *   The type of the logical error that can be raised
+    * @tparam A
+    *   The type of the elements in the `iterable`
+    * @tparam B
+    *   The type of the transformed elements
+    * @return
+    *   A list of transformed elements
+    */
+  inline def mapAccumulating[E, A, B](
+      iterable: Iterable[A],
+      inline combine: (E, E) => E
+  )(
+      inline transform: A => (Raise[E] ?=> B)
+  )(using Raise[E]): List[B] = {
+    val errors  = collection.mutable.ArrayBuffer.empty[E]
+    val results = collection.mutable.ArrayBuffer.empty[B]
+    iterable.foreach { a =>
+      Raise.fold(transform(a))(error => errors += error)(result => results += result)
+    }
+    if errors.isEmpty then results.toList
+    else Raise.raise(errors.reduce(combine))
+  }
+
   /** An effect that represents the ability to raise an error of type `E`. */
   trait Unsafe[-E] {
 
@@ -627,8 +730,8 @@ object Raise {
     case object Empty             extends LazyValue[Nothing]
   }
 
-  /** Accumulates the errors of the executions in the `block` lambda and returns a [[LazyValue]] that
-    * can be either a value or a list of errors. The function is intended to be used inside an
+  /** Accumulates the errors of the executions in the `block` lambda and returns a [[LazyValue]]
+    * that can be either a value or a list of errors. The function is intended to be used inside an
     * [[accumulate]] block.
     *
     * @see
@@ -646,8 +749,8 @@ object Raise {
     }
   }
 
-  /** A type class to convert a container `MV[_]` of [[LazyValue]]s to a container of values. The error
-    * raised during the conversion must be accumulated into a container `ME[_]` of errors.
+  /** A type class to convert a container `MV[_]` of [[LazyValue]]s to a container of values. The
+    * error raised during the conversion must be accumulated into a container `ME[_]` of errors.
     * @tparam ME
     *   The type of the container of errors
     * @tparam MV
@@ -658,8 +761,8 @@ object Raise {
     def convert[Error: RaiseM, A](convertible: MV[LazyValue[A]]): MV[A]
   }
 
-  /** A type class to convert a container `M[_]` of [[LazyValue]]s to a container of values accumulating
-    * errors into a [[RaiseAcc]] container.
+  /** A type class to convert a container `M[_]` of [[LazyValue]]s to a container of values
+    * accumulating errors into a [[RaiseAcc]] container.
     * @tparam M
     *   The type of the container of [[LazyValue]]s
     */
@@ -667,8 +770,8 @@ object Raise {
     def convert[Error: RaiseAcc, A](convertible: M[LazyValue[A]]): M[A]
   }
 
-  /** A type class instance to convert a container `List[LazyValue[Error, A]]` to a container `List[A]`
-    * accumulating errors into a [[RaiseAcc]] container.
+  /** A type class instance to convert a container `List[LazyValue[Error, A]]` to a container
+    * `List[A]` accumulating errors into a [[RaiseAcc]] container.
     *
     * @see
     *   [[LazyValue]]
