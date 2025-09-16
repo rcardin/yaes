@@ -123,6 +123,83 @@ val result = Raise.either {
 // result will be Left(List("Name cannot be empty", "Age cannot be negative"))
 ```
 
+⚠️ **Important**: When using the `accumulate` function with lists or other collections, you **must** assign the result to a variable before returning it. Direct return of accumulated collections may not work correctly.
+
+```scala
+// ✅ CORRECT - Assign to variable first
+val result = Raise.either {
+  Raise.accumulate {
+    val processedItems = List(1, 2, 3, 4, 5).map { i =>
+      accumulating {
+        if (i % 2 == 0) Raise.raise(i.toString)
+        else i
+      }
+    }
+    processedItems  // Return the assigned variable
+  }
+}
+
+// ❌ INCORRECT - Direct return may not work
+val result = Raise.either {
+  Raise.accumulate {
+    List(1, 2, 3, 4, 5).map { i =>
+      accumulating {
+        if (i % 2 == 0) Raise.raise(i.toString)
+        else i
+      }
+    }  // Direct return without assignment
+  }
+}
+```
+
+The `mapAccumulating` function allows you to transform collections while accumulating any errors that occur during the transformation. This is particularly useful when you want to process all elements and collect all errors rather than stopping at the first failure.
+
+```scala
+import in.rcard.yaes.Raise.*
+
+def validateNumber(n: Int)(using Raise[String]): Int =
+  if (n > 0) n else Raise.raise(s"$n is not positive")
+
+// Transform all elements, accumulating errors
+val result = Raise.either {
+  Raise.mapAccumulating(List(1, -2, 3, -4, 5)) { number =>
+    validateNumber(number)
+  }
+}
+// result will be Left(List("-2 is not positive", "-4 is not positive"))
+
+// With all valid inputs
+val successResult = Raise.either {
+  Raise.mapAccumulating(List(1, 2, 3, 4, 5)) { number =>
+    validateNumber(number)
+  }
+}
+// successResult will be Right(List(1, 2, 3, 4, 5))
+```
+
+For more complex error types, you can provide a custom error combination function:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+case class ValidationErrors(errors: List[String])
+
+def combineErrors(error1: ValidationErrors, error2: ValidationErrors): ValidationErrors =
+  ValidationErrors(error1.errors ++ error2.errors)
+
+def validateUserData(data: String)(using Raise[ValidationErrors]): String =
+  if (data.isEmpty) Raise.raise(ValidationErrors(List("Data cannot be empty")))
+  else if (data.length < 3) Raise.raise(ValidationErrors(List("Data too short")))
+  else data
+
+val result = Raise.either {
+  Raise.mapAccumulating(List("Alice", "", "Bo", "Charlie"), combineErrors) { userData =>
+    validateUserData(userData)
+  }
+}
+// result will be Left(ValidationErrors(List("Data cannot be empty", "Data too short")))
+```
+
 ### Transforming Error Types
 
 Transform errors from one type to another using `withError`:
