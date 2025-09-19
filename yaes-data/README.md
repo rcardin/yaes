@@ -1,3 +1,4 @@
+![Made for Scala 3](https://img.shields.io/badge/Scala%203-%23de3423.svg?logo=scala&logoColor=white)
 ![GitHub Workflow Status (with branch)](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)
 ![Maven Central](https://img.shields.io/maven-central/v/in.rcard.yaes/yaes-data_3)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)

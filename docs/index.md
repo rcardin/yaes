@@ -9,6 +9,7 @@ title: "λÆS - Yet Another Effect System"
 
 # Yet Another Effect System (λÆS)
 
+![Made for Scala 3](https://img.shields.io/badge/Scala%203-%23de3423.svg?logo=scala&logoColor=white)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)
 ![Maven Central](https://img.shields.io/maven-central/v/in.rcard.yaes/yaes-core_3)
 ![GitHub release](https://img.shields.io/github/v/release/rcardin/yaes)
