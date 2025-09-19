@@ -10,7 +10,7 @@
 
 λÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner.
 
-You can visit the dedicated website at [https://rcardin.github.io/yaes/](https://rcardin.github.io/yaes/).
+You can visit the dedicated website 🌐 at [https://rcardin.github.io/yaes/](https://rcardin.github.io/yaes/).
 
 Here is the talk I gave at the **Scalar 2025** about the main concepts behind the library: 
 
