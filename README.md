@@ -88,6 +88,10 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.6.0"
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
 
+### Requirements
+
+- **Java 24 or higher** is required to run λÆS due to its use of modern Java features like Virtual Threads and Structured Concurrency.
+
 ## Usage
 
 The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:

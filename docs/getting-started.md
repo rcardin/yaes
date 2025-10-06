@@ -5,6 +5,11 @@ title: "Getting Started"
 
 # Getting Started with λÆS
 
+## Requirements
+
+- **Java 24 or higher** is required to run λÆS due to its use of modern Java features like Virtual Threads and Structured Concurrency.
+- **Scala 3** is required, as λÆS leverages Scala 3's context functions and other advanced features.
+
 ## Installation
 
 The library is available on Maven Central. Add the following dependencies to your `build.sbt`:
