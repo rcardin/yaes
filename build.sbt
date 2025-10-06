@@ -19,6 +19,9 @@ name := "yaes"
 val scala3Version = "3.7.3"
 scalaVersion := scala3Version
 
+scalacOptions += "-target:24"
+javacOptions ++= Seq("-source", "24", "-target", "24")
+
 lazy val `yaes-data` = project
   .settings(
     name         := "yaes-data",

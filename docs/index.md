@@ -43,6 +43,12 @@ The data module provides functional data structures optimized for use with effec
 
 ## 🚀 Quick Start
 
+### Requirements
+
+- **Java 24 or higher** is required to run λÆS due to its use of modern Java features like Virtual Threads and Structured Concurrency.
+
+### Installation
+
 Add the dependencies to your `build.sbt`:
 
 ```scala

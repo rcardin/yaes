@@ -10,6 +10,10 @@ The `yaes-data` module provides a collection of functional data structures that 
 
 * `Flow`: A cold asynchronous data stream that sequentially emits values
 
+## Requirements
+
+- **Java 24 or higher** is required to run λÆS Data due to its use of modern Java features like Virtual Threads and Structured Concurrency.
+
 ## Flow
 
 A Flow is a cold asynchronous data stream that sequentially emits values and completes normally or with an exception.
