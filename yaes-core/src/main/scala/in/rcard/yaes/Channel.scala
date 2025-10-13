@@ -1,19 +1,24 @@
 package in.rcard.yaes
 
 import in.rcard.yaes.Async.Async
+import in.rcard.yaes.Raise.Raise
 import in.rcard.yaes.Channel.SendChannel
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import in.rcard.yaes.Channel.ChannelClosed
 
 object Channel {
 
+  case object ChannelClosed
+  type ChannelClosed = ChannelClosed.type
+
   trait SendChannel[T] {
-    def send(value: T)(using Async): Unit
+    def send(value: T)(using Async, Raise[ChannelClosed]): Unit
     def close(): Boolean
   }
 
   trait ReceiveChannel[T] {
-    def receive()(using Async): T
+    def receive()(using Async, Raise[ChannelClosed]): T
   }
 
   def unbounded[T](): Channel[T] =
@@ -26,16 +31,16 @@ class Channel[T] private (queue: BlockingQueue[T])
 
   private val closed = new AtomicBoolean(false)
 
-  override def receive()(using Async): T =
+  override def receive()(using Async, Raise[ChannelClosed]): T =
     if (closed.get() && queue.isEmpty()) {
-      throw new IllegalStateException("Channel is closed and empty")
+      Raise.raise(ChannelClosed)
     } else {
       queue.take()
     }
 
-  override def send(value: T)(using Async): Unit =
+  override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
     if (closed.get()) {
-      throw new IllegalStateException("Channel is closed")
+      Raise.raise(ChannelClosed)
     } else {
       queue.put(value)
     }

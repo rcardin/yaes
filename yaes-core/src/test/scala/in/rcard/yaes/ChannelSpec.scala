@@ -3,6 +3,7 @@ package in.rcard.yaes
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
+import in.rcard.yaes.Channel.ChannelClosed
 
 class ChannelSpec extends AnyFlatSpec with Matchers {
 
@@ -10,13 +11,15 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     val channel             = Channel.unbounded[Int]()
     var actualReceivedValue = 0
 
-    Async.run {
-      Async.fork {
-        channel.send(42)
-      }
+    Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(42)
+        }
 
-      val fiber = Async.fork {
-        actualReceivedValue = channel.receive()
+        val fiber = Async.fork {
+          actualReceivedValue = channel.receive()
+        }
       }
     }
 
@@ -27,13 +30,15 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     val channel             = Channel.unbounded[Int]()
     var actualReceivedValue = 0
 
-    Async.run {
-      val fiber = Async.fork {
-        actualReceivedValue = channel.receive()
-      }
+    Raise.run {
+      Async.run {
+        val fiber = Async.fork {
+          actualReceivedValue = channel.receive()
+        }
 
-      Async.delay(100.millis)
-      channel.send(42)
+        Async.delay(100.millis)
+        channel.send(42)
+      }
     }
 
     actualReceivedValue should be(42)
@@ -42,19 +47,59 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   it should "not discard messages sent before closing" in {
     val channel = Channel.unbounded[Int]()
 
-    Async.run {
-      Async.fork {
-        channel.send(1)
-        channel.send(2)
-        channel.send(3)
-        channel.close()
+    val actualResult = Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(1)
+          channel.send(2)
+          channel.send(3)
+          channel.close()
+        }
+
+        Async.delay(200.millis)
+
+        channel.receive() + channel.receive() + channel.receive()
+      }
+    }
+
+    actualResult should be(6)
+  }
+
+  it should "return false if the channel was already closed" in {
+    val channel = Channel.unbounded[Int]()
+
+    val firstCloseResult  = channel.close()
+    val secondCloseResult = channel.close()
+
+    firstCloseResult should be(true)
+    secondCloseResult should be(false)
+  }
+
+  it should "raise ChannelClosed when sending on a closed channel" in {
+    val channel = Channel.unbounded[Int]()
+    channel.close()
+
+    val actualResult =
+      Raise.run {
+        Async.run {
+          channel.send(42)
+        }
       }
 
-      Async.delay(200.millis)
+    actualResult should be(ChannelClosed)
+  }
 
-      val actualResult = channel.receive() + channel.receive() + channel.receive()
+  it should "raise ChannelClosed when receiving from a closed and empty channel" in {
+    val channel = Channel.unbounded[Int]()
+    channel.close()
 
-      actualResult should be(6)
-    }
+    val actualResult =
+      Raise.run {
+        Async.run {
+          channel.receive()
+        }
+      }
+
+    actualResult should be(ChannelClosed)
   }
 }
