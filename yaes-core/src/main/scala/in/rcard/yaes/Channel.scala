@@ -3,6 +3,7 @@ package in.rcard.yaes
 import in.rcard.yaes.Async.Async
 import in.rcard.yaes.Channel.SendChannel
 import java.util.concurrent.BlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 object Channel {
 
@@ -19,15 +20,26 @@ object Channel {
     new Channel(new java.util.concurrent.LinkedBlockingQueue[T]())
 }
 
-class Channel[T] private(queue: BlockingQueue[T]) extends Channel.ReceiveChannel[T], Channel.SendChannel[T] {
+class Channel[T] private (queue: BlockingQueue[T])
+    extends Channel.ReceiveChannel[T],
+      Channel.SendChannel[T] {
 
-  override def receive()(using Async): T = 
-    queue.take()
+  private val closed = new AtomicBoolean(false)
+
+  override def receive()(using Async): T =
+    if (closed.get() && queue.isEmpty()) {
+      throw new IllegalStateException("Channel is closed and empty")
+    } else {
+      queue.take()
+    }
 
   override def send(value: T)(using Async): Unit =
-    queue.put(value)
+    if (closed.get()) {
+      throw new IllegalStateException("Channel is closed")
+    } else {
+      queue.put(value)
+    }
 
-  override def close(): Boolean = ???
-
+  override def close(): Boolean = closed.compareAndSet(false, true)
 
 }

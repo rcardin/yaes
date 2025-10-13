@@ -39,22 +39,22 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     actualReceivedValue should be(42)
   }
 
-//   it should "not discard messages sent before closing" in {
-//     val channel = Channel.unbounded[Int]()
+  it should "not discard messages sent before closing" in {
+    val channel = Channel.unbounded[Int]()
 
-//     Async.run {
-//       Async.fork {
-//         channel.send(1)
-//         channel.send(2)
-//         channel.send(3)
-//         channel.close()
-//       }
+    Async.run {
+      Async.fork {
+        channel.send(1)
+        channel.send(2)
+        channel.send(3)
+        channel.close()
+      }
 
-//       Async.delay(200.millis)
+      Async.delay(200.millis)
 
-//       val actualResult = channel.receive() + channel.receive() + channel.receive()
+      val actualResult = channel.receive() + channel.receive() + channel.receive()
 
-//       actualResult should be(6)
-//     }
-//   }
+      actualResult should be(6)
+    }
+  }
 }
