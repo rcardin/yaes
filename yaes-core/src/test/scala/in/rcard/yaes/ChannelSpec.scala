@@ -102,4 +102,28 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
 
     actualResult should be(ChannelClosed)
   }
+
+  it should "allow using foreach to process incoming messages" in {
+    val channel      = Channel.unbounded[Int]()
+    var actualResult = 0
+
+    Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(1)
+          channel.send(2)
+          channel.send(3)
+          channel.close()
+        }
+
+        Async.delay(200.millis)
+
+        for (value <- channel) {
+          actualResult += value
+        }
+      }
+    }
+
+    actualResult should be(6)
+  }
 }

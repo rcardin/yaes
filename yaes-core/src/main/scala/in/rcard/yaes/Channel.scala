@@ -23,6 +23,17 @@ object Channel {
 
   def unbounded[T](): Channel[T] =
     new Channel(new java.util.concurrent.LinkedBlockingQueue[T]())
+
+  extension [T](channel: Channel[T]) {
+    def foreach[U](f: T => U)(using Async): Unit = {
+      Raise.run {  // FIXME Not the best implementation
+        while (true) {
+          val value = channel.receive()
+          f(value)
+        }
+      }
+    }
+  }
 }
 
 class Channel[T] private (queue: BlockingQueue[T])
@@ -32,7 +43,7 @@ class Channel[T] private (queue: BlockingQueue[T])
   private val closed = new AtomicBoolean(false)
 
   override def receive()(using Async, Raise[ChannelClosed]): T =
-    if (closed.get() && queue.isEmpty()) {
+    if (closed.get() && queue.isEmpty()) { // FIXME Possible race condition?
       Raise.raise(ChannelClosed)
     } else {
       queue.take()
