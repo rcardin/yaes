@@ -4,6 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 import in.rcard.yaes.Channel.ChannelClosed
+import in.rcard.yaes.Channel.Producer
 
 class ChannelSpec extends AnyFlatSpec with Matchers {
 
@@ -125,5 +126,47 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     }
 
     actualResult should be(6)
+  }
+
+  it should "use produce to create a producer and receive messages" in {
+    val actualResult = Raise.run {
+      Async.run {
+        val channel = Channel.produce[Int] {
+          Producer.send(1)
+          Producer.send(2)
+          Producer.send(3)
+        }
+
+        var sum = 0
+        for (value <- channel) {
+          sum += value
+        }
+        sum
+      }
+    }
+
+    actualResult should be(6)
+  }
+
+  it should "close the channel if the producer block raise an error" in {
+    val actualResult = Raise.run {
+      Async.run {
+        val channel = Channel.produce[Int] {
+          Producer.send(1)
+          Producer.send(2)
+          Raise.raise("Ooops!")
+        }
+
+        Async.fork {
+          var sum = 0
+          for (value <- channel) {
+            sum += value
+          }
+          sum
+        }.value
+      }
+    }
+
+    actualResult should be("Ooops!")
   }
 }

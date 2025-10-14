@@ -24,9 +24,9 @@ object Channel {
   def unbounded[T](): Channel[T] =
     new Channel(new java.util.concurrent.LinkedBlockingQueue[T]())
 
-  extension [T](channel: Channel[T]) {
+  extension [T](channel: ReceiveChannel[T]) {
     def foreach[U](f: T => U)(using Async): Unit = {
-      Raise.run {  // FIXME Not the best implementation
+      Raise.run { // FIXME Not the best implementation
         while (true) {
           val value = channel.receive()
           f(value)
@@ -34,6 +34,31 @@ object Channel {
       }
     }
   }
+
+  trait Producer[T] extends SendChannel[T] {}
+  object Producer {
+    def send[T](value: T)(using p: Producer[T], a: Async, r: Raise[ChannelClosed]): Unit =
+      p.send(value)
+    def close()(using p: Producer[?], a: Async, r: Raise[ChannelClosed]): Boolean =
+      p.close()
+  }
+
+  def produce[T](block: Producer[T] ?=> Unit)(using Async): ReceiveChannel[T] = {
+    val channel = Channel.unbounded[T]() // FIXME We need to move this away
+    Async
+      .fork {
+        block(using new Producer[T] {
+          override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
+            channel.send(value)
+          override def close(): Boolean = channel.close()
+        })
+      }
+      .onComplete { _ =>
+        channel.close()
+      }
+    channel
+  }
+
 }
 
 class Channel[T] private (queue: BlockingQueue[T])
