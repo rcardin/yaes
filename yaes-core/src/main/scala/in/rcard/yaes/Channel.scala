@@ -47,18 +47,20 @@ object Channel {
     val channel = Channel.unbounded[T]() // FIXME We need to move this away
     Async
       .fork {
-        block(using new Producer[T] {
-          override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
-            channel.send(value)
-          override def close(): Boolean = channel.close()
-        })
-      }
-      .onComplete { _ =>
-        channel.close()
+        try {
+          block(using
+            new Producer[T] {
+              override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
+                channel.send(value)
+              override def close(): Boolean = channel.close()
+            }
+          )
+        } finally {
+          channel.close()
+        }
       }
     channel
   }
-
 }
 
 class Channel[T] private (queue: BlockingQueue[T])

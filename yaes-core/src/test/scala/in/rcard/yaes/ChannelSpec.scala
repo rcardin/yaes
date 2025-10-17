@@ -148,7 +148,35 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     actualResult should be(6)
   }
 
-  it should "close the channel if the producer block raise an error" in {
+  it should "close the channel if the producer throws an exception" in {
+    val actualQueue     = new java.util.concurrent.LinkedBlockingQueue[Int]()
+    val actualException = intercept[RuntimeException] {
+      Raise.run {
+        Async.run {
+          val channel = Channel.produce[Int] {
+            Producer.send(1)
+            Async.delay(100.millis)
+            Producer.send(2)
+            Async.delay(100.millis)
+            Producer.send(3)
+            throw new RuntimeException("Oops!!!")
+          }
+
+          Async.fork {
+            for (value <- channel) {
+              actualQueue.put(value)
+            }
+          }
+        }
+      }
+    }
+
+    actualException shouldBe a[RuntimeException]
+    actualException.getMessage shouldEqual "Oops!!!"
+    actualQueue.toArray should contain theSameElementsInOrderAs List(1, 2, 3)
+  }
+
+  it should "close the channel if the producer is cancelled" in {
     val actualQueue = new java.util.concurrent.LinkedBlockingQueue[Int]()
     Raise.run {
       Async.run {
