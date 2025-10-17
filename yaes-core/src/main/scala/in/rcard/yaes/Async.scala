@@ -174,6 +174,7 @@ class JvmAsync extends Async.Unsafe {
           }
         } finally {
           JvmAsync.scope.remove()
+          promise.cancel(true)
           innerScope.close()
         }
       })
