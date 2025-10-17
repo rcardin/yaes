@@ -170,10 +170,11 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         }
 
         Async.delay(550.millis)
+        println("Cancelling producer")
         producerFb.cancel()
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List(0, 1, 2, 3, 4)
+    actualQueue.toArray should contain theSameElementsInOrderAs List(0, 1, 2, 3, 4, 5)
   }
 }

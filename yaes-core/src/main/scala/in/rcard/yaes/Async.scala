@@ -154,11 +154,11 @@ class JvmAsync extends Async.Unsafe {
       .get()
       .fork(() => {
         val innerScope = new ShutdownOnFailure()
+        forkedThread.complete(Thread.currentThread())
+        println(s"[$innerScope] FORK")
         try {
           val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-            val currentThread = Thread.currentThread()
             JvmAsync.scope.set(innerScope)
-            forkedThread.complete(currentThread)
             block
           })
           innerScope.join()
@@ -172,9 +172,12 @@ class JvmAsync extends Async.Unsafe {
           } else {
             promise.complete(innerTask.get())
           }
+        } catch {
+          case ie: InterruptedException =>
+            promise.cancel(true)
         } finally {
           JvmAsync.scope.remove()
-          promise.cancel(true)
+          println(s"[$innerScope] CLOSE")
           innerScope.close()
         }
       })
