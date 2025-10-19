@@ -26,6 +26,9 @@ object Channel {
   def unbounded[T](): Channel[T] =
     new Channel(new java.util.concurrent.LinkedBlockingQueue[T]())
 
+  def bounded[T](capacity: Int): Channel[T] =
+    new Channel(new java.util.concurrent.ArrayBlockingQueue[T](capacity))
+
   extension [T](channel: ReceiveChannel[T]) {
     def foreach[U](f: T => U)(using Async): Unit = {
       Raise.run { // FIXME Not the best implementation
@@ -95,7 +98,7 @@ class Channel[T] private (private val queue: BlockingQueue[T])
   override def close(): Boolean = status.compareAndSet(Status.Open, Status.Close)
 
   override def cancel()(using Async): Unit = {
-    status.set(Status.Cancelled)
+    status.compareAndSet(Status.Open, Status.Cancelled)
     queue.clear()
   }
 }

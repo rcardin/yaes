@@ -232,4 +232,34 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     actualResult should be(ChannelClosed)
     actualQueue.toArray should contain theSameElementsInOrderAs List("p0", "c0", "p1", "c1")
   }
+
+  "Bounded channel" should "block on send when full" in {
+    val channel             = Channel.bounded[Int](2)
+    val actualQueue  = new java.util.concurrent.LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        val senderFiber = Async.fork {
+          channel.send(1)
+          actualQueue.put("p1")
+          channel.send(2)
+          actualQueue.put("p2")
+          channel.send(3)
+          actualQueue.put("p3")
+        }
+
+        Async.delay(200.millis)
+
+        channel.receive()
+        actualQueue.put("c1")
+        channel.receive()
+        actualQueue.put("c2")
+        channel.receive()
+        actualQueue.put("c3")
+        channel.close()
+      }
+    }
+
+    actualQueue.toArray should contain theSameElementsInOrderAs List("p1", "p2", "c1", "c2", "p3", "c3")
+  }
 }
