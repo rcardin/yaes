@@ -5,6 +5,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 import in.rcard.yaes.Channel.ChannelClosed
 import in.rcard.yaes.Channel.Producer
+import in.rcard.yaes.Async.Cancelled
 
 class ChannelSpec extends AnyFlatSpec with Matchers {
 
@@ -204,5 +205,31 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     }
 
     actualQueue.toArray should contain theSameElementsInOrderAs List(0, 1, 2, 3, 4, 5)
+  }
+
+  it should "close the channel if the channel is cancelled" in {
+    val actualQueue  = new java.util.concurrent.LinkedBlockingQueue[String]()
+    val actualResult = Raise.run {
+      Async.run {
+        val channel = Channel.produce[Int] {
+          var i = 0
+          while (true) {
+            Producer.send(i)
+            actualQueue.put(s"p$i")
+            i += 1
+            Async.delay(100.millis)
+          }
+        }
+
+        actualQueue.put(s"c${channel.receive()}")
+        Async.delay(150.millis)
+        actualQueue.put(s"c${channel.receive()}")
+        channel.cancel()
+        channel.receive()
+      }
+    }
+
+    actualResult should be(ChannelClosed)
+    actualQueue.toArray should contain theSameElementsInOrderAs List("p0", "c0", "p1", "c1")
   }
 }

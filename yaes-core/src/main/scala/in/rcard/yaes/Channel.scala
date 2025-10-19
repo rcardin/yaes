@@ -6,6 +6,7 @@ import in.rcard.yaes.Channel.SendChannel
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import in.rcard.yaes.Channel.ChannelClosed
+import java.util.concurrent.atomic.AtomicReference
 
 object Channel {
 
@@ -19,6 +20,7 @@ object Channel {
 
   trait ReceiveChannel[T] {
     def receive()(using Async, Raise[ChannelClosed]): T
+    def cancel()(using Async): Unit
   }
 
   def unbounded[T](): Channel[T] =
@@ -63,26 +65,37 @@ object Channel {
   }
 }
 
-class Channel[T] private (queue: BlockingQueue[T])
+class Channel[T] private (private val queue: BlockingQueue[T])
     extends Channel.ReceiveChannel[T],
       Channel.SendChannel[T] {
 
-  private val closed = new AtomicBoolean(false)
+  enum Status {
+    case Open, Close, Cancelled
+  }
+
+  private val status = new AtomicReference(Status.Open)
 
   override def receive()(using Async, Raise[ChannelClosed]): T =
-    if (closed.get() && queue.isEmpty()) { // FIXME Possible race condition?
+    if (status.get() != Status.Open && queue.isEmpty()) { // FIXME Possible race condition?
       Raise.raise(ChannelClosed)
     } else {
       queue.take()
     }
 
   override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
-    if (closed.get()) {
-      Raise.raise(ChannelClosed)
-    } else {
-      queue.put(value)
+    status.get() match {
+      case Status.Cancelled =>
+        Thread.currentThread().interrupt()
+      case Status.Close =>
+        Raise.raise(ChannelClosed)
+      case Status.Open =>
+        queue.put(value)
     }
 
-  override def close(): Boolean = closed.compareAndSet(false, true)
+  override def close(): Boolean = status.compareAndSet(Status.Open, Status.Close)
 
+  override def cancel()(using Async): Unit = {
+    status.set(Status.Cancelled)
+    queue.clear()
+  }
 }
