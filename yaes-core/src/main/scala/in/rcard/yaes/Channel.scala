@@ -66,8 +66,13 @@ object Channel {
       p.close()
   }
 
-  def produce[T](block: Producer[T] ?=> Unit)(using Async): ReceiveChannel[T] = {
-    val channel = Channel.unbounded[T]() // FIXME We need to move this away
+  def produce[T](block: Producer[T] ?=> Unit)(using Async): ReceiveChannel[T] =
+    produceWith(Channel.Type.Unbounded)(block)
+
+  def produceWith[T](
+      channelType: Channel.Type = Channel.Type.Unbounded
+  )(block: Producer[T] ?=> Unit)(using Async): ReceiveChannel[T] = {
+    val channel = Channel[T](channelType)
     Async
       .fork {
         try {
