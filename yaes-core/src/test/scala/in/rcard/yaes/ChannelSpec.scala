@@ -6,6 +6,7 @@ import scala.concurrent.duration._
 import in.rcard.yaes.Channel.ChannelClosed
 import in.rcard.yaes.Channel.Producer
 import in.rcard.yaes.Async.Cancelled
+import java.util.concurrent.LinkedBlockingQueue
 
 class ChannelSpec extends AnyFlatSpec with Matchers {
 
@@ -150,7 +151,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "close the channel if the producer throws an exception" in {
-    val actualQueue     = new java.util.concurrent.LinkedBlockingQueue[Int]()
+    val actualQueue     = new LinkedBlockingQueue[Int]()
     val actualException = intercept[RuntimeException] {
       Raise.run {
         Async.run {
@@ -178,7 +179,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "close the channel if the producer is cancelled" in {
-    val actualQueue = new java.util.concurrent.LinkedBlockingQueue[Int]()
+    val actualQueue = new LinkedBlockingQueue[Int]()
     Raise.run {
       Async.run {
         val producerFb = Async.fork {
@@ -208,7 +209,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "close the channel if the channel is cancelled" in {
-    val actualQueue  = new java.util.concurrent.LinkedBlockingQueue[String]()
+    val actualQueue  = new LinkedBlockingQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         val channel = Channel.produce[Int] {
@@ -234,8 +235,8 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   }
 
   "Bounded channel" should "block on send when full" in {
-    val channel             = Channel.bounded[Int](2)
-    val actualQueue  = new java.util.concurrent.LinkedBlockingQueue[String]()
+    val channel     = Channel.bounded[Int](2)
+    val actualQueue = new LinkedBlockingQueue[String]()
 
     Raise.run {
       Async.run {
@@ -260,6 +261,37 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List("p1", "p2", "c1", "c2", "p3", "c3")
+    actualQueue.toArray should contain theSameElementsInOrderAs List(
+      "p1",
+      "p2",
+      "c1",
+      "c2",
+      "p3",
+      "c3"
+    )
+  }
+
+  "Rendezvous channel" should "block on send until receive is ready" in {
+    val channel     = Channel.rendezvous[Int]()
+    val actualQueue = new LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        val senderFiber = Async.fork {
+          actualQueue.put("p1")
+          channel.send(1)
+          actualQueue.put("p2")
+          channel.send(2)
+        }
+
+        Async.delay(200.millis)
+
+        actualQueue.put(s"c${channel.receive()}")
+        actualQueue.put(s"c${channel.receive()}")
+        channel.close()
+      }
+    }
+
+    actualQueue.toArray should contain theSameElementsInOrderAs List("p1", "c1", "p2", "c2")
   }
 }

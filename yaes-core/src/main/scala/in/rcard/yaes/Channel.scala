@@ -7,8 +7,18 @@ import java.util.concurrent.BlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import in.rcard.yaes.Channel.ChannelClosed
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.SynchronousQueue
 
 object Channel {
+
+  sealed trait Type {}
+  object Type       {
+    case object Unbounded             extends Type
+    case class Bounded(capacity: Int) extends Type
+    case object Rendezvous            extends Type
+  }
 
   case object ChannelClosed
   type ChannelClosed = ChannelClosed.type
@@ -23,11 +33,19 @@ object Channel {
     def cancel()(using Async): Unit
   }
 
-  def unbounded[T](): Channel[T] =
-    new Channel(new java.util.concurrent.LinkedBlockingQueue[T]())
+  def unbounded[T](): Channel[T] = Channel(Type.Unbounded)
 
-  def bounded[T](capacity: Int): Channel[T] =
-    new Channel(new java.util.concurrent.ArrayBlockingQueue[T](capacity))
+  def bounded[T](capacity: Int): Channel[T] = Channel(Type.Bounded(capacity))
+
+  def rendezvous[T](): Channel[T] = Channel(Type.Rendezvous)
+
+  def apply[T](channelType: Type): Channel[T] = channelType match {
+    case Type.Unbounded         => new Channel(new LinkedBlockingQueue[T]())
+    case Type.Bounded(capacity) =>
+      new Channel(new ArrayBlockingQueue[T](capacity))
+    case Type.Rendezvous =>
+      new Channel(new SynchronousQueue[T]())
+  }
 
   extension [T](channel: ReceiveChannel[T]) {
     def foreach[U](f: T => U)(using Async): Unit = {
@@ -72,7 +90,7 @@ class Channel[T] private (private val queue: BlockingQueue[T])
     extends Channel.ReceiveChannel[T],
       Channel.SendChannel[T] {
 
-  enum Status {
+  private enum Status {
     case Open, Close, Cancelled
   }
 
