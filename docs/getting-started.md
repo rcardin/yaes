@@ -75,6 +75,7 @@ Handlers are the tools that execute deferred effects. They can be composed and a
 ## Next Steps
 
 - Explore the [available effects](effects/)
+- Learn about [communication primitives](communication-primitives.html) for fiber coordination
 - Learn about [functional data structures](data-structures.html)
 - Check out [practical examples](examples.html)
 - Read about [contributing](contributing.html)
