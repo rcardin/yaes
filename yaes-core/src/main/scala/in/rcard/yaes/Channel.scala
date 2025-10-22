@@ -409,11 +409,11 @@ object Channel {
     *   a new channel with the specified type
     */
   def apply[T](channelType: Type): Channel[T] = channelType match {
-    case Type.Unbounded         => new Channel(new LinkedBlockingQueue[T]())
+    case Type.Unbounded         => new Channel[T](new LinkedBlockingQueue[Any]())
     case Type.Bounded(capacity) =>
-      new Channel(new ArrayBlockingQueue[T](capacity))
+      new Channel[T](new ArrayBlockingQueue[Any](capacity))
     case Type.Rendezvous =>
-      new Channel(new SynchronousQueue[T]())
+      new Channel[T](new SynchronousQueue[Any]())
   }
 
   /** Extension methods for [[ReceiveChannel]]. */
@@ -673,7 +673,7 @@ object Channel {
   * @tparam T
   *   the type of elements in the channel
   */
-class Channel[T] private (private val queue: BlockingQueue[T])
+class Channel[T] private (private val queue: BlockingQueue[Any])
     extends Channel.ReceiveChannel[T],
       Channel.SendChannel[T] {
 
@@ -681,6 +681,9 @@ class Channel[T] private (private val queue: BlockingQueue[T])
   private enum Status {
     case Open, Close, Cancelled
   }
+
+  /** Marker object to indicate closed state in the queue. */
+  private object ClosedMarker
 
   private val status = new AtomicReference(Status.Open)
 
@@ -699,10 +702,12 @@ class Channel[T] private (private val queue: BlockingQueue[T])
     *   if the channel is closed and empty
     */
   override def receive()(using Async, Raise[ChannelClosed]): T =
-    if (status.get() != Status.Open && queue.isEmpty()) { // FIXME Possible race condition?
-      Raise.raise(ChannelClosed)
-    } else {
-      queue.take()
+    queue.take() match {
+      case ClosedMarker =>
+        queue.offer(ClosedMarker)
+        Raise.raise(ChannelClosed)
+      case value =>
+        value.asInstanceOf[T]
     }
 
   /** Sends an element to the channel, suspending if necessary.
@@ -737,7 +742,14 @@ class Channel[T] private (private val queue: BlockingQueue[T])
     * @return
     *   `true` if the channel was successfully closed, `false` if already closed or cancelled
     */
-  override def close(): Boolean = status.compareAndSet(Status.Open, Status.Close)
+  override def close(): Boolean = {
+    if (status.compareAndSet(Status.Open, Status.Close)) {
+      queue.offer(ClosedMarker)
+      true
+    } else {
+      false
+    }
+  }
 
   /** Cancels the channel and clears all buffered elements.
     *
@@ -750,5 +762,6 @@ class Channel[T] private (private val queue: BlockingQueue[T])
   override def cancel()(using Async): Unit = {
     status.compareAndSet(Status.Open, Status.Cancelled)
     queue.clear()
+    queue.offer(ClosedMarker)
   }
 }

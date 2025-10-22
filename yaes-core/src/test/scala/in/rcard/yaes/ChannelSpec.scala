@@ -200,7 +200,6 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         }
 
         Async.delay(550.millis)
-        println("Cancelling producer")
         producerFb.cancel()
       }
     }
@@ -280,6 +279,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         val senderFiber = Async.fork {
           actualQueue.put("p1")
           channel.send(1)
+          Async.delay(100.millis)
           actualQueue.put("p2")
           channel.send(2)
         }
