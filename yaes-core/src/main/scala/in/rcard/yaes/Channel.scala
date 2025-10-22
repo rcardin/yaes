@@ -451,7 +451,7 @@ object Channel {
       *   the return type of the function (typically Unit)
       */
     def foreach[U](f: T => U)(using Async): Unit = {
-      Raise.run { // FIXME Not the best implementation
+      Raise.run[ChannelClosed, Unit] {
         while (true) {
           val value = channel.receive()
           f(value)
