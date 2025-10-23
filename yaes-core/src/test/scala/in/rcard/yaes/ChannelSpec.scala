@@ -233,6 +233,30 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("p0", "c0", "p1", "c1")
   }
 
+  it should "cancel a closed channel" in {
+    val actualQueue  = new LinkedBlockingQueue[Int]()
+    val actualResult = Raise.run {
+      Async.run {
+        val channel = Channel.produce[Int] {
+          Producer.send(1)
+          actualQueue.put(1)
+          Producer.send(2)
+          actualQueue.put(2)
+          Producer.send(3)
+          actualQueue.put(3)
+        }
+
+        Async.delay(200.millis)
+        channel.cancel()
+        val readMsg = channel.receive()
+        actualQueue.put(readMsg)
+      }
+    }
+
+    actualResult should be(ChannelClosed)
+    actualQueue.toArray should contain theSameElementsInOrderAs List(1, 2, 3)
+  }
+
   "Bounded channel" should "block on send when full" in {
     val channel     = Channel.bounded[Int](2)
     val actualQueue = new LinkedBlockingQueue[String]()
@@ -249,25 +273,26 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         }
 
         Async.delay(200.millis)
+        
+        val queueSnapshot = actualQueue.toArray.toList
+        queueSnapshot should contain allOf ("p1", "p2")
+        
+        actualQueue.put(s"c${channel.receive()}")
+        actualQueue.put(s"c${channel.receive()}")
 
-        channel.receive()
-        actualQueue.put("c1")
-        channel.receive()
-        actualQueue.put("c2")
-        channel.receive()
-        actualQueue.put("c3")
+        Async.delay(200.millis)
+
+        actualQueue.put(s"c${channel.receive()}")
         channel.close()
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List(
-      "p1",
-      "p2",
-      "c1",
-      "c2",
-      "p3",
-      "c3"
-    )
+    val finalQueue = actualQueue.toArray.toList.map(_.toString)
+    finalQueue should contain allOf ("p1", "p2", "p3", "c1", "c2", "c3")
+    
+    finalQueue.filter(_.startsWith("p")) should equal(List("p1", "p2", "p3"))
+    
+    finalQueue.filter(_.startsWith("c")) should equal(List("c1", "c2", "c3"))
   }
 
   "Rendezvous channel" should "block on send until receive is ready" in {

@@ -760,7 +760,7 @@ class Channel[T] private (private val queue: BlockingQueue[Any])
     *   the async context
     */
   override def cancel()(using Async): Unit = {
-    status.compareAndSet(Status.Open, Status.Cancelled)
+    status.set(Status.Cancelled)
     queue.clear()
     queue.offer(ClosedMarker)
   }
