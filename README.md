@@ -83,7 +83,9 @@ The above code shows how to handle only the `Random` effect. The `Raise` effect 
 The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.6.0"
+```scala
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.7.0"
+```
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
