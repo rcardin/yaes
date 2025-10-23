@@ -134,6 +134,11 @@ val result: String = Raise.run {
 - [**Flow**](data-structures.html#flow) - Cold asynchronous data streams with rich operators
 - [**More data structures**](data-structures.html) - Additional functional data structures
 
+## 🔗 Communication Primitives
+
+- [**Channel**](communication-primitives.html#channel) - Communication primitive for transferring data between fibers
+- [**More primitives**](communication-primitives.html) - Additional concurrency primitives
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please check our [contributing guidelines](contributing.html) to get started.

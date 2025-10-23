@@ -914,6 +914,263 @@ object Log {
 }
 ```
 
+## Communication Primitives
+
+Beyond effects, λÆS provides communication primitives for coordinating between asynchronous computations.
+
+### Channels
+
+A `Channel` is a communication primitive for transferring data between asynchronous computations (fibers). Conceptually, a channel is similar to `java.util.concurrent.BlockingQueue`, but it has suspending operations instead of blocking ones and can be closed.
+
+Channels are particularly useful when you need to:
+- Share data between multiple fibers
+- Implement producer-consumer patterns
+- Create pipelines of asynchronous transformations
+- Coordinate work between concurrent computations
+
+#### Channel Types
+
+Channels support different buffer configurations that control how elements are buffered and when senders/receivers suspend:
+
+**Unbounded Channel**: A channel with unlimited buffer capacity that never suspends the sender.
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.unbounded[Int]()
+
+Raise.run {
+  Async.run {
+    Async.fork {
+      // These sends will never suspend
+      channel.send(1)
+      channel.send(2)
+      channel.send(3)
+    }
+  }
+}
+```
+
+**Bounded Channel**: A channel with a fixed buffer capacity. When the buffer is full, the sender suspends until there is space available, providing backpressure.
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.bounded[Int](capacity = 2)
+
+Raise.run {
+  Async.run {
+    Async.fork {
+      channel.send(1) // Succeeds immediately
+      channel.send(2) // Succeeds immediately
+      channel.send(3) // Suspends until receiver takes an element
+    }
+  }
+}
+```
+
+**Rendezvous Channel**: A channel with no buffer. The sender and receiver must meet (rendezvous): `send` suspends until another computation invokes `receive`, and vice versa.
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.rendezvous[String]()
+
+Raise.run {
+  Async.run {
+    val sender = Async.fork {
+      channel.send("hello") // Suspends until receiver is ready
+      println("Message sent")
+    }
+
+    val receiver = Async.fork {
+      val msg = channel.receive() // Suspends until sender is ready
+      println(s"Received: $msg")
+    }
+  }
+}
+```
+
+#### Basic Operations
+
+Channels are composed of two interfaces:
+- **`SendChannel`**: For sending elements (can also close the channel)
+- **`ReceiveChannel`**: For receiving elements (can also cancel the channel)
+
+**Sending and Receiving**:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.unbounded[Int]()
+
+Raise.run {
+  Async.run {
+    // Producer fiber
+    Async.fork {
+      channel.send(1)
+      channel.send(2)
+      channel.send(3)
+      channel.close() // Signal no more elements
+    }
+
+    // Consumer fiber
+    channel.foreach { value =>
+      println(s"Received: $value")
+    }
+    // Prints: Received: 1, Received: 2, Received: 3
+  }
+}
+```
+
+**Closing vs Canceling**:
+
+- **`close()`**: Prevents further sends but allows receiving remaining buffered elements
+- **`cancel()`**: Immediately clears all buffered elements and marks the channel as cancelled
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.unbounded[Int]()
+
+Raise.run {
+  Async.run {
+    Async.fork {
+      channel.send(1)
+      channel.send(2)
+    }
+    channel.close() // No more sends allowed
+    
+    println(channel.receive()) // Prints: 1
+    println(channel.receive()) // Prints: 2
+    // channel.receive() // Would raise ChannelClosed
+  }
+}
+```
+
+#### Producer DSL
+
+The `produce` and `produceWith` functions provide a convenient DSL for creating channels with producer coroutines:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.Producer
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+Raise.run {
+  Async.run {
+    // Create an unbounded channel with a producer
+    val channel = Channel.produce[Int] {
+      (1 to 10).foreach { i =>
+        Producer.send(i * i)
+      }
+      // Channel automatically closed when block completes
+    }
+
+    // Consume the produced elements
+    channel.foreach { value =>
+      println(s"Square: $value")
+    }
+  }
+}
+```
+
+You can also specify the channel type with `produceWith`:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.Producer
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+Raise.run {
+  Async.run {
+    // Create a bounded producer with backpressure
+    val channel = Channel.produceWith(Channel.Type.Bounded(5)) {
+      var count = 0
+      while (count < 100) {
+        Producer.send(count)
+        count += 1
+      }
+    }
+
+    // Consume with backpressure
+    channel.foreach { value =>
+      Async.delay(100.millis) // Slow consumer
+      println(value)
+    }
+  }
+}
+```
+
+#### Error Handling
+
+Channel operations can raise `ChannelClosed` errors. These must be handled using the `Raise` effect:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.ChannelClosed
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val result: ChannelClosed | String = Raise.run {
+  Async.run {
+    val channel = Channel.unbounded[String]()
+    channel.close()
+    
+    // This will raise ChannelClosed
+    channel.send("too late!")
+  }
+}
+```
+
+#### Practical Example: Pipeline Pattern
+
+Channels are excellent for building data processing pipelines:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.Producer
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+case class User(id: Int, name: String)
+
+def processUsers(): Unit = Raise.run {
+  Async.run {
+    // Stage 1: Generate user IDs
+    val idsChannel = Channel.produce[Int] {
+      (1 to 100).foreach(Producer.send)
+    }
+
+    // Stage 2: Fetch users (with bounded channel for backpressure)
+    val usersChannel = Channel.produceWith[User](Channel.Type.Bounded(10)) {
+      idsChannel.foreach { id =>
+        val user = User(id, s"User$id") // Simulate fetch
+        Producer.send(user)
+      }
+    }
+
+    // Stage 3: Process users
+    usersChannel.foreach { user =>
+      println(s"Processing: ${user.name}")
+      // Do actual processing...
+    }
+  }
+}
+```
+
 ## Contributing
 
 If you want to contribute to the project, please do it 🙏! Any help is welcome.

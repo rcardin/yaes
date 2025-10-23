@@ -118,3 +118,9 @@ val (winner, remaining) = Async.racePair(computation1, computation2)
 - **Cooperative Cancellation**: Based on JVM interruption
 - **Parent-Child Relationships**: Cancelling a parent cancels all children
 - **Exception Transparency**: Exceptions propagate naturally
+
+## See Also
+
+- [Communication Primitives](../communication-primitives.html) - Use Channels for communication between fibers
+- [IO Effect](io.html) - For handling exceptions in async computations
+- [Raise Effect](raise.html) - For typed error handling with cancellation
