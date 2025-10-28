@@ -1,7 +1,7 @@
 package in.rcard.yaes
 
-/** Represents an effect built on top af an effect `F`. The effect is represented by the `unsafe`
-  * field, and it should not be handled directly but throught the [[Yaes.Handler]] interface.
+/** Represents an effect built on top of an effect `F`. The effect is represented by the `unsafe`
+  * field, and it should not be handled directly but through the [[Yaes.Handler]] interface.
   *
   * @param unsafe
   *   An instance of the effect `F`
