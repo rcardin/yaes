@@ -129,7 +129,25 @@ val result: String = Raise.run {
 - [**System**](effects/system-clock.html) - System properties and environment variables
 - [**Log**](effects/log.html) - Logging at different levels
 
-## 🗃 Data Structures
+## � Application Development
+
+- [**YaesApp**](yaes-app.html) - Common entry point for YAES applications with automatic effect handling
+
+`YaesApp` provides a unified entry point for building complete applications:
+
+```scala
+import in.rcard.yaes.*
+
+object MyApp extends YaesApp {
+  run {
+    Output.printLn("Hello, YAES!")
+    val logger = Log.getLogger("MyApp")
+    logger.info("Application started")
+  }
+}
+```
+
+## �🗃 Data Structures
 
 - [**Flow**](data-structures.html#flow) - Cold asynchronous data streams with rich operators
 - [**More data structures**](data-structures.html) - Additional functional data structures
