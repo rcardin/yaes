@@ -72,6 +72,7 @@ trait YaesApp {
     */
   def run: (
       Output.Output,
+      Input.Input,
       Random.Random,
       Clock.Clock,
       System.System,
@@ -83,19 +84,22 @@ trait YaesApp {
     * The order of handlers is:
     *   1. IO (outermost) - handles side effects, async operations, and exceptions
     *   2. Output - console output
-    *   3. Random - random number generation
-    *   4. Clock - time operations
-    *   5. System - system properties/env vars
-    *   6. Log (innermost) - structured logging
+    *   3. Input - console input
+    *   4. Random - random number generation
+    *   5. Clock - time operations
+    *   6. System - system properties/env vars
+    *   7. Log (innermost) - structured logging
     */
   private def executeRun(): Unit = {
     val result = IO.runBlocking(runTimeout) {
       Output.run {
-        Random.run {
-          Clock.run {
-            System.run {
-              Log.run {
-                run
+        Input.run {
+          Random.run {
+            Clock.run {
+              System.run {
+                Log.run {
+                  run
+                }
               }
             }
           }
@@ -160,6 +164,7 @@ object YaesApp {
   def apply(
       block: (
           Output.Output,
+          Input.Input,
           Random.Random,
           Clock.Clock,
           System.System,
@@ -168,6 +173,7 @@ object YaesApp {
   ): YaesApp = new YaesApp {
     def run: (
         Output.Output,
+        Input.Input,
         Random.Random,
         Clock.Clock,
         System.System,
