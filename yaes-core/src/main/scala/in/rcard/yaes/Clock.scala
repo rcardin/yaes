@@ -5,6 +5,8 @@ import java.lang.System as JSystem
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.DurationLong
 
+type Clock = Yaes[Clock.Unsafe]
+
 /** Companion object for the [[Clock]] effect, providing utility methods and handlers.
   *
   * This object contains methods to run Clock operations to get the current time and a monotonic
@@ -18,8 +20,6 @@ import scala.concurrent.duration.DurationLong
   * }}}
   */
 object Clock {
-
-  type Clock = Yaes[Clock.Unsafe]
 
   /** Lifts a block of code into the Clock effect.
     *

@@ -1,5 +1,7 @@
 package in.rcard.yaes
 
+type Output = Yaes[Output.Unsafe]
+
 /** Companion object providing convenient methods for working with the Output effect.
   *
   * This object contains:
@@ -23,8 +25,6 @@ package in.rcard.yaes
   * }}}
   */
 object Output {
-
-  type Output = Yaes[Output.Unsafe]
 
   /** Lifts a block of code into the Output effect.
     *

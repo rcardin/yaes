@@ -1,8 +1,5 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Async.Async
-import in.rcard.yaes.Raise.Raise
-
 import java.util as ju
 import scala.concurrent.duration.Duration
 
@@ -15,8 +12,9 @@ import ju.concurrent.StructuredTaskScope.ShutdownOnFailure
 import ju.concurrent.StructuredTaskScope.Subtask
 import ju.concurrent.SynchronousQueue
 import ju.function.Consumer
-import Async.Cancelled
 import ju.concurrent.ConcurrentHashMap
+
+type Async = Yaes[Async.Unsafe]
 
 /** Represents an asynchronous computation that can be controlled.
   *
@@ -61,7 +59,7 @@ trait Fiber[A] {
     * @return
     *   the computed value
     */
-  def value(using async: Async): Raise[Cancelled] ?=> A
+  def value(using async: Async): Raise[Async.Cancelled] ?=> A
 
   /** Waits for the computation to complete. It does not raise any errors if the fiber was
     * cancelled.
@@ -117,10 +115,10 @@ class JvmFiber[A](
     promise.thenAccept(result => fn(result))
   }
 
-  override def value(using async: Async): Raise[Cancelled] ?=> A = try {
-    promise.get()
+  override def value(using async: Async): Raise[Async.Cancelled] ?=> A = try {
+    unsafeValue
   } catch {
-    case cancellationEx: CancellationException => Raise.raise(Cancelled)
+    case cancellationEx: CancellationException => Raise.raise(Async.Cancelled)
   }
 
   override def join()(using async: Async): Unit =
@@ -220,8 +218,6 @@ object JvmAsync {
   * }}}
   */
 object Async {
-
-  type Async = Yaes[Async.Unsafe]
 
   /** A type representing a cancelled computation.
     *

@@ -2,6 +2,8 @@ package in.rcard.yaes
 
 import in.rcard.yaes.Yaes.Handler
 
+type State[S] = Yaes[State.Unsafe[S]]
+
 /**
  * State effect for managing stateful computations in a functional way.
  *
@@ -21,13 +23,6 @@ import in.rcard.yaes.Yaes.Handler
  * }}}
  */
 object State {
-
-  /**
-   * Type alias for the State effect with state type S.
-   *
-   * @tparam S the type of the state being managed
-   */
-  type State[S] = Yaes[Unsafe[S]]
 
   /**
    * Retrieves the current state value.

@@ -12,6 +12,10 @@ import scala.util.Failure
 import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary.Label
 
+type Raise[E] = Yaes[Raise.Unsafe[E]]
+
+infix type raises[A, Error] = Raise[Error] ?=> A
+
 /** An effect that represents the ability to raise an error of type `E`.
   *
   * Example usage:
@@ -36,10 +40,6 @@ import scala.util.boundary.Label
   * safe and composable way.
   */
 object Raise {
-
-  type Raise[E] = Yaes[Raise.Unsafe[E]]
-
-  infix type raises[A, Error] = Raise[Error] ?=> A
 
   /** Lifts a block of code that may use the Raise effect.
     *

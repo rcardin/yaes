@@ -11,7 +11,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
     val app = new YaesApp {
       override protected def handleError(error: Option[Throwable]): Unit = () // Prevent actual exit
 
-      override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+      override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
         executed = true
       }
     }
@@ -26,7 +26,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
     val app = new YaesApp {
       override protected def handleError(error: Option[Throwable]): Unit = ()
 
-      override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+      override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
         capturedArgs = args
       }
     }
@@ -41,7 +41,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
       val app = new YaesApp {
         override protected def handleError(error: Option[Throwable]): Unit = ()
 
-        override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+        override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
           Output.printLn("Hello, YAES!")
         }
       }
@@ -58,7 +58,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
     val app = new YaesApp {
       override protected def handleError(error: Option[Throwable]): Unit = ()
 
-      override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+      override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
         randomValue = Random.nextInt
       }
     }
@@ -74,7 +74,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
     val app = new YaesApp {
       override protected def handleError(error: Option[Throwable]): Unit = ()
 
-      override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+      override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
         timestamp = Clock.now
       }
     }
@@ -91,7 +91,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
         errorCaptured = error
       }
 
-      override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+      override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
         throw new RuntimeException("Test error")
       }
     }
@@ -107,7 +107,7 @@ class YaesAppSpec extends AnyFlatSpec with Matchers {
       val app = new YaesApp {
         override protected def handleError(error: Option[Throwable]): Unit = ()
 
-        override def run: (Output.Output, Input.Input, Random.Random, Clock.Clock, System.System, Log.Log) ?=> Unit = {
+        override def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {
           val timestamp = Clock.now
           val random = Random.nextInt
           Output.printLn(s"Time: $timestamp, Random: $random")

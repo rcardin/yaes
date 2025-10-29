@@ -71,12 +71,12 @@ trait YaesApp {
     * }}}
     */
   def run: (
-      Output.Output,
-      Input.Input,
-      Random.Random,
-      Clock.Clock,
-      System.System,
-      Log.Log
+      Output,
+      Input,
+      Random,
+      Clock,
+      System,
+      Log
   ) ?=> Unit
 
   /** Executes the run method with all the effect handlers in the correct order.
@@ -163,21 +163,21 @@ object YaesApp {
     */
   def apply(
       block: (
-          Output.Output,
-          Input.Input,
-          Random.Random,
-          Clock.Clock,
-          System.System,
-          Log.Log
+          Output,
+          Input,
+          Random,
+          Clock,
+          System,
+          Log
       ) ?=> Unit
   ): YaesApp = new YaesApp {
     def run: (
-        Output.Output,
-        Input.Input,
-        Random.Random,
-        Clock.Clock,
-        System.System,
-        Log.Log
+        Output,
+        Input,
+        Random,
+        Clock,
+        System,
+        Log
     ) ?=> Unit = block
   }
 }
