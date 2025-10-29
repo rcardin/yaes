@@ -254,13 +254,13 @@ object CustomClockApp extends YaesApp {
 }
 ```
 
-### Custom Exit Behavior
+### Custom Handle Error Behavior
 
-Override `exit` to prevent actual system exit (useful for testing):
+Override `handleError` to prevent actual system exit (useful for testing):
 
 ```scala 3
 object NoExitApp extends YaesApp {
-  override protected def exit(code: Int): Unit = {
+  override protected def handleError(error: Throwable): Unit = {
     Output.run {
       Output.printLn(s"Would exit with code: $code")
     }
@@ -280,7 +280,7 @@ object NoExitApp extends YaesApp {
 3. **Typed Error Handling**: Use `Raise[E]` explicitly when you need type-safe error handling for domain-specific errors (e.g., parsing, validation)
 4. **Logging**: Use structured logging instead of `Output.printLn` for production code
 5. **Configuration**: Read configuration from environment variables and system properties, wrapping typed operations with `Raise.run`
-6. **Testing**: Override `exit` and error handling methods for testing
+6. **Testing**: Override `handleError` for testing
 7. **Timeout**: Set appropriate timeouts for production applications
 8. **Separation of Concerns**: Keep business logic in separate functions, use `run` block for wiring
 

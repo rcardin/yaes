@@ -49,7 +49,7 @@ trait YaesApp {
     *
     * This method has access to common effects:
     *   - Output: for console output
-    *   - Input: for console input  
+    *   - Input: for console input
     *   - Random: for random number generation
     *   - Clock: for time operations
     *   - System: for system properties and environment variables
