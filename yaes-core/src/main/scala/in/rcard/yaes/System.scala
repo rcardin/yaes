@@ -1,7 +1,8 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Raise.Raise
 import java.lang.System as JSystem
+
+type System = Yaes[System.Unsafe]
 
 /** Companion object providing convenient methods for working with the `System` effect.
   *
@@ -33,8 +34,6 @@ import java.lang.System as JSystem
   * }}}
   */
 object System {
-
-  type System = Yaes[System.Unsafe]
 
   /** Lifts a block of code into the System effect.
     *

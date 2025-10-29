@@ -37,13 +37,13 @@ class JvmExecutor extends Executor {
   }
 }
 
+type IO = Yaes[IO.Unsafe]
+
 /** The `IO` effect represents a side-effecting operation that can be run in a controlled
   * environment. This effect is useful to represent operations that can fail with uncotrolled
   * exceptions.
   */
 object IO {
-
-  type IO = Yaes[IO.Unsafe]
 
   /** Lifts a side-effecting operation into the `IO` effect.
     *
