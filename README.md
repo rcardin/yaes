@@ -108,6 +108,40 @@ The library provides a set of effects that can be used to define and handle effe
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
 
+### YaesApp: Common Entry Point
+
+For building complete applications, λÆS provides `YaesApp`, a trait that simplifies application development by automatically handling common effects in the correct order.
+
+**Quick Example:**
+
+```scala 3
+import in.rcard.yaes.*
+
+object MyApp extends YaesApp {
+  override def run {
+    Output.printLn(s"Hello! Starting with args: ${args.mkString(", ")}")
+    
+    val currentTime = Clock.now
+    Output.printLn(s"Current time: $currentTime")
+    
+    val randomNumber = Random.nextInt
+    Output.printLn(s"Random number: $randomNumber")
+    
+    val logger = Log.getLogger("MyApp")
+    logger.info("Application started successfully")
+  }
+}
+```
+
+`YaesApp` automatically provides:
+- **Output**, **Input** - Console I/O
+- **Random** - Random number generation
+- **Clock** - Time operations
+- **System** - System properties and environment variables
+- **Log** - Structured logging
+
+For more details, see the [YaesApp documentation](docs/yaes-app.md).
+
 ### The `IO` Effect
 
 The `IO` effect allows for running side-effecting operations:
