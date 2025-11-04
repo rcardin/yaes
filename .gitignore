@@ -93,3 +93,4 @@ project/plugins/project/
 project/.bloop/*
 project/project/*
 project/metals.sbt
+cs
