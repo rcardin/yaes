@@ -58,14 +58,16 @@ Raise.run {
 
 #### Bounded Channel
 
-A channel with a fixed buffer capacity. When the buffer is full, the sender suspends until there is space available, providing backpressure to prevent overwhelming the receiver.
+A channel with a fixed buffer capacity. When the buffer is full, behavior depends on the configured overflow policy.
 
 ```scala
 import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.OverflowStrategy
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 import scala.concurrent.duration.*
 
+// Default behavior: suspend when full
 val channel = Channel.bounded[Int](capacity = 2)
 
 Raise.run {
@@ -81,6 +83,80 @@ Raise.run {
     println(channel.receive()) // 1
     println(channel.receive()) // 2
     println(channel.receive()) // 3
+  }
+}
+```
+
+##### Buffer Overflow Policies
+
+Bounded channels support different strategies for handling buffer overflow, controlled by the `onOverflow` parameter:
+
+**SUSPEND (default)**: The sender suspends until space becomes available in the buffer. This provides natural backpressure to prevent fast producers from overwhelming slow consumers.
+
+```scala
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.OverflowStrategy
+
+val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.SUSPEND)
+// Equivalent to: Channel.bounded[Int](capacity = 2)
+```
+
+**DROP_OLDEST**: When the buffer is full, the oldest element is dropped to make space for the new element. The send operation completes immediately without suspending. This is useful when you only care about the most recent data.
+
+```scala
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.OverflowStrategy
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.bounded[Int](capacity = 3, onOverflow = OverflowStrategy.DROP_OLDEST)
+
+Raise.run {
+  Async.run {
+    Async.fork {
+      // All sends complete immediately
+      channel.send(1) // Buffer: [1]
+      channel.send(2) // Buffer: [1, 2]
+      channel.send(3) // Buffer: [1, 2, 3]
+      channel.send(4) // Buffer: [2, 3, 4] - 1 is dropped
+      channel.send(5) // Buffer: [3, 4, 5] - 2 is dropped
+      channel.close()
+    }
+
+    Async.delay(100.millis)
+    
+    // Only receives the last 3 elements
+    channel.foreach(println) // Prints: 3, 4, 5
+  }
+}
+```
+
+**DROP_LATEST**: When the buffer is full, the new element is discarded and the buffer remains unchanged. The send operation completes immediately without suspending. This is useful when you want to preserve the earliest data.
+
+```scala
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.OverflowStrategy
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.bounded[Int](capacity = 3, onOverflow = OverflowStrategy.DROP_LATEST)
+
+Raise.run {
+  Async.run {
+    Async.fork {
+      // All sends complete immediately
+      channel.send(1) // Buffer: [1]
+      channel.send(2) // Buffer: [1, 2]
+      channel.send(3) // Buffer: [1, 2, 3]
+      channel.send(4) // Buffer: [1, 2, 3] - 4 is dropped
+      channel.send(5) // Buffer: [1, 2, 3] - 5 is dropped
+      channel.close()
+    }
+
+    Async.delay(100.millis)
+    
+    // Only receives the first 3 elements
+    channel.foreach(println) // Prints: 1, 2, 3
   }
 }
 ```
@@ -401,7 +477,9 @@ def bufferedCommunicationExample(): Unit = {
 ### 1. Choose the Right Channel Type
 
 - **Unbounded**: Use when memory is not a concern and you want maximum throughput
-- **Bounded**: Use for backpressure and controlled memory usage
+- **Bounded with SUSPEND**: Use for backpressure and controlled memory usage
+- **Bounded with DROP_OLDEST**: Use when only the most recent data matters (e.g., sensor readings, real-time updates)
+- **Bounded with DROP_LATEST**: Use when the earliest data is most important (e.g., event logs, audit trails)
 - **Rendezvous**: Use when you need strict synchronization between sender and receiver
 
 ### 2. Always Close Channels
@@ -585,10 +663,13 @@ Log.run {
 ## Performance Considerations
 
 - **Unbounded channels** can lead to unbounded memory usage if producers are faster than consumers
-- **Bounded channels** provide natural backpressure but may cause producers to suspend
+- **Bounded channels with SUSPEND** provide natural backpressure but may cause producers to suspend
+- **Bounded channels with DROP_OLDEST/DROP_LATEST** never suspend but may lose data; use when data loss is acceptable
 - **Rendezvous channels** provide the strongest synchronization but the lowest throughput
 - Use appropriate buffer sizes for bounded channels based on your workload
-- Consider the trade-offs between throughput, latency, and memory usage
+- Consider the trade-offs between throughput, latency, memory usage, and data loss tolerance
+- DROP_OLDEST is ideal for monitoring scenarios where only current state matters
+- DROP_LATEST is ideal for preserving historical data when buffer fills
 
 ## Thread Safety
 
