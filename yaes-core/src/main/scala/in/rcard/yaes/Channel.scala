@@ -815,8 +815,10 @@ private class RendezvousQueue[T](private val delegate: SynchronousQueue[T])
 private class DropOldestBoundedQueue[T](private val delegate: ArrayBlockingQueue[T])
     extends ChannelQueue[T] {
   override def put(e: T): Unit = {
-    while (!delegate.offer(e)) {
-      delegate.poll()
+    delegate.synchronized {
+      while (!delegate.offer(e)) {
+        delegate.poll()
+      }
     }
   }
 
