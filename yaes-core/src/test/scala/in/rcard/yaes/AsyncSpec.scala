@@ -533,6 +533,29 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe TimedOut
   }
 
+  it should "use the provided name for forked fibers" in {
+    val threadNames = new ConcurrentLinkedQueue[String]()
+    
+    Async.run {
+      val fb1 = Async.fork("custom-fiber-1") {
+        threadNames.add(Thread.currentThread().getName())
+        Async.delay(100.millis)
+      }
+      
+      val fb2 = Async.fork("custom-fiber-2") {
+        threadNames.add(Thread.currentThread().getName())
+        Async.delay(100.millis)
+      }
+      
+      fb1.join()
+      fb2.join()
+    }
+
+    val names = threadNames.toArray().toList.asInstanceOf[List[String]]
+    names should have size 2
+    names.forall(_.contains("custom-fiber")) shouldBe true
+  }
+
   "forkOn on a Flow" should "execute the flow in a dedicated fiber" in {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {

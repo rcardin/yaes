@@ -11,6 +11,7 @@ import ju.concurrent.StructuredTaskScope
 import ju.concurrent.StructuredTaskScope.ShutdownOnFailure
 import ju.concurrent.StructuredTaskScope.Subtask
 import ju.concurrent.SynchronousQueue
+import ju.concurrent.ThreadFactory
 import ju.function.Consumer
 import ju.concurrent.ConcurrentHashMap
 
@@ -151,7 +152,7 @@ class JvmAsync extends Async.Unsafe {
     JvmAsync.scope
       .get()
       .fork(() => {
-        val innerScope = new ShutdownOnFailure()
+        val innerScope = new ShutdownOnFailure(name, JvmAsync.namedThreadFactory(name))
         forkedThread.complete(Thread.currentThread())
         try {
           val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
@@ -183,6 +184,10 @@ class JvmAsync extends Async.Unsafe {
 object JvmAsync {
 
   private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any]] = new ThreadLocal()
+
+  private[yaes] def namedThreadFactory(name: String): ThreadFactory = {
+    Thread.ofVirtual().name(name).factory()
+  }
 }
 
 /** Companion object for [[Async]] providing utility methods and constructors.
@@ -527,7 +532,10 @@ object Async {
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
         val async     = new JvmAsync()
-        val loomScope = new ShutdownOnFailure()
+        val loomScope = new ShutdownOnFailure(
+          "yaes-async-handler",
+          JvmAsync.namedThreadFactory("yaes-async-handler")
+        )
         try {
           val mainTask = loomScope.fork(() => {
             try {
