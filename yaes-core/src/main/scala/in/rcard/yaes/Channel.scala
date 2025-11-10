@@ -689,8 +689,8 @@ object Channel {
     private def sendSuspend(value: T)(using Async, Raise[ChannelClosed]): Unit = {
       while (queue.size() >= capacity) {
         if (cancelled) {
-          return ()
           Thread.currentThread().interrupt()
+          return ()
         }
         if (closed) {
           Raise.raise(ChannelClosed)
@@ -699,8 +699,8 @@ object Channel {
       }
 
       if (cancelled) {
-        return ()
         Thread.currentThread().interrupt()
+        return ()
       }
       if (closed) {
         Raise.raise(ChannelClosed)
