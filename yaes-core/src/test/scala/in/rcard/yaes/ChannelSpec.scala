@@ -303,14 +303,16 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     Raise.run {
       Async.run {
         val senderFiber = Async.fork {
-          actualQueue.put("p1")
           channel.send(1)
+          actualQueue.put("p1")
           Async.delay(100.millis)
-          actualQueue.put("p2")
           channel.send(2)
+          actualQueue.put("p2")
         }
 
-        Async.delay(200.millis)
+        Async.delay(300.millis)
+
+        actualQueue.toArray should contain theSameElementsInOrderAs List("p1")
 
         actualQueue.put(s"c${channel.receive()}")
         actualQueue.put(s"c${channel.receive()}")
@@ -318,7 +320,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List("p1", "c1", "p2", "c2")
+    actualQueue.toArray should contain theSameElementsAs List("p1", "c1", "p2", "c2")
   }
 
   "Bounded channel with DROP_OLDEST policy" should "drop oldest element when buffer is full" in {
