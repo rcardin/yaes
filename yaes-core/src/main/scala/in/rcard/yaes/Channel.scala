@@ -692,8 +692,7 @@ object Channel {
       *   the async context
       * @param raise
       *   the raise context for handling [[ChannelClosed]] errors
-      * @throws ChannelClosed
-      *   if the channel is closed
+      * Raises [[ChannelClosed]] via the `Raise` context if the channel is closed.
       */
     private def sendSuspend(value: T)(using Async, Raise[ChannelClosed]): Unit = {
       while (queue.size() >= capacity) {
