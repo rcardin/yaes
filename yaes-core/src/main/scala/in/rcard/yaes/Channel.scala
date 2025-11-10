@@ -546,8 +546,8 @@ object Channel {
     */
   private class RendezvousChannel[T] extends Channel[T] {
 
-    private var item: T          = null.asInstanceOf[T]; // FIXME
-    @volatile private var hasItem: Boolean = false;
+    private var item: T          = null.asInstanceOf[T];
+    @volatile private var hasItem: Boolean = false
 
     override def receive()(using Async, Raise[ChannelClosed]): T = {
       lock.lock()
@@ -1043,58 +1043,6 @@ abstract class Channel[T] extends Channel.ReceiveChannel[T], Channel.SendChannel
 
   /** Atomic reference to the current status of the channel. */
   private val status = new AtomicReference(Status.Open)
-
-  /** Receives an element from the channel, suspending if necessary.
-    *
-    * This operation blocks the current thread until an element is available or the channel is
-    * closed. If the channel is closed and empty, it raises [[Channel.ChannelClosed]].
-    *
-    * @param async
-    *   the async context
-    * @param raise
-    *   the raise context for handling errors
-    * @return
-    *   the received element
-    * @throws Channel.ChannelClosed
-    *   if the channel is closed and empty
-    */
-  // override def receive()(using Async, Raise[ChannelClosed]): T = {
-  //   val element = queue.take()
-  //   element match {
-  //     case ClosedMarker =>
-  //       queue.offer(ClosedMarker)
-  //       Raise.raise(ChannelClosed)
-  //     case value =>
-  //       if (status.get() == Status.Close) {
-  //         queue.offer(ClosedMarker)
-  //       }
-  //       value.asInstanceOf[T]
-  //   }
-  // }
-
-  /** Sends an element to the channel, suspending if necessary.
-    *
-    * This operation blocks the current thread if the channel's buffer is full (for bounded
-    * channels) or until a receiver is ready (for rendezvous channels).
-    *
-    * @param value
-    *   the element to send
-    * @param async
-    *   the async context
-    * @param raise
-    *   the raise context for handling errors
-    * @throws Channel.ChannelClosed
-    *   if the channel is closed
-    */
-  // override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
-  //   status.get() match {
-  //     case Status.Cancelled =>
-  //       Thread.currentThread().interrupt()
-  //     case Status.Close =>
-  //       Raise.raise(ChannelClosed)
-  //     case Status.Open =>
-  //       queue.put(value)
-  //   }
 
   /** Closes the channel, preventing further sends.
     *
