@@ -1,13 +1,109 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Channel.SendChannel
-import java.util.concurrent.BlockingQueue
-import java.util.concurrent.atomic.AtomicBoolean
 import in.rcard.yaes.Channel.ChannelClosed
-import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.SynchronousQueue
+import in.rcard.yaes.Channel.SendChannel
+
+import java.util.LinkedList
+import java.util.Queue
+import java.util.concurrent.locks.ReentrantLock
+
+/** A channel implementation that supports both sending and receiving operations.
+  *
+  * This class implements both [[Channel.SendChannel]] and [[Channel.ReceiveChannel]], providing
+  * full bidirectional channel operations.
+  *
+  * The channel maintains internal state to track whether it's open, closed, or cancelled:
+  *   - '''Open''': Normal operation; send and receive work normally
+  *   - '''Closed''': No more sends allowed; remaining buffered elements can still be received
+  *   - '''Cancelled''': All buffered elements are cleared; operations fail immediately
+  *
+  * Example usage:
+  * {{{
+  * val channel = Channel.bounded[String](10)
+  *
+  * Raise.run {
+  *   Async.run {
+  *     // Producer fiber
+  *     Async.fork {
+  *       channel.send("Hello")
+  *       channel.send("World")
+  *       channel.close()
+  *     }
+  *
+  *     // Consumer fiber
+  *     println(channel.receive()) // "Hello"
+  *     println(channel.receive()) // "World"
+  *     channel.receive() // Raises ChannelClosed
+  *   }
+  * }
+  * }}}
+  *
+  * @tparam T
+  *   the type of elements in the channel
+  */
+abstract class Channel[T] extends Channel.ReceiveChannel[T], Channel.SendChannel[T] {
+
+  /** Synchronization lock for thread-safe access to channel state. */
+  protected val lock = new ReentrantLock()
+
+  /** Condition variable signaled when elements are added to the channel. */
+  protected val notEmpty = lock.newCondition()
+
+  /** Condition variable signaled when elements are removed from the channel. */
+  protected val notFull = lock.newCondition()
+
+  /** Flag indicating whether the channel has been closed. */
+  @volatile protected var closed = false
+
+  /** Flag indicating whether the channel has been cancelled. */
+  @volatile protected var cancelled = false
+
+  protected def clearBuffer(): Unit
+
+  /** Closes the channel, preventing further sends.
+    *
+    * After closing, attempts to send will raise [[Channel.ChannelClosed]]. Receivers can still
+    * consume buffered elements until the queue is empty.
+    *
+    * @return
+    *   `true` if the channel was successfully closed, `false` if already closed or cancelled
+    */
+  override def close(): Boolean = {
+    lock.lock()
+    try {
+      if (closed) {
+        return false
+      }
+      closed = true
+      notFull.signalAll()
+      notEmpty.signalAll()
+    } finally {
+      lock.unlock()
+    }
+    true
+  }
+
+  /** Cancels the channel and clears all buffered elements.
+    *
+    * This operation immediately discards all buffered elements and marks the channel as cancelled.
+    * Ongoing send/receive operations are interrupted.
+    *
+    * @param async
+    *   the async context
+    */
+  override def cancel()(using Async): Unit = {
+    lock.lock()
+    try {
+      closed = true
+      cancelled = true
+      clearBuffer()
+      notFull.signalAll()
+      notEmpty.signalAll()
+    } finally {
+      lock.unlock()
+    }
+  }
+}
 
 /** A channel is a communication primitive for transferring data between asynchronous computations.
   * Conceptually, a channel is similar to [[java.util.concurrent.BlockingQueue]], but it has
@@ -89,11 +185,16 @@ object Channel {
 
     /** A bounded channel with a fixed buffer capacity.
       *
-      * When the buffer is full, the sender suspends until there is space available. This provides
-      * backpressure to prevent overwhelming the receiver.
+      * When the buffer is full, the behavior depends on the `onOverflow` policy:
+      *   - [[OverflowStrategy.SUSPEND]]: The sender suspends until space becomes available
+      *     (default)
+      *   - [[OverflowStrategy.DROP_OLDEST]]: The oldest element is dropped to make space
+      *   - [[OverflowStrategy.DROP_LATEST]]: The new element is discarded
       *
       * Example:
       * {{{
+      * import Channel.OverflowStrategy
+      *
       * val channel = Channel.bounded[Int](capacity = 2)
       *
       * Raise.run {
@@ -109,8 +210,11 @@ object Channel {
       *
       * @param capacity
       *   the maximum number of elements that can be buffered
+      * @param onOverflow
+      *   the strategy to use when the buffer is full (default: [[OverflowStrategy.SUSPEND]])
       */
-    case class Bounded(capacity: Int) extends Type
+    case class Bounded(capacity: Int, onOverflow: OverflowStrategy = OverflowStrategy.SUSPEND)
+        extends Type
 
     /** A rendezvous channel with no buffer.
       *
@@ -137,6 +241,54 @@ object Channel {
       * }}}
       */
     case object Rendezvous extends Type
+  }
+
+  /** A strategy for buffer overflow handling in bounded channels.
+    *
+    * This controls what happens when a bounded channel's buffer is full and a new element is sent:
+    *   - [[OverflowStrategy.SUSPEND]]: The sender suspends until space becomes available (default
+    *     behavior)
+    *   - [[OverflowStrategy.DROP_OLDEST]]: The oldest value in the buffer is dropped and the new
+    *     value is added
+    *   - [[OverflowStrategy.DROP_LATEST]]: The new value is discarded and the buffer remains
+    *     unchanged
+    *
+    * Example:
+    * {{{
+    * import Channel.OverflowStrategy
+    *
+    * // Channel that drops oldest element when full
+    * val channel1 = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+    *
+    * // Channel that drops newest element when full
+    * val channel2 = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+    *
+    * // Channel that suspends sender when full (default)
+    * val channel3 = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.SUSPEND)
+    * }}}
+    */
+  enum OverflowStrategy {
+
+    /** Suspends the sender until space becomes available in the buffer.
+      *
+      * This is the default behavior for bounded channels and provides backpressure to prevent fast
+      * producers from overwhelming slow consumers.
+      */
+    case SUSPEND
+
+    /** Drops the oldest element in the buffer and adds the new element.
+      *
+      * When the buffer is full, the oldest buffered element is removed to make space for the new
+      * element. The send operation completes immediately without suspending.
+      */
+    case DROP_OLDEST
+
+    /** Drops the new element and keeps the buffer unchanged.
+      *
+      * When the buffer is full, the new element being sent is discarded and the buffer remains
+      * unchanged. The send operation completes immediately without suspending.
+      */
+    case DROP_LATEST
   }
 
   /** Indicates that a channel operation failed because the channel was closed. */
@@ -317,28 +469,34 @@ object Channel {
     */
   def unbounded[T](): Channel[T] = Channel(Type.Unbounded)
 
-  /** Creates a bounded channel with the specified capacity.
+  /** Creates a bounded channel with the specified capacity and overflow policy.
     *
-    * A bounded channel provides backpressure: when the buffer is full, senders suspend until space
-    * becomes available. This is useful for controlling memory usage and preventing fast producers
-    * from overwhelming slow consumers.
+    * A bounded channel controls behavior when the buffer is full based on the `onOverflow` policy:
+    *   - [[OverflowStrategy.SUSPEND]]: Senders suspend until space becomes available (default)
+    *   - [[OverflowStrategy.DROP_OLDEST]]: The oldest element is dropped to make space
+    *   - [[OverflowStrategy.DROP_LATEST]]: The new element is discarded
     *
     * Example:
     * {{{
-    * val channel = Channel.bounded[String](capacity = 10)
+    * import Channel.OverflowStrategy
+    *
+    * // Default behavior: suspend when full
+    * val channel1 = Channel.bounded[String](capacity = 10)
+    *
+    * // Drop oldest element when full
+    * val channel2 = Channel.bounded[Int](capacity = 5, onOverflow = OverflowStrategy.DROP_OLDEST)
     *
     * Raise.run {
     *   Async.run {
     *     val producer = Async.fork {
     *       (1 to 100).foreach { i =>
-    *         channel.send(s"message-$i") // Suspends when buffer is full
+    *         channel2.send(i) // Never suspends; drops oldest when full
     *       }
     *     }
-    *     channel.close()
+    *     channel2.close()
     *
-    *     channel.foreach { msg =>
-    *       Async.delay(100.millis) // Slow consumer
-    *       println(msg)
+    *     channel2.foreach { msg =>
+    *       println(msg) // Only receives last 5 elements
     *     }
     *   }
     * }
@@ -346,12 +504,17 @@ object Channel {
     *
     * @param capacity
     *   the maximum number of elements that can be buffered
+    * @param onOverflow
+    *   the strategy to use when the buffer is full (default: [[OverflowStrategy.SUSPEND]])
     * @tparam T
     *   the type of elements in the channel
     * @return
     *   a new bounded channel
     */
-  def bounded[T](capacity: Int): Channel[T] = Channel(Type.Bounded(capacity))
+  def bounded[T](
+      capacity: Int,
+      onOverflow: OverflowStrategy = OverflowStrategy.SUSPEND
+  ): Channel[T] = Channel(Type.Bounded(capacity, onOverflow))
 
   /** Creates a rendezvous channel (zero buffer capacity).
     *
@@ -406,12 +569,295 @@ object Channel {
     * @return
     *   a new channel with the specified type
     */
-  def apply[T](channelType: Type): Channel[T] = channelType match {
-    case Type.Unbounded         => new Channel[T](new LinkedBlockingQueue[Any]())
-    case Type.Bounded(capacity) =>
-      new Channel[T](new ArrayBlockingQueue[Any](capacity))
-    case Type.Rendezvous =>
-      new Channel[T](new SynchronousQueue[Any]())
+  def apply[T](channelType: Type): Channel[T] =
+    channelType match {
+      case Type.Unbounded                     => new UnboundedChannel[T]()
+      case Type.Bounded(capacity, onOverflow) => new BoundedChannel[T](capacity, onOverflow)
+      case Type.Rendezvous                    => new RendezvousChannel[T]()
+    }
+
+  /** Implementation of an unbounded channel with unlimited buffer capacity.
+    *
+    * This channel uses a [[LinkedList]] as the backing queue, which can grow without bounds.
+    * Senders never suspend in this implementation, making it suitable for scenarios where
+    * throughput is prioritized over memory constraints.
+    *
+    * @tparam T
+    *   the type of elements in the channel
+    */
+  private class UnboundedChannel[T] extends Channel[T] {
+
+    private val queue: Queue[T] = new LinkedList[T]
+
+    override protected def clearBuffer(): Unit = queue.clear()
+
+    override def receive()(using Async, Raise[ChannelClosed]): T = {
+      lock.lock()
+      try {
+        while (queue.isEmpty) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          notEmpty.await()
+        }
+        if (cancelled || (queue.isEmpty && closed)) {
+          Raise.raise(ChannelClosed)
+        }
+        val value = queue.poll()
+        value
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def send(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+      lock.lock()
+      try {
+        if (cancelled) {
+          Thread.currentThread().interrupt()
+          return ()
+        } else if (closed) {
+          Raise.raise(ChannelClosed)
+        } else {
+          queue.offer(value)
+          notEmpty.signal()
+        }
+      } finally {
+        lock.unlock()
+      }
+    }
+  }
+
+  /** Implementation of a rendezvous channel with zero buffer capacity.
+    *
+    * This channel has no buffer and requires sender and receiver to meet (rendezvous)
+    * simultaneously. The sender suspends until a receiver is ready, and vice versa. This provides
+    * the strongest synchronization guarantee between communicating parties.
+    *
+    * @tparam T
+    *   the type of elements in the channel
+    */
+  private class RendezvousChannel[T] extends Channel[T] {
+
+    private var item: T          = null.asInstanceOf[T]
+    private var hasItem: Boolean = false
+
+    override protected def clearBuffer(): Unit = {
+      item = null.asInstanceOf[T]
+      hasItem = false
+    }
+
+    override def receive()(using Async, Raise[ChannelClosed]): T = {
+      lock.lock()
+      try {
+        while (!hasItem) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          notEmpty.await()
+        }
+        if (cancelled || (!hasItem && closed)) {
+          Raise.raise(ChannelClosed)
+        }
+        val value = item
+        item = null.asInstanceOf[T]
+        hasItem = false
+        notFull.signal()
+        value
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def send(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+      lock.lock()
+      try {
+        if (cancelled) {
+          Thread.currentThread().interrupt()
+          return ()
+        } else if (closed) {
+          Raise.raise(ChannelClosed)
+        }
+
+        while (hasItem) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          notFull.await()
+        }
+
+        if (cancelled) {
+          Thread.currentThread().interrupt()
+          return ()
+        } else if (closed) {
+          Raise.raise(ChannelClosed)
+        }
+
+        item = value
+        hasItem = true
+        notEmpty.signal()
+        while (hasItem) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          if (cancelled) {
+            Thread.currentThread().interrupt()
+            return ()
+          }
+          notFull.await()
+        }
+      } finally {
+        lock.unlock()
+      }
+    }
+  }
+
+  /** Implementation of a bounded channel with fixed buffer capacity and configurable overflow
+    * handling.
+    *
+    * This channel limits the number of buffered elements to the specified capacity. When the buffer
+    * is full, the behavior depends on the [[OverflowStrategy]]:
+    *   - [[OverflowStrategy.SUSPEND]]: Senders suspend until space becomes available
+    *   - [[OverflowStrategy.DROP_OLDEST]]: The oldest buffered element is removed
+    *   - [[OverflowStrategy.DROP_LATEST]]: The new element is discarded
+    *
+    * @param capacity
+    *   the maximum number of elements that can be buffered
+    * @param onOverflow
+    *   the strategy to apply when the buffer is full
+    * @tparam T
+    *   the type of elements in the channel
+    */
+  private class BoundedChannel[T](capacity: Int, onOverflow: Channel.OverflowStrategy)
+      extends Channel[T] {
+
+    private val queue: Queue[T] = new LinkedList[T]
+
+    override protected def clearBuffer(): Unit = queue.clear()
+
+    override def receive()(using Async, Raise[ChannelClosed]): T = {
+      lock.lock()
+      try {
+        while (queue.isEmpty) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          notEmpty.await()
+        }
+
+        if (cancelled || (queue.isEmpty && closed)) {
+          Raise.raise(ChannelClosed)
+        }
+
+        val value = queue.poll()
+
+        if (onOverflow == OverflowStrategy.SUSPEND) {
+          notFull.signal()
+        }
+        value
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def send(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+      lock.lock()
+      try {
+        if (cancelled) {
+          Thread.currentThread().interrupt()
+          return ()
+        } else if (closed) {
+          Raise.raise(ChannelClosed)
+        } else {
+
+          onOverflow match {
+            case OverflowStrategy.SUSPEND     => sendSuspend(value)
+            case OverflowStrategy.DROP_LATEST => sendDropLatest(value)
+            case OverflowStrategy.DROP_OLDEST => sendDropOldest(value)
+          }
+        }
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    /** Sends a value using the SUSPEND overflow strategy.
+      *
+      * This method suspends the sender when the buffer is full, waiting until space becomes
+      * available. This provides backpressure to prevent fast producers from overwhelming slow
+      * consumers.
+      *
+      * @param value
+      *   the element to send
+      * @param async
+      *   the async context
+      * @param raise
+      *   the raise context for handling [[ChannelClosed]] errors Raises [[ChannelClosed]] via the
+      *   `Raise` context if the channel is closed.
+      */
+    private def sendSuspend(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+      while (queue.size() >= capacity) {
+        if (cancelled) {
+          Thread.currentThread().interrupt()
+          return ()
+        }
+        if (closed) {
+          Raise.raise(ChannelClosed)
+        }
+        notFull.await()
+      }
+
+      if (cancelled) {
+        Thread.currentThread().interrupt()
+        return ()
+      }
+      if (closed) {
+        Raise.raise(ChannelClosed)
+      }
+
+      queue.offer(value)
+      notEmpty.signal()
+    }
+
+    /** Sends a value using the DROP_OLDEST overflow strategy.
+      *
+      * When the buffer is full, this method removes the oldest buffered element to make space for
+      * the new value. The send operation completes immediately without suspending.
+      *
+      * @param value
+      *   the element to send
+      * @param async
+      *   the async context
+      * @param raise
+      *   the raise context for handling [[ChannelClosed]] errors
+      */
+    private def sendDropOldest(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+      if (queue.size() >= capacity) {
+        queue.poll()
+      }
+
+      queue.offer(value)
+      notEmpty.signal()
+    }
+
+    /** Sends a value using the DROP_LATEST overflow strategy.
+      *
+      * When the buffer is full, this method discards the new value and keeps the buffer unchanged.
+      * The send operation completes immediately without suspending.
+      *
+      * @param value
+      *   the element to send (may be discarded)
+      * @param async
+      *   the async context
+      * @param raise
+      *   the raise context for handling [[ChannelClosed]] errors
+      */
+    private def sendDropLatest(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+      if (queue.size() < capacity) {
+        queue.offer(value)
+        notEmpty.signal()
+      }
+    }
   }
 
   /** Extension methods for [[ReceiveChannel]]. */
@@ -631,135 +1077,5 @@ object Channel {
         }
       }
     channel
-  }
-}
-
-/** A channel implementation that supports both sending and receiving operations.
-  *
-  * This class implements both [[Channel.SendChannel]] and [[Channel.ReceiveChannel]], providing
-  * full bidirectional channel operations. Channels are backed by Java's [[BlockingQueue]]
-  * implementations and provide thread-safe concurrent access.
-  *
-  * The channel maintains internal state to track whether it's open, closed, or cancelled:
-  *   - '''Open''': Normal operation; send and receive work normally
-  *   - '''Closed''': No more sends allowed; remaining buffered elements can still be received
-  *   - '''Cancelled''': All buffered elements are cleared; operations fail immediately
-  *
-  * Example usage:
-  * {{{
-  * val channel = Channel.bounded[String](10)
-  *
-  * Raise.run {
-  *   Async.run {
-  *     // Producer fiber
-  *     Async.fork {
-  *       channel.send("Hello")
-  *       channel.send("World")
-  *       channel.close()
-  *     }
-  *
-  *     // Consumer fiber
-  *     println(channel.receive()) // "Hello"
-  *     println(channel.receive()) // "World"
-  *     channel.receive() // Raises ChannelClosed
-  *   }
-  * }
-  * }}}
-  *
-  * @param queue
-  *   the underlying blocking queue for buffering elements
-  * @tparam T
-  *   the type of elements in the channel
-  */
-class Channel[T] private (private val queue: BlockingQueue[Any])
-    extends Channel.ReceiveChannel[T],
-      Channel.SendChannel[T] {
-
-  /** Internal status of the channel. */
-  private enum Status {
-    case Open, Close, Cancelled
-  }
-
-  /** Marker object to indicate closed state in the queue. */
-  private object ClosedMarker
-
-  private val status = new AtomicReference(Status.Open)
-
-  /** Receives an element from the channel, suspending if necessary.
-    *
-    * This operation blocks the current thread until an element is available or the channel is
-    * closed. If the channel is closed and empty, it raises [[Channel.ChannelClosed]].
-    *
-    * @param async
-    *   the async context
-    * @param raise
-    *   the raise context for handling errors
-    * @return
-    *   the received element
-    * @throws Channel.ChannelClosed
-    *   if the channel is closed and empty
-    */
-  override def receive()(using Async, Raise[ChannelClosed]): T =
-    queue.take() match {
-      case ClosedMarker =>
-        queue.offer(ClosedMarker)
-        Raise.raise(ChannelClosed)
-      case value =>
-        value.asInstanceOf[T]
-    }
-
-  /** Sends an element to the channel, suspending if necessary.
-    *
-    * This operation blocks the current thread if the channel's buffer is full (for bounded
-    * channels) or until a receiver is ready (for rendezvous channels).
-    *
-    * @param value
-    *   the element to send
-    * @param async
-    *   the async context
-    * @param raise
-    *   the raise context for handling errors
-    * @throws Channel.ChannelClosed
-    *   if the channel is closed
-    */
-  override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
-    status.get() match {
-      case Status.Cancelled =>
-        Thread.currentThread().interrupt()
-      case Status.Close =>
-        Raise.raise(ChannelClosed)
-      case Status.Open =>
-        queue.put(value)
-    }
-
-  /** Closes the channel, preventing further sends.
-    *
-    * After closing, attempts to send will raise [[Channel.ChannelClosed]]. Receivers can still
-    * consume buffered elements until the queue is empty.
-    *
-    * @return
-    *   `true` if the channel was successfully closed, `false` if already closed or cancelled
-    */
-  override def close(): Boolean = {
-    if (status.compareAndSet(Status.Open, Status.Close)) {
-      queue.offer(ClosedMarker)
-      true
-    } else {
-      false
-    }
-  }
-
-  /** Cancels the channel and clears all buffered elements.
-    *
-    * This operation immediately discards all buffered elements and marks the channel as cancelled.
-    * Ongoing send/receive operations are interrupted.
-    *
-    * @param async
-    *   the async context
-    */
-  override def cancel()(using Async): Unit = {
-    status.set(Status.Cancelled)
-    queue.clear()
-    queue.offer(ClosedMarker)
   }
 }

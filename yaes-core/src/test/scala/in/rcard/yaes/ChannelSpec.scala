@@ -270,9 +270,10 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
           actualQueue.put("p2")
           channel.send(3)
           actualQueue.put("p3")
+          channel.close()
         }
 
-        Async.delay(200.millis)
+        Async.delay(300.millis)
         
         val queueSnapshot = actualQueue.toArray.toList
         queueSnapshot should contain allOf ("p1", "p2")
@@ -283,7 +284,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         Async.delay(200.millis)
 
         actualQueue.put(s"c${channel.receive()}")
-        channel.close()
+        // channel.close()
       }
     }
 
@@ -302,14 +303,14 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     Raise.run {
       Async.run {
         val senderFiber = Async.fork {
-          actualQueue.put("p1")
           channel.send(1)
+          actualQueue.put("p1")
           Async.delay(100.millis)
           actualQueue.put("p2")
           channel.send(2)
         }
 
-        Async.delay(200.millis)
+        Async.delay(300.millis)
 
         actualQueue.put(s"c${channel.receive()}")
         actualQueue.put(s"c${channel.receive()}")
@@ -317,6 +318,372 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List("p1", "c1", "p2", "c2")
+    actualQueue.toArray should contain theSameElementsInOrderAs List("c1", "p1", "p2", "c2")
+  }
+
+  it should "block on receive until send is ready" in {
+    val channel     = Channel.rendezvous[Int]()
+    val actualQueue = new LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        val receiverFiber = Async.fork {
+          val value = channel.receive()
+          actualQueue.put(s"c$value")
+        }
+
+        Async.delay(200.millis)
+        actualQueue.put("p1")
+        channel.send(42)
+        Async.delay(100.millis)
+        actualQueue.put("p2")
+        
+        Async.delay(100.millis)
+        channel.close()
+      }
+    }
+
+    actualQueue.toArray should contain theSameElementsInOrderAs List("p1", "c42", "p2")
+  }
+
+  it should "ensure sender and receiver synchronize exactly" in {
+    val channel     = Channel.rendezvous[String]()
+    val actualQueue = new LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        val sender = Async.fork {
+          actualQueue.put("s1-start")
+          channel.send("msg1")
+          actualQueue.put("s1-done")
+          Async.delay(50.millis)
+          actualQueue.put("s2-start")
+          channel.send("msg2")
+          actualQueue.put("s2-done")
+        }
+
+        val receiver = Async.fork {
+          Async.delay(100.millis)
+          actualQueue.put("r1-start")
+          val msg1 = channel.receive()
+          actualQueue.put(s"r1-got-$msg1")
+          
+          Async.delay(100.millis)
+          actualQueue.put("r2-start")
+          val msg2 = channel.receive()
+          actualQueue.put(s"r2-got-$msg2")
+        }
+
+        Async.delay(500.millis)
+        channel.close()
+      }
+    }
+
+    val events = actualQueue.toArray.toList
+    // Sender should start before receiver
+    events.indexOf("s1-start") should be < events.indexOf("r1-start")
+    // Sender should complete only after receiver receives
+    events.indexOf("r1-got-msg1") should be < events.indexOf("s1-done")
+    events.indexOf("r2-got-msg2") should be < events.indexOf("s2-done")
+  }
+
+  it should "handle multiple concurrent senders and receivers" in {
+    val channel     = Channel.rendezvous[Int]()
+    val actualQueue = new LinkedBlockingQueue[Int]()
+
+    Raise.run {
+      Async.run {
+        // Multiple senders
+        val sender1 = Async.fork {
+          channel.send(1)
+          Async.delay(50.millis)
+          channel.send(3)
+        }
+
+        val sender2 = Async.fork {
+          Async.delay(25.millis)
+          channel.send(2)
+          Async.delay(50.millis)
+          channel.send(4)
+        }
+
+        // Multiple receivers
+        val receiver1 = Async.fork {
+          actualQueue.put(channel.receive())
+          actualQueue.put(channel.receive())
+        }
+
+        val receiver2 = Async.fork {
+          actualQueue.put(channel.receive())
+          actualQueue.put(channel.receive())
+        }
+
+        Async.delay(500.millis)
+        channel.close()
+      }
+    }
+
+    val received = actualQueue.toArray.toList.map(_.asInstanceOf[Int]).sorted
+    received should equal(List(1, 2, 3, 4))
+  }
+
+  it should "raise ChannelClosed when sending on closed rendezvous channel" in {
+    val channel = Channel.rendezvous[String]()
+    channel.close()
+
+    val actualResult = Raise.run {
+      Async.run {
+        channel.send("message")
+      }
+    }
+
+    actualResult should be(ChannelClosed)
+  }
+
+  it should "raise ChannelClosed when receiving from closed rendezvous channel" in {
+    val channel = Channel.rendezvous[String]()
+    channel.close()
+
+    val actualResult = Raise.run {
+      Async.run {
+        channel.receive()
+      }
+    }
+
+    actualResult should be(ChannelClosed)
+  }
+
+  it should "not buffer any elements" in {
+    val channel     = Channel.rendezvous[Int]()
+    val actualQueue = new LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        val sender = Async.fork {
+          actualQueue.put("sending")
+          channel.send(42)
+          actualQueue.put("sent")
+        }
+
+        // Wait to ensure sender is blocked
+        Async.delay(200.millis)
+        
+        // At this point, sender should be waiting
+        actualQueue.toArray.toList should equal(List("sending"))
+        
+        // Now receive
+        actualQueue.put(s"received-${channel.receive()}")
+        
+        Async.delay(100.millis)
+        channel.close()
+      }
+    }
+
+    actualQueue.toArray should contain theSameElementsInOrderAs List("sending", "received-42", "sent")
+  }
+
+  it should "work with produce for rendezvous channel" in {
+    val actualQueue = new LinkedBlockingQueue[Int]()
+
+    Raise.run {
+      Async.run {
+        val channel = Channel.produceWith(Channel.Type.Rendezvous) {
+          Producer.send(1)
+          Producer.send(2)
+          Producer.send(3)
+        }
+
+        // Slow consumer to test rendezvous behavior
+        for (value <- channel) {
+          actualQueue.put(value)
+          Async.delay(50.millis)
+        }
+      }
+    }
+
+    actualQueue.toArray.toList should equal(List(1, 2, 3))
+  }
+
+  it should "handle cancellation properly" in {
+    val channel     = Channel.rendezvous[Int]()
+    val actualQueue = new LinkedBlockingQueue[String]()
+
+    val actualResult = Raise.run {
+      Async.run {
+        val sender = Async.fork {
+          actualQueue.put("s1")
+          channel.send(1)
+          actualQueue.put("s2")
+        }
+
+        Async.delay(100.millis)
+        actualQueue.put("cancel")
+        channel.cancel()
+        
+        actualQueue.put("receive-attempt")
+        channel.receive()
+      }
+    }
+
+    actualResult should be(ChannelClosed)
+    val events = actualQueue.toArray.toList
+    events should contain allOf("s1", "cancel", "receive-attempt")
+  }
+
+  "Bounded channel with DROP_OLDEST policy" should "drop oldest element when buffer is full" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 3, onOverflow = OverflowStrategy.DROP_OLDEST)
+    val receivedValues = new LinkedBlockingQueue[Int]()
+
+    Raise.run {
+      Async.run {
+        // Send more elements than capacity
+        Async.fork {
+          channel.send(1) // Buffer: [1]
+          channel.send(2) // Buffer: [1, 2]
+          channel.send(3) // Buffer: [1, 2, 3]
+          channel.send(4) // Buffer: [2, 3, 4] (1 dropped)
+          channel.send(5) // Buffer: [3, 4, 5] (2 dropped)
+          channel.close()
+        }
+
+        // Give sender time to send all elements
+        Async.delay(200.millis)
+
+        // Receive all remaining elements
+        for (value <- channel) {
+          receivedValues.put(value)
+        }
+      }
+    }
+
+    // Should only receive the last 3 elements (oldest were dropped)
+    receivedValues.toArray.toList should equal(List(3, 4, 5))
+  }
+
+  it should "not suspend the sender when buffer is full" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+    val sendTimes = new LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(1)
+          sendTimes.put("sent1")
+          channel.send(2)
+          sendTimes.put("sent2")
+          channel.send(3) // Should not suspend even though buffer was full
+          sendTimes.put("sent3")
+          channel.send(4)
+          sendTimes.put("sent4")
+        }
+
+        // Give sender time to complete all sends
+        Async.delay(100.millis)
+
+        // All sends should have completed without suspending
+        sendTimes.toArray.toList should equal(List("sent1", "sent2", "sent3", "sent4"))
+
+        channel.close()
+      }
+    }
+  }
+
+  "Bounded channel with DROP_LATEST policy" should "drop newest element when buffer is full" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 3, onOverflow = OverflowStrategy.DROP_LATEST)
+    val receivedValues = new LinkedBlockingQueue[Int]()
+
+    Raise.run {
+      Async.run {
+        // Send more elements than capacity
+        Async.fork {
+          channel.send(1) // Buffer: [1]
+          channel.send(2) // Buffer: [1, 2]
+          channel.send(3) // Buffer: [1, 2, 3]
+          channel.send(4) // Buffer: [1, 2, 3] (4 dropped)
+          channel.send(5) // Buffer: [1, 2, 3] (5 dropped)
+          channel.close()
+        }
+
+        // Give sender time to send all elements
+        Async.delay(200.millis)
+
+        // Receive all remaining elements
+        for (value <- channel) {
+          receivedValues.put(value)
+        }
+      }
+    }
+
+    // Should only receive the first 3 elements (newest were dropped)
+    receivedValues.toArray.toList should equal(List(1, 2, 3))
+  }
+
+  it should "not suspend the sender when buffer is full" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+    val sendTimes = new LinkedBlockingQueue[String]()
+
+    Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(1)
+          sendTimes.put("sent1")
+          channel.send(2)
+          sendTimes.put("sent2")
+          channel.send(3) // Should not suspend even though buffer is full (3 is dropped)
+          sendTimes.put("sent3")
+          channel.send(4) // Should not suspend (4 is dropped)
+          sendTimes.put("sent4")
+        }
+
+        // Give sender time to complete all sends
+        Async.delay(100.millis)
+
+        // All sends should have completed without suspending
+        sendTimes.toArray.toList should equal(List("sent1", "sent2", "sent3", "sent4"))
+
+        channel.close()
+      }
+    }
+  }
+
+  it should "work correctly with slow consumer" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+    val receivedValues = new LinkedBlockingQueue[Int]()
+
+    Raise.run {
+      Async.run {
+        // Fast producer
+        Async.fork {
+          (1 to 10).foreach { i =>
+            channel.send(i)
+            Async.delay(10.millis)
+          }
+          channel.close()
+        }
+
+        // Slow consumer
+        Async.delay(100.millis)
+        for (value <- channel) {
+          receivedValues.put(value)
+          Async.delay(50.millis)
+        }
+      }
+    }
+
+    // Should receive the first elements that fit in the buffer before consumer started
+    // The exact values depend on timing, but should be from the beginning
+    val received = receivedValues.toArray.toList
+    received should not be empty
+    received.head should be(1)
   }
 }

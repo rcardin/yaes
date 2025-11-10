@@ -987,22 +987,57 @@ Raise.run {
 }
 ```
 
-**Bounded Channel**: A channel with a fixed buffer capacity. When the buffer is full, the sender suspends until there is space available, providing backpressure.
+**Bounded Channel**: A channel with a fixed buffer capacity. When the buffer is full, behavior depends on the overflow policy (default is to suspend the sender).
 
 ```scala 3
 import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.OverflowStrategy
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 
-val channel = Channel.bounded[Int](capacity = 2)
+// Default: suspend when full
+val channel1 = Channel.bounded[Int](capacity = 2)
+
+// Drop oldest element when full
+val channel2 = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+
+// Drop newest element when full
+val channel3 = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
 
 Raise.run {
   Async.run {
     Async.fork {
-      channel.send(1) // Succeeds immediately
-      channel.send(2) // Succeeds immediately
-      channel.send(3) // Suspends until receiver takes an element
+      channel1.send(1) // Succeeds immediately
+      channel1.send(2) // Succeeds immediately
+      channel1.send(3) // Suspends until receiver takes an element
     }
+  }
+}
+```
+
+**Buffer Overflow Policies**: Bounded channels support different strategies for handling buffer overflow:
+
+- `OverflowStrategy.SUSPEND` (default): The sender suspends until space becomes available, providing backpressure
+- `OverflowStrategy.DROP_OLDEST`: The oldest element in the buffer is dropped to make space for the new element
+- `OverflowStrategy.DROP_LATEST`: The new element is discarded and the buffer remains unchanged
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Channel.OverflowStrategy
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+// Channel that never suspends, dropping old elements when full
+val channel = Channel.bounded[Int](capacity = 3, onOverflow = OverflowStrategy.DROP_OLDEST)
+
+Raise.run {
+  Async.run {
+    Async.fork {
+      (1 to 5).foreach(channel.send) // Sends never suspend
+      channel.close()
+    }
+    
+    channel.foreach(println) // Prints: 3, 4, 5 (first two were dropped)
   }
 }
 ```
