@@ -1,19 +1,17 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Channel.SendChannel
-import java.util.concurrent.BlockingQueue
-import java.util.concurrent.atomic.AtomicBoolean
 import in.rcard.yaes.Channel.ChannelClosed
-import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.SynchronousQueue
-import java.util.concurrent.locks.ReentrantLock
-import java.util.Queue
+import in.rcard.yaes.Channel.SendChannel
+
 import java.util.LinkedList
-import in.rcard.yaes.Channel.OverflowStrategy
-import in.rcard.yaes.Channel.Type.Unbounded
-import in.rcard.yaes.Channel.Type.Bounded
+import java.util.Queue
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.SynchronousQueue
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
 
 /** A channel is a communication primitive for transferring data between asynchronous computations.
   * Conceptually, a channel is similar to [[java.util.concurrent.BlockingQueue]], but it has
@@ -523,6 +521,7 @@ object Channel {
       try {
         if (cancelled) {
           Thread.currentThread().interrupt()
+          return ()
         } else if (closed) {
           Raise.raise(ChannelClosed)
         } else {
