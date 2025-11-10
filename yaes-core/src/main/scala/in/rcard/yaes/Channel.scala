@@ -546,7 +546,7 @@ object Channel {
     */
   private class RendezvousChannel[T] extends Channel[T] {
 
-    private var item: T          = null.asInstanceOf[T];
+    private var item: T                    = null.asInstanceOf[T]
     @volatile private var hasItem: Boolean = false
 
     override def receive()(using Async, Raise[ChannelClosed]): T = {
@@ -605,8 +605,8 @@ object Channel {
   /** Implementation of a bounded channel with fixed buffer capacity and configurable overflow
     * handling.
     *
-    * This channel limits the number of buffered elements to the specified capacity. When the
-    * buffer is full, the behavior depends on the [[OverflowStrategy]]:
+    * This channel limits the number of buffered elements to the specified capacity. When the buffer
+    * is full, the behavior depends on the [[OverflowStrategy]]:
     *   - [[OverflowStrategy.SUSPEND]]: Senders suspend until space becomes available
     *   - [[OverflowStrategy.DROP_OLDEST]]: The oldest buffered element is removed
     *   - [[OverflowStrategy.DROP_LATEST]]: The new element is discarded
@@ -969,8 +969,7 @@ object Channel {
 /** A channel implementation that supports both sending and receiving operations.
   *
   * This class implements both [[Channel.SendChannel]] and [[Channel.ReceiveChannel]], providing
-  * full bidirectional channel operations. Channels are backed by a [[ChannelQueue]] that wraps
-  * Java's [[BlockingQueue]] implementations and provides thread-safe concurrent access.
+  * full bidirectional channel operations.
   *
   * The channel maintains internal state to track whether it's open, closed, or cancelled:
   *   - '''Open''': Normal operation; send and receive work normally
@@ -998,51 +997,25 @@ object Channel {
   * }
   * }}}
   *
-  * @param queue
-  *   the underlying queue for buffering elements
   * @tparam T
   *   the type of elements in the channel
   */
 abstract class Channel[T] extends Channel.ReceiveChannel[T], Channel.SendChannel[T] {
 
   /** Synchronization lock for thread-safe access to channel state. */
-  protected val lock     = new ReentrantLock()
-  
+  protected val lock = new ReentrantLock()
+
   /** Condition variable signaled when elements are added to the channel. */
   protected val notEmpty = lock.newCondition()
-  
+
   /** Condition variable signaled when elements are removed from the channel. */
-  protected val notFull  = lock.newCondition()
+  protected val notFull = lock.newCondition()
 
   /** Flag indicating whether the channel has been closed. */
-  @volatile protected var closed    = false // FIXME Do we need this?
-  
+  @volatile protected var closed = false
+
   /** Flag indicating whether the channel has been cancelled. */
-  @volatile protected var cancelled = false // FIXME Do we need this?
-
-  /** Internal status of the channel.
-    *
-    * Tracks the lifecycle state of the channel from open to closed or cancelled.
-    */
-  private enum Status {
-    
-    /** The channel is open and accepting send/receive operations. */
-    case Open
-    
-    /** The channel is closed; no more sends are allowed but receives can still consume buffered
-      * elements.
-      */
-    case Close
-    
-    /** The channel is cancelled; all operations fail and buffered elements are discarded. */
-    case Cancelled
-  }
-
-  /** Marker object to indicate closed state in the queue. */
-  private object ClosedMarker
-
-  /** Atomic reference to the current status of the channel. */
-  private val status = new AtomicReference(Status.Open)
+  @volatile protected var cancelled = false
 
   /** Closes the channel, preventing further sends.
     *
