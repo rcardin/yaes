@@ -546,7 +546,7 @@ object Channel {
   private class RendezvousChannel[T] extends Channel[T] {
 
     private var item: T                    = null.asInstanceOf[T]
-    @volatile private var hasItem: Boolean = false
+    private var hasItem: Boolean = false
 
     override def receive()(using Async, Raise[ChannelClosed]): T = {
       lock.lock()
