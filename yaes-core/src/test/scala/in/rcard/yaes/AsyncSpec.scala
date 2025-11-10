@@ -18,7 +18,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   "The Async effect" should "wait the completion of all the forked fibers" in {
     val results = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      val fb1 = Async.fork {
+      val fb1   = Async.fork {
         Async.delay(1.second)
         queue.add("fb1")
       }
@@ -37,7 +37,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "stop the execution if one the fiber throws an exception" in {
-    val results = new ConcurrentLinkedQueue[String]()
+    val results     = new ConcurrentLinkedQueue[String]()
     val raiseResult = Raise.run {
       Async.run {
         val fb1 = Async.fork("fb1") {
@@ -61,7 +61,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "stop the execution if a child fiber throws an exception" in {
-    val results = new ConcurrentLinkedQueue[String]()
+    val results     = new ConcurrentLinkedQueue[String]()
     val raiseResult = Raise.run {
       Async.run {
         val fb1 = Async.fork {
@@ -88,7 +88,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "stop the execution if the block throws an exception" in {
-    val results = new ConcurrentLinkedQueue[String]()
+    val results     = new ConcurrentLinkedQueue[String]()
     val raiseResult = Raise.run {
       Async.run {
         val fb1 = Async.fork {
@@ -112,7 +112,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "join the values of different fibers" in {
-    val queue = new ConcurrentLinkedQueue[String]()
+    val queue  = new ConcurrentLinkedQueue[String]()
     val result = Raise.run {
       Async.run {
         val fb1 = Async.fork {
@@ -136,7 +136,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "wait for children fibers to finish" in {
     val results = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      val fb1 = Async.fork {
+      val fb1   = Async.fork {
         Async.fork {
           Async.delay(1.second)
           queue.add("1")
@@ -155,7 +155,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
   it should "cancel a fiber at the first suspending point" in {
     val actualQueue = Async.run {
-      val queue = new ConcurrentLinkedQueue[String]()
+      val queue       = new ConcurrentLinkedQueue[String]()
       val cancellable = Async.fork {
         Async.delay(2.seconds)
         queue.add("cancellable")
@@ -173,7 +173,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "not throw an exception if a cancelled fiber is joined" in {
 
     val actualQueue = Async.run {
-      val queue = new ConcurrentLinkedQueue[String]()
+      val queue       = new ConcurrentLinkedQueue[String]()
       val cancellable = Async.fork {
         Async.delay(2.seconds)
         queue.add("cancellable")
@@ -193,7 +193,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
     val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      val fb1 = Async.fork {
+      val fb1   = Async.fork {
         val innerCancellablefb = Async.fork {
           Async.delay(2.seconds)
           queue.add("cancellable")
@@ -214,7 +214,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "cancel children fibers" in {
     val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      val fb1 = Async.fork("fb1") {
+      val fb1   = Async.fork("fb1") {
         Async.fork("inner-fb") {
           Async.fork("inner-inner-fb") {
             Async.delay(6.seconds)
@@ -282,7 +282,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "racePair two fibers and return the fastest result if both succeed" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
       val raceResult = Async.racePair(
         {
@@ -311,7 +311,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "racePair two fibers and return the fastest result if the slowest fails" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         val raceResult = Async.racePair(
@@ -343,7 +343,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "racePair two fibers and return the error of the fastest one, cancelling the other" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         val raceResult = Async.racePair(
@@ -375,7 +375,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "race two fibers and return the fastest result and cancel the other" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
       Async.race(
         {
@@ -395,7 +395,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "race two fibers and return the fastest result if the slowest fails" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         Async.race(
@@ -418,7 +418,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "race two fibers and return the error of the fastest one, cancelling the other" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         val raceResult = Async.race(
@@ -456,7 +456,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "par two computation and return the error of the failing one and cancel the other" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         val (result1, result2) = Async.par(
@@ -480,7 +480,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "par two computation and return the error of slowest" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Raise.run {
       Async.run {
         val (result1, result2) = Async.par(
@@ -517,7 +517,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "raise a TimedOut error and cancel the computation if the timeout is reached" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue                  = new ConcurrentLinkedQueue[String]()
     val actualResult: Int | TimedOut =
       Async.run {
         Raise.run {
@@ -533,8 +533,26 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe TimedOut
   }
 
+  it should "use the provided name for forked fibers" in {
+    val threadNames = new ConcurrentLinkedQueue[String]()
+
+    Async.run {
+      val fb1 = Async.fork("custom-fiber-1") {
+        threadNames.add(Thread.currentThread().getName())
+        Async.delay(100.millis)
+      }
+
+      val fb2 = Async.fork("custom-fiber-2") {
+        threadNames.add(Thread.currentThread().getName())
+        Async.delay(100.millis)
+      }
+    }
+
+    threadNames.toArray should contain theSameElementsAs List("custom-fiber-1", "custom-fiber-2")
+  }
+
   "forkOn on a Flow" should "execute the flow in a dedicated fiber" in {
-    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
       val flow = Flow.flow {
         Async.delay(1.second)
