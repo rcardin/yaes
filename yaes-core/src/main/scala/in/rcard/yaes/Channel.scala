@@ -5,13 +5,105 @@ import in.rcard.yaes.Channel.SendChannel
 
 import java.util.LinkedList
 import java.util.Queue
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.BlockingQueue
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.SynchronousQueue
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
+
+/** A channel implementation that supports both sending and receiving operations.
+  *
+  * This class implements both [[Channel.SendChannel]] and [[Channel.ReceiveChannel]], providing
+  * full bidirectional channel operations.
+  *
+  * The channel maintains internal state to track whether it's open, closed, or cancelled:
+  *   - '''Open''': Normal operation; send and receive work normally
+  *   - '''Closed''': No more sends allowed; remaining buffered elements can still be received
+  *   - '''Cancelled''': All buffered elements are cleared; operations fail immediately
+  *
+  * Example usage:
+  * {{{
+  * val channel = Channel.bounded[String](10)
+  *
+  * Raise.run {
+  *   Async.run {
+  *     // Producer fiber
+  *     Async.fork {
+  *       channel.send("Hello")
+  *       channel.send("World")
+  *       channel.close()
+  *     }
+  *
+  *     // Consumer fiber
+  *     println(channel.receive()) // "Hello"
+  *     println(channel.receive()) // "World"
+  *     channel.receive() // Raises ChannelClosed
+  *   }
+  * }
+  * }}}
+  *
+  * @tparam T
+  *   the type of elements in the channel
+  */
+abstract class Channel[T] extends Channel.ReceiveChannel[T], Channel.SendChannel[T] {
+
+  /** Synchronization lock for thread-safe access to channel state. */
+  protected val lock = new ReentrantLock()
+
+  /** Condition variable signaled when elements are added to the channel. */
+  protected val notEmpty = lock.newCondition()
+
+  /** Condition variable signaled when elements are removed from the channel. */
+  protected val notFull = lock.newCondition()
+
+  /** Flag indicating whether the channel has been closed. */
+  @volatile protected var closed = false
+
+  /** Flag indicating whether the channel has been cancelled. */
+  @volatile protected var cancelled = false
+
+  protected def clearBuffer(): Unit
+
+  /** Closes the channel, preventing further sends.
+    *
+    * After closing, attempts to send will raise [[Channel.ChannelClosed]]. Receivers can still
+    * consume buffered elements until the queue is empty.
+    *
+    * @return
+    *   `true` if the channel was successfully closed, `false` if already closed or cancelled
+    */
+  override def close(): Boolean = {
+    lock.lock()
+    try {
+      if (closed) {
+        return false
+      }
+      closed = true
+      notFull.signalAll()
+      notEmpty.signalAll()
+    } finally {
+      lock.unlock()
+    }
+    true
+  }
+
+  /** Cancels the channel and clears all buffered elements.
+    *
+    * This operation immediately discards all buffered elements and marks the channel as cancelled.
+    * Ongoing send/receive operations are interrupted.
+    *
+    * @param async
+    *   the async context
+    */
+  override def cancel()(using Async): Unit = {
+    lock.lock()
+    try {
+      closed = true
+      cancelled = true
+      clearBuffer()
+      notFull.signalAll()
+      notEmpty.signalAll()
+    } finally {
+      lock.unlock()
+    }
+  }
+}
 
 /** A channel is a communication primitive for transferring data between asynchronous computations.
   * Conceptually, a channel is similar to [[java.util.concurrent.BlockingQueue]], but it has
@@ -497,6 +589,8 @@ object Channel {
 
     private val queue: Queue[T] = new LinkedList[T]
 
+    override protected def clearBuffer(): Unit = queue.clear()
+
     override def receive()(using Async, Raise[ChannelClosed]): T = {
       lock.lock()
       try {
@@ -545,8 +639,13 @@ object Channel {
     */
   private class RendezvousChannel[T] extends Channel[T] {
 
-    private var item: T                    = null.asInstanceOf[T]
+    private var item: T          = null.asInstanceOf[T]
     private var hasItem: Boolean = false
+
+    override protected def clearBuffer(): Unit = {
+      item = null.asInstanceOf[T]
+      hasItem = false
+    }
 
     override def receive()(using Async, Raise[ChannelClosed]): T = {
       lock.lock()
@@ -634,6 +733,8 @@ object Channel {
 
     private val queue: Queue[T] = new LinkedList[T]
 
+    override protected def clearBuffer(): Unit = queue.clear()
+
     override def receive()(using Async, Raise[ChannelClosed]): T = {
       lock.lock()
       try {
@@ -691,8 +792,8 @@ object Channel {
       * @param async
       *   the async context
       * @param raise
-      *   the raise context for handling [[ChannelClosed]] errors
-      * Raises [[ChannelClosed]] via the `Raise` context if the channel is closed.
+      *   the raise context for handling [[ChannelClosed]] errors Raises [[ChannelClosed]] via the
+      *   `Raise` context if the channel is closed.
       */
     private def sendSuspend(value: T)(using Async, Raise[ChannelClosed]): Unit = {
       while (queue.size() >= capacity) {
@@ -976,100 +1077,5 @@ object Channel {
         }
       }
     channel
-  }
-}
-
-/** A channel implementation that supports both sending and receiving operations.
-  *
-  * This class implements both [[Channel.SendChannel]] and [[Channel.ReceiveChannel]], providing
-  * full bidirectional channel operations.
-  *
-  * The channel maintains internal state to track whether it's open, closed, or cancelled:
-  *   - '''Open''': Normal operation; send and receive work normally
-  *   - '''Closed''': No more sends allowed; remaining buffered elements can still be received
-  *   - '''Cancelled''': All buffered elements are cleared; operations fail immediately
-  *
-  * Example usage:
-  * {{{
-  * val channel = Channel.bounded[String](10)
-  *
-  * Raise.run {
-  *   Async.run {
-  *     // Producer fiber
-  *     Async.fork {
-  *       channel.send("Hello")
-  *       channel.send("World")
-  *       channel.close()
-  *     }
-  *
-  *     // Consumer fiber
-  *     println(channel.receive()) // "Hello"
-  *     println(channel.receive()) // "World"
-  *     channel.receive() // Raises ChannelClosed
-  *   }
-  * }
-  * }}}
-  *
-  * @tparam T
-  *   the type of elements in the channel
-  */
-abstract class Channel[T] extends Channel.ReceiveChannel[T], Channel.SendChannel[T] {
-
-  /** Synchronization lock for thread-safe access to channel state. */
-  protected val lock = new ReentrantLock()
-
-  /** Condition variable signaled when elements are added to the channel. */
-  protected val notEmpty = lock.newCondition()
-
-  /** Condition variable signaled when elements are removed from the channel. */
-  protected val notFull = lock.newCondition()
-
-  /** Flag indicating whether the channel has been closed. */
-  @volatile protected var closed = false
-
-  /** Flag indicating whether the channel has been cancelled. */
-  @volatile protected var cancelled = false
-
-  /** Closes the channel, preventing further sends.
-    *
-    * After closing, attempts to send will raise [[Channel.ChannelClosed]]. Receivers can still
-    * consume buffered elements until the queue is empty.
-    *
-    * @return
-    *   `true` if the channel was successfully closed, `false` if already closed or cancelled
-    */
-  override def close(): Boolean = {
-    lock.lock()
-    try {
-      if (closed) {
-        return false
-      }
-      closed = true
-      notFull.signalAll()
-      notEmpty.signalAll()
-    } finally {
-      lock.unlock()
-    }
-    true
-  }
-
-  /** Cancels the channel and clears all buffered elements.
-    *
-    * This operation immediately discards all buffered elements and marks the channel as cancelled.
-    * Ongoing send/receive operations are interrupted.
-    *
-    * @param async
-    *   the async context
-    */
-  override def cancel()(using Async): Unit = {
-    lock.lock()
-    try {
-      closed = true
-      cancelled = true
-      notFull.signalAll()
-      notEmpty.signalAll()
-    } finally {
-      lock.unlock()
-    }
   }
 }
