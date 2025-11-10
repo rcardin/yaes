@@ -306,13 +306,11 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
           channel.send(1)
           actualQueue.put("p1")
           Async.delay(100.millis)
-          channel.send(2)
           actualQueue.put("p2")
+          channel.send(2)
         }
 
         Async.delay(300.millis)
-
-        actualQueue.toArray should contain theSameElementsInOrderAs List("p1")
 
         actualQueue.put(s"c${channel.receive()}")
         actualQueue.put(s"c${channel.receive()}")
@@ -320,8 +318,10 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualQueue.toArray should contain theSameElementsAs List("p1", "c1", "p2", "c2")
+    actualQueue.toArray should contain theSameElementsInOrderAs List("c1", "p1", "p2", "c2")
   }
+
+  
 
   "Bounded channel with DROP_OLDEST policy" should "drop oldest element when buffer is full" in {
     import Channel.OverflowStrategy

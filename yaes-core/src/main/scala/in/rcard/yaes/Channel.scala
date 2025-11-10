@@ -578,24 +578,34 @@ object Channel {
           return ()
         } else if (closed) {
           Raise.raise(ChannelClosed)
-        } else {
-          while (hasItem) {
-            if (closed) {
-              Raise.raise(ChannelClosed)
-            }
-            notFull.await()
-          }
+        }
 
+        while (hasItem) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          notFull.await()
+        }
+
+        if (cancelled) {
+          Thread.currentThread().interrupt()
+          return ()
+        } else if (closed) {
+          Raise.raise(ChannelClosed)
+        }
+
+        item = value
+        hasItem = true
+        notEmpty.signal()
+        while (hasItem) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
           if (cancelled) {
             Thread.currentThread().interrupt()
             return ()
-          } else if (closed) {
-            Raise.raise(ChannelClosed)
           }
-
-          item = value
-          hasItem = true
-          notEmpty.signal()
+          notFull.await()
         }
       } finally {
         lock.unlock()
