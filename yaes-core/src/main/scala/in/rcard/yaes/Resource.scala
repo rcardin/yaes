@@ -7,6 +7,8 @@ import java.util.Queue
 import java.util.Deque
 import java.util.concurrent.ConcurrentLinkedDeque
 
+type Resource = Yaes[Resource.Unsafe]
+
 /** Companion object providing convenient methods for working with the `Resource` effect.
   *
   * The `Resource` effect provides automatic resource management with guaranteed cleanup. It ensures
@@ -47,8 +49,6 @@ import java.util.concurrent.ConcurrentLinkedDeque
   * }}}
   */
 object Resource {
-
-  type Resource = Yaes[Resource.Unsafe]
 
   /** Lifts a block of code into the Resource effect.
     *

@@ -1,9 +1,9 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Log.Log
-
 import java.time.Clock as JClock
 import java.time.LocalDateTime
+
+type Log = Yaes[Log.Unsafe]
 
 /** Represents a logging effect.
   *
@@ -34,8 +34,6 @@ object Log {
 
   /** Default clock used for timestamping log messages. Uses the system's default time zone. */
   given clock: JClock = java.time.Clock.systemDefaultZone()
-
-  type Log = Yaes[Log.Unsafe]
 
   /** Represents the severity level of a log message.
     *

@@ -1,5 +1,7 @@
 package in.rcard.yaes
 
+type Random = Yaes[Random.Unsafe]
+
 /** Companion object for the Random effect providing utility methods and handlers.
   *
   * This object contains:
@@ -8,8 +10,6 @@ package in.rcard.yaes
   *   - A handler implementation to run Random effects
   */
 object Random {
-
-  type Random = Yaes[Random.Unsafe]
 
   /** Creates a computation that depends on the Random effect.
     *

@@ -51,10 +51,10 @@ The data module provides functional data structures optimized for use with effec
 
 Add the dependencies to your `build.sbt`:
 
-```scala
+```scala 3
 libraryDependencies ++= Seq(
-  "in.rcard.yaes" %% "yaes-core" % "0.7.0",
-  "in.rcard.yaes" %% "yaes-data" % "0.7.0"  // Optional: for Flow and other data structures
+  "in.rcard.yaes" %% "yaes-core" % "0.8.0",
+  "in.rcard.yaes" %% "yaes-data" % "0.8.0"  // Optional: for Flow and other data structures
 )
 ```
 
@@ -62,7 +62,7 @@ libraryDependencies ++= Seq(
 
 You can choose between **monadic style**:
 
-```scala
+```scala 3
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Yaes.*
@@ -75,7 +75,7 @@ def drunkFlip(using Random, Raise[String]): String = for {
 
 Or a more **direct style**:
 
-```scala
+```scala 3
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Raise.*
 
@@ -104,7 +104,7 @@ In λÆS, types like `Random` and `Raise` are **Effects**:
 
 Effects are managed using **Handlers**:
 
-```scala
+```scala 3
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Raise.*
 
@@ -128,6 +128,24 @@ val result: String = Raise.run {
 - [**Clock**](effects/system-clock.html) - Time management
 - [**System**](effects/system-clock.html) - System properties and environment variables
 - [**Log**](effects/log.html) - Logging at different levels
+
+## 🛠️ Application Development
+
+- [**YaesApp**](yaes-app.html) - Common entry point for YAES applications with automatic effect handling
+
+`YaesApp` provides a unified entry point for building complete applications:
+
+```scala 3
+import in.rcard.yaes.*
+
+object MyApp extends YaesApp {
+  override def run {
+    Output.printLn("Hello, YAES!")
+    val logger = Log.getLogger("MyApp")
+    logger.info("Application started")
+  }
+}
+```
 
 ## 🗃 Data Structures
 

@@ -1,8 +1,8 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Raise.Raise
-
 import java.io.IOException
+
+type Input = Yaes[Input.Unsafe]
 
 /** Companion object for the Input effect, providing utility methods and handlers.
   *
@@ -21,8 +21,6 @@ import java.io.IOException
   * }}}
   */
 object Input {
-
-  type Input = Yaes[Input.Unsafe]
 
   /** Lifts a block of code into the Input effect.
     *
