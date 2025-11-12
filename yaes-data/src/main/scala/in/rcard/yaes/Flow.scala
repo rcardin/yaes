@@ -434,6 +434,147 @@ object Flow {
 
   }
 
+  extension (byteFlow: Flow[Array[Byte]]) {
+
+    /** Decodes byte arrays from this flow into UTF-8 strings. This method correctly handles
+      * multi-byte UTF-8 character sequences that may be split across chunk boundaries.
+      *
+      * The method uses a CharsetDecoder to properly buffer incomplete character sequences and emit
+      * them when complete. This ensures that characters are never corrupted when reading data in
+      * chunks from streams.
+      *
+      * Example:
+      * {{{
+      * import java.io.FileInputStream
+      * import scala.collection.mutable.ArrayBuffer
+      * import scala.util.Using
+      *
+      * // Reading a UTF-8 text file
+      * Using(new FileInputStream("data.txt")) { inputStream =>
+      *   val result = ArrayBuffer[String]()
+      *   Flow.fromInputStream(inputStream, bufferSize = 1024)
+      *     .asUtf8String()
+      *     .collect { str =>
+      *       result += str
+      *     }
+      *   // result contains decoded strings
+      * }
+      *
+      * // Processing JSON from a network socket
+      * val jsonBytes = """{"name":"世界","emoji":"😀"}""".getBytes("UTF-8")
+      * val input = new java.io.ByteArrayInputStream(jsonBytes)
+      * val json = Flow.fromInputStream(input, bufferSize = 5)
+      *   .asUtf8String()
+      *   .fold("")(_ + _)
+      * // json contains the complete, correctly decoded JSON string
+      * }}}
+      *
+      * @return
+      *   A flow that emits decoded UTF-8 strings
+      */
+    def asUtf8String(): Flow[String] = {
+      asString(java.nio.charset.StandardCharsets.UTF_8)
+    }
+
+    /** Decodes byte arrays from this flow into strings using the specified charset. This method
+      * correctly handles multi-byte character sequences that may be split across chunk boundaries.
+      *
+      * The method uses a CharsetDecoder to properly buffer incomplete character sequences and emit
+      * them when complete. This ensures that characters are never corrupted when reading data in
+      * chunks from streams.
+      *
+      * Example:
+      * {{{
+      * import java.io.ByteArrayInputStream
+      * import java.nio.charset.StandardCharsets
+      * import scala.collection.mutable.ArrayBuffer
+      *
+      * // Reading ISO-8859-1 encoded data
+      * val data = "café".getBytes(StandardCharsets.ISO_8859_1)
+      * val input = new ByteArrayInputStream(data)
+      * val result = ArrayBuffer[String]()
+      *
+      * Flow.fromInputStream(input, bufferSize = 2)
+      *   .asString(StandardCharsets.ISO_8859_1)
+      *   .collect { str =>
+      *     result += str
+      *   }
+      * // result contains correctly decoded strings
+      *
+      * // Reading UTF-16 data
+      * val utf16Data = "Hello 世界".getBytes(StandardCharsets.UTF_16)
+      * val utf16Input = new ByteArrayInputStream(utf16Data)
+      * val utf16Result = Flow.fromInputStream(utf16Input)
+      *   .asString(StandardCharsets.UTF_16)
+      *   .fold("")(_ + _)
+      * // utf16Result contains the complete decoded string
+      * }}}
+      *
+      * @param charset
+      *   The charset to use for decoding
+      * @return
+      *   A flow that emits decoded strings
+      */
+    def asString(charset: java.nio.charset.Charset): Flow[String] = new Flow[String] {
+      override def collect(collector: Flow.FlowCollector[String]): Unit = {
+        val decoder = charset
+          .newDecoder()
+          .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+          .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        
+        // Buffer to accumulate incomplete byte sequences
+        var incompleteBytes = Array.empty[Byte]
+
+        byteFlow.collect { bytes =>
+          // Prepend any incomplete bytes from the previous chunk
+          val fullBytes = incompleteBytes ++ bytes
+          val inputBuffer = java.nio.ByteBuffer.wrap(fullBytes)
+          // Allocate enough space for worst case
+          val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length * 3)
+          
+          // Decode with endOfInput=false to handle incomplete sequences
+          val result = decoder.decode(inputBuffer, outputBuffer, false)
+          
+          // Check if there are remaining bytes (incomplete character sequence)
+          if (inputBuffer.hasRemaining) {
+            // Save incomplete bytes for next chunk
+            val remaining = new Array[Byte](inputBuffer.remaining())
+            inputBuffer.get(remaining)
+            incompleteBytes = remaining
+          } else {
+            incompleteBytes = Array.empty[Byte]
+          }
+          
+          outputBuffer.flip()
+          if (outputBuffer.hasRemaining) {
+            collector.emit(outputBuffer.toString)
+          }
+        }
+        
+        // Process any remaining incomplete bytes at the end
+        if (incompleteBytes.nonEmpty) {
+          val inputBuffer = java.nio.ByteBuffer.wrap(incompleteBytes)
+          val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length * 3)
+          decoder.decode(inputBuffer, outputBuffer, true)
+          decoder.flush(outputBuffer)
+          outputBuffer.flip()
+          if (outputBuffer.hasRemaining) {
+            collector.emit(outputBuffer.toString)
+          }
+        } else {
+          // Just flush in case
+          val finalBuffer = java.nio.CharBuffer.allocate(10)
+          decoder.decode(java.nio.ByteBuffer.allocate(0), finalBuffer, true)
+          decoder.flush(finalBuffer)
+          finalBuffer.flip()
+          if (finalBuffer.hasRemaining) {
+            collector.emit(finalBuffer.toString)
+          }
+        }
+      }
+    }
+  }
+
   /** Creates a flow using the given builder block that emits values through the FlowCollector. The
     * builder block is invoked when the flow is collected.
     *
@@ -537,6 +678,67 @@ object Flow {
     while (next.isDefined) {
       Flow.emit(next.get._1)
       next = step(next.get._2)
+    }
+  }
+
+  /** Creates a flow that reads data from an InputStream and emits it as byte arrays (chunks).
+    * The flow will continue reading until the end of the stream is reached (when read returns -1).
+    *
+    * This method does NOT automatically close the InputStream. The caller is responsible for
+    * managing the stream lifecycle using try-finally or resource management patterns.
+    *
+    * Example:
+    * {{{
+    * import java.io.FileInputStream
+    * import scala.util.Using
+    *
+    * // Reading from a file with resource management
+    * Using(new FileInputStream("data.txt")) { inputStream =>
+    *   val chunks = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+    *   Flow.fromInputStream(inputStream, bufferSize = 1024).collect { chunk =>
+    *     chunks += chunk
+    *   }
+    *   // Process chunks...
+    * }
+    *
+    * // Reading with custom buffer size
+    * val inputStream = new java.io.ByteArrayInputStream("Hello, World!".getBytes())
+    * val result = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+    * Flow.fromInputStream(inputStream, bufferSize = 5).collect { chunk =>
+    *   result += chunk
+    * }
+    * // result contains chunks of up to 5 bytes each
+    * }}}
+    *
+    * @param inputStream
+    *   The InputStream to read from
+    * @param bufferSize
+    *   The size of the buffer used for reading chunks (default: 8192 bytes)
+    * @return
+    *   A flow that emits byte arrays read from the stream
+    * @throws IllegalArgumentException
+    *   if bufferSize is less than or equal to 0
+    * @throws java.io.IOException
+    *   if an I/O error occurs during reading
+    */
+  def fromInputStream(
+      inputStream: java.io.InputStream,
+      bufferSize: Int = 8192
+  ): Flow[Array[Byte]] = {
+    if (bufferSize <= 0) {
+      throw new IllegalArgumentException(s"bufferSize must be greater than 0, but was $bufferSize")
+    }
+    
+    flow {
+      val buffer   = new Array[Byte](bufferSize)
+      var bytesRead = inputStream.read(buffer)
+      
+      while (bytesRead != -1) {
+        if (bytesRead > 0) {
+          emit(buffer.take(bytesRead))
+        }
+        bytesRead = inputStream.read(buffer)
+      }
     }
   }
   
