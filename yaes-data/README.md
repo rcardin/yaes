@@ -45,11 +45,9 @@ val flow3: Flow[Int] = Flow(1, 2, 3)
 
 // Create from InputStream
 import java.io.FileInputStream
-import scala.util.Using
 
-val flow4: Flow[Array[Byte]] = Using(new FileInputStream("data.bin")) { inputStream =>
-  Flow.fromInputStream(inputStream, bufferSize = 1024)
-}
+val inputStream = new FileInputStream("data.bin")
+val flow4: Flow[Array[Byte]] = Flow.fromInputStream(inputStream, bufferSize = 1024)
 ```
 
 ### Collecting Flow Values

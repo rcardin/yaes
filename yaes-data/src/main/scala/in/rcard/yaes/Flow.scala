@@ -483,6 +483,11 @@ object Flow {
       * them when complete. This ensures that characters are never corrupted when reading data in
       * chunks from streams.
       *
+      * '''Error Handling:''' The decoder is configured to report malformed input and unmappable
+      * characters. If malformed or invalid byte sequences are encountered, the flow will throw a
+      * `java.nio.charset.MalformedInputException` or `java.nio.charset.UnmappableCharacterException`.
+      * Any valid data decoded before the error will be emitted before the exception is thrown.
+      *
       * Example:
       * {{{
       * import java.io.ByteArrayInputStream
@@ -534,6 +539,9 @@ object Flow {
 
         // Decode with endOfInput=false to handle incomplete sequences
         val result = decoder.decode(inputBuffer, outputBuffer, false)
+        if (result.isError) {
+          result.throwException()
+        }
 
         // Check if there are remaining bytes (incomplete character sequence)
         if (inputBuffer.hasRemaining) {
@@ -555,17 +563,29 @@ object Flow {
       if (incompleteBytes.nonEmpty) {
         val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
         val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length * 3)
-        decoder.decode(inputBuffer, outputBuffer, true)
-        decoder.flush(outputBuffer)
+        val decodeResult = decoder.decode(inputBuffer, outputBuffer, true)
+        if (decodeResult.isError) {
+          decodeResult.throwException()
+        }
+        val flushResult = decoder.flush(outputBuffer)
+        if (flushResult.isError) {
+          flushResult.throwException()
+        }
         outputBuffer.flip()
         if (outputBuffer.hasRemaining) {
           emit(outputBuffer.toString)
         }
       } else {
         // Just flush in case
-        val finalBuffer = java.nio.CharBuffer.allocate(10)
-        decoder.decode(java.nio.ByteBuffer.allocate(0), finalBuffer, true)
-        decoder.flush(finalBuffer)
+        val finalBuffer  = java.nio.CharBuffer.allocate(10)
+        val decodeResult = decoder.decode(java.nio.ByteBuffer.allocate(0), finalBuffer, true)
+        if (decodeResult.isError) {
+          decodeResult.throwException()
+        }
+        val flushResult = decoder.flush(finalBuffer)
+        if (flushResult.isError) {
+          flushResult.throwException()
+        }
         finalBuffer.flip()
         if (finalBuffer.hasRemaining) {
           emit(finalBuffer.toString)

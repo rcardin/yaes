@@ -84,11 +84,9 @@ Create a flow that reads data from an InputStream as byte chunks:
 ```scala
 import in.rcard.yaes.Flow
 import java.io.FileInputStream
-import scala.util.Using
 
-val byteFlow: Flow[Array[Byte]] = Using(new FileInputStream("data.bin")) { inputStream =>
-  Flow.fromInputStream(inputStream, bufferSize = 8192)
-}
+val inputStream = new FileInputStream("data.bin")
+val byteFlow: Flow[Array[Byte]] = Flow.fromInputStream(inputStream, bufferSize = 8192)
 ```
 
 Note: The `fromInputStream` method does NOT automatically close the InputStream. Use resource management patterns like `Using` to ensure proper cleanup.
