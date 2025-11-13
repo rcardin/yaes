@@ -77,14 +77,21 @@ import in.rcard.yaes.Flow
 val flow: Flow[String] = Flow("hello", "world", "!")
 ```
 
-### Empty and Single Value Flows
+### From InputStream
+
+Create a flow that reads data from an InputStream as byte chunks:
 
 ```scala
 import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
 
-val emptyFlow: Flow[Int] = Flow.empty[Int]
-val singleFlow: Flow[String] = Flow.just("single value")
+val byteFlow: Flow[Array[Byte]] = Using(new FileInputStream("data.bin")) { inputStream =>
+  Flow.fromInputStream(inputStream, bufferSize = 8192)
+}
 ```
+
+Note: The `fromInputStream` method does NOT automatically close the InputStream. Use resource management patterns like `Using` to ensure proper cleanup.
 
 ## Collecting Flow Values
 
@@ -239,6 +246,141 @@ val count = Flow("a", "b", "c", "d")
   .count()
 
 // Result: 4
+```
+
+## Working with Binary Data and Text
+
+Flow provides powerful capabilities for working with InputStreams and decoding binary data into text.
+
+### Reading from InputStream
+
+Use `fromInputStream` to create a flow from any InputStream:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val chunks = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .collect { chunk =>
+      chunks += chunk
+    }
+}
+```
+
+The `bufferSize` parameter controls how much data is read at once. Larger buffers can improve performance for large files, while smaller buffers use less memory.
+
+### Decoding UTF-8 Text
+
+The `asUtf8String()` method correctly handles multi-byte UTF-8 character sequences that may be split across chunk boundaries:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("text.txt")) { inputStream =>
+  val result = scala.collection.mutable.ArrayBuffer[String]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .asUtf8String()
+    .collect { str =>
+      result += str
+    }
+}
+```
+
+This is especially important when processing files that contain:
+- Emoji characters (e.g., 😀, 🌍)
+- Non-Latin scripts (e.g., 世界, العالم, Мир)
+- Special symbols and mathematical notation
+
+### Decoding with Custom Charsets
+
+Use `asString()` to decode text with a specific charset:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
+
+// Reading ISO-8859-1 encoded data
+val data = "café".getBytes(StandardCharsets.ISO_8859_1)
+val input = new ByteArrayInputStream(data)
+
+val result = Flow.fromInputStream(input, bufferSize = 2)
+  .asString(StandardCharsets.ISO_8859_1)
+  .fold("")(_ + _)
+
+// result contains: "café"
+```
+
+### Processing Large Text Files
+
+Combine Flow operators to efficiently process large text files:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("large-file.txt")) { inputStream =>
+  val lineCount = Flow.fromInputStream(inputStream, bufferSize = 8192)
+    .asUtf8String()
+    .fold(0) { (count, str) =>
+      count + str.count(_ == '\n')
+    }
+  
+  println(s"File contains $lineCount lines")
+}
+```
+
+### Processing JSON from Network
+
+```scala
+import in.rcard.yaes.Flow
+import java.net.URL
+import scala.util.Using
+
+val url = new URL("https://api.example.com/data.json")
+
+Using(url.openStream()) { inputStream =>
+  val json = Flow.fromInputStream(inputStream, bufferSize = 4096)
+    .asUtf8String()
+    .fold("")(_ + _)
+  
+  // Parse JSON string
+  println(s"Received JSON: $json")
+}
+```
+
+### Reading Binary Files with Text Processing
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+case class FileMetadata(totalBytes: Int, textContent: String)
+
+Using(new FileInputStream("mixed-data.txt")) { inputStream =>
+  var totalBytes = 0
+  val textParts = scala.collection.mutable.ArrayBuffer[String]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 512)
+    .onEach { chunk =>
+      totalBytes += chunk.length
+    }
+    .asUtf8String()
+    .collect { text =>
+      textParts += text
+    }
+  
+  FileMetadata(totalBytes, textParts.mkString)
+}
 ```
 
 ## Practical Examples

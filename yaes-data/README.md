@@ -42,6 +42,14 @@ val flow2: Flow[Int] = List(1, 2, 3).asFlow()
 
 // Create from varargs
 val flow3: Flow[Int] = Flow(1, 2, 3)
+
+// Create from InputStream
+import java.io.FileInputStream
+import scala.util.Using
+
+val flow4: Flow[Array[Byte]] = Using(new FileInputStream("data.bin")) { inputStream =>
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+}
 ```
 
 ### Collecting Flow Values
@@ -192,6 +200,64 @@ Counts the number of emitted values:
 ```scala
 val count = Flow(1, 2, 3, 4, 5).count()
 // count is 5
+```
+
+### Working with InputStreams
+
+Flow provides support for reading data from InputStreams and decoding byte streams into strings.
+
+#### fromInputStream
+
+Creates a flow from an InputStream that emits byte arrays:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val chunks = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+  Flow.fromInputStream(inputStream, bufferSize = 1024).collect { chunk =>
+    chunks += chunk
+  }
+}
+```
+
+#### asUtf8String
+
+Decodes byte arrays from a flow into UTF-8 strings, correctly handling multi-byte character boundaries:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val result = scala.collection.mutable.ArrayBuffer[String]()
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .asUtf8String()
+    .collect { str =>
+      result += str
+    }
+}
+```
+
+#### asString
+
+Decodes byte arrays using a specific charset:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
+
+val data = "café".getBytes(StandardCharsets.ISO_8859_1)
+val input = new ByteArrayInputStream(data)
+
+val result = Flow.fromInputStream(input, bufferSize = 2)
+  .asString(StandardCharsets.ISO_8859_1)
+  .fold("")(_ + _)
+// result contains the decoded string
 ```
 
 ## Dependency

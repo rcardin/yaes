@@ -407,23 +407,23 @@ object Flow {
     }
 
     /** Returns a flow that pairs each element of the original flow with its index beginning at 0
-     *
-     * Example:
-     * {{{
-     * val originalFlow = Flow("a", "b", "c")
-     * val result = scala.collection.mutable.ArrayBuffer[(String, Long)]()
-     *
-     * originalFlow
-     *   .zipWithIndex()
-     *   .collect { value =>
-     *     result += value
-     *   }
-     * // result contains: ("a", 0), ("b", 1), ("c", 2)
-     * }}}
-     *
-     * @return
-     * A flow that pairs each element of the original flow with its index beginning at 0
-     */
+      *
+      * Example:
+      * {{{
+      * val originalFlow = Flow("a", "b", "c")
+      * val result = scala.collection.mutable.ArrayBuffer[(String, Long)]()
+      *
+      * originalFlow
+      *   .zipWithIndex()
+      *   .collect { value =>
+      *     result += value
+      *   }
+      * // result contains: ("a", 0), ("b", 1), ("c", 2)
+      * }}}
+      *
+      * @return
+      *   A flow that pairs each element of the original flow with its index beginning at 0
+      */
     def zipWithIndex(): Flow[(A, Long)] = Flow.flow {
       var index: Long = 0L
       originalFlow.collect { a =>
@@ -515,61 +515,60 @@ object Flow {
       * @return
       *   A flow that emits decoded strings
       */
-    def asString(charset: java.nio.charset.Charset): Flow[String] = new Flow[String] {
-      override def collect(collector: Flow.FlowCollector[String]): Unit = {
-        val decoder = charset
-          .newDecoder()
-          .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-          .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-        
-        // Buffer to accumulate incomplete byte sequences
-        var incompleteBytes = Array.empty[Byte]
+    def asString(charset: java.nio.charset.Charset): Flow[String] = flow {
 
-        byteFlow.collect { bytes =>
-          // Prepend any incomplete bytes from the previous chunk
-          val fullBytes = incompleteBytes ++ bytes
-          val inputBuffer = java.nio.ByteBuffer.wrap(fullBytes)
-          // Allocate enough space for worst case
-          val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length * 3)
-          
-          // Decode with endOfInput=false to handle incomplete sequences
-          val result = decoder.decode(inputBuffer, outputBuffer, false)
-          
-          // Check if there are remaining bytes (incomplete character sequence)
-          if (inputBuffer.hasRemaining) {
-            // Save incomplete bytes for next chunk
-            val remaining = new Array[Byte](inputBuffer.remaining())
-            inputBuffer.get(remaining)
-            incompleteBytes = remaining
-          } else {
-            incompleteBytes = Array.empty[Byte]
-          }
-          
-          outputBuffer.flip()
-          if (outputBuffer.hasRemaining) {
-            collector.emit(outputBuffer.toString)
-          }
-        }
-        
-        // Process any remaining incomplete bytes at the end
-        if (incompleteBytes.nonEmpty) {
-          val inputBuffer = java.nio.ByteBuffer.wrap(incompleteBytes)
-          val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length * 3)
-          decoder.decode(inputBuffer, outputBuffer, true)
-          decoder.flush(outputBuffer)
-          outputBuffer.flip()
-          if (outputBuffer.hasRemaining) {
-            collector.emit(outputBuffer.toString)
-          }
+      val decoder = charset
+        .newDecoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+
+      // Buffer to accumulate incomplete byte sequences
+      var incompleteBytes = Array.empty[Byte]
+
+      byteFlow.collect { bytes =>
+        // Prepend any incomplete bytes from the previous chunk
+        val fullBytes   = incompleteBytes ++ bytes
+        val inputBuffer = java.nio.ByteBuffer.wrap(fullBytes)
+        // Allocate enough space for worst case
+        val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length * 3)
+
+        // Decode with endOfInput=false to handle incomplete sequences
+        val result = decoder.decode(inputBuffer, outputBuffer, false)
+
+        // Check if there are remaining bytes (incomplete character sequence)
+        if (inputBuffer.hasRemaining) {
+          // Save incomplete bytes for next chunk
+          val remaining = new Array[Byte](inputBuffer.remaining())
+          inputBuffer.get(remaining)
+          incompleteBytes = remaining
         } else {
-          // Just flush in case
-          val finalBuffer = java.nio.CharBuffer.allocate(10)
-          decoder.decode(java.nio.ByteBuffer.allocate(0), finalBuffer, true)
-          decoder.flush(finalBuffer)
-          finalBuffer.flip()
-          if (finalBuffer.hasRemaining) {
-            collector.emit(finalBuffer.toString)
-          }
+          incompleteBytes = Array.empty[Byte]
+        }
+
+        outputBuffer.flip()
+        if (outputBuffer.hasRemaining) {
+          emit(outputBuffer.toString)
+        }
+      }
+
+      // Process any remaining incomplete bytes at the end
+      if (incompleteBytes.nonEmpty) {
+        val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
+        val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length * 3)
+        decoder.decode(inputBuffer, outputBuffer, true)
+        decoder.flush(outputBuffer)
+        outputBuffer.flip()
+        if (outputBuffer.hasRemaining) {
+          emit(outputBuffer.toString)
+        }
+      } else {
+        // Just flush in case
+        val finalBuffer = java.nio.CharBuffer.allocate(10)
+        decoder.decode(java.nio.ByteBuffer.allocate(0), finalBuffer, true)
+        decoder.flush(finalBuffer)
+        finalBuffer.flip()
+        if (finalBuffer.hasRemaining) {
+          emit(finalBuffer.toString)
         }
       }
     }
@@ -649,30 +648,33 @@ object Flow {
     collector.emit(value)
   }
 
-  /**
-   * Creates a flow by successively applying a function to a seed value to generate elements and a new state.
-   *
-   * Example:
-   * {{{
-   * // Creating a flow via unfold
-   * val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
-   *   if (a > 50) None
-   *   else Some((a, (b, a + b)))
-   * }
-   *
-   * val result = scala.collection.mutable.ArrayBuffer[Int]()
-   * fibonacciFlow.collect { value =>
-   *   actualResult += value
-   * }
-   *
-   * // result contains: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
-   * }}}
- *
-   * @param seed the initial state used to generate the first element
-   * @param step a function that takes the current state and returns an `Option` containing a tuple of 
-   *             the next element and the new state, or `None` to terminate the flow
-   * @return a flow containing the sequence of elements generated
-   */
+  /** Creates a flow by successively applying a function to a seed value to generate elements and a
+    * new state.
+    *
+    * Example:
+    * {{{
+    * // Creating a flow via unfold
+    * val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
+    *   if (a > 50) None
+    *   else Some((a, (b, a + b)))
+    * }
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * fibonacciFlow.collect { value =>
+    *   actualResult += value
+    * }
+    *
+    * // result contains: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
+    * }}}
+    *
+    * @param seed
+    *   the initial state used to generate the first element
+    * @param step
+    *   a function that takes the current state and returns an `Option` containing a tuple of the
+    *   next element and the new state, or `None` to terminate the flow
+    * @return
+    *   a flow containing the sequence of elements generated
+    */
   def unfold[S, A](seed: S)(step: S => Option[(A, S)]): Flow[A] = flow {
     var next = step(seed)
     while (next.isDefined) {
@@ -681,8 +683,8 @@ object Flow {
     }
   }
 
-  /** Creates a flow that reads data from an InputStream and emits it as byte arrays (chunks).
-    * The flow will continue reading until the end of the stream is reached (when read returns -1).
+  /** Creates a flow that reads data from an InputStream and emits it as byte arrays (chunks). The
+    * flow will continue reading until the end of the stream is reached (when read returns -1).
     *
     * This method does NOT automatically close the InputStream. The caller is responsible for
     * managing the stream lifecycle using try-finally or resource management patterns.
@@ -728,11 +730,11 @@ object Flow {
     if (bufferSize <= 0) {
       throw new IllegalArgumentException(s"bufferSize must be greater than 0, but was $bufferSize")
     }
-    
+
     flow {
-      val buffer   = new Array[Byte](bufferSize)
+      val buffer    = new Array[Byte](bufferSize)
       var bytesRead = inputStream.read(buffer)
-      
+
       while (bytesRead != -1) {
         if (bytesRead > 0) {
           emit(buffer.take(bytesRead))
@@ -741,7 +743,7 @@ object Flow {
       }
     }
   }
-  
+
   /** Creates a flow that emits the given varargs elements.
     *
     * Example:
