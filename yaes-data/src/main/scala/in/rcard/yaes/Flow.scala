@@ -485,8 +485,9 @@ object Flow {
       *
       * '''Error Handling:''' The decoder is configured to report malformed input and unmappable
       * characters. If malformed or invalid byte sequences are encountered, the flow will throw a
-      * `java.nio.charset.MalformedInputException` or `java.nio.charset.UnmappableCharacterException`.
-      * Any valid data decoded before the error will be emitted before the exception is thrown.
+      * `java.nio.charset.MalformedInputException` or
+      * `java.nio.charset.UnmappableCharacterException`. Any valid data decoded before the error
+      * will be emitted before the exception is thrown.
       *
       * Example:
       * {{{
@@ -742,7 +743,9 @@ object Flow {
 
       while (bytesRead != -1) {
         if (bytesRead > 0) {
-          emit(buffer.take(bytesRead))
+          val chunk = new Array[Byte](bytesRead)
+          System.arraycopy(buffer, 0, chunk, 0, bytesRead)
+          emit(chunk)
         }
         bytesRead = inputStream.read(buffer)
       }
