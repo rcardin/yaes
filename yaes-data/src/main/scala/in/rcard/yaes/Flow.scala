@@ -575,21 +575,6 @@ object Flow {
         if (outputBuffer.hasRemaining) {
           emit(outputBuffer.toString)
         }
-      } else {
-        // Just flush in case
-        val finalBuffer  = java.nio.CharBuffer.allocate(10)
-        val decodeResult = decoder.decode(java.nio.ByteBuffer.allocate(0), finalBuffer, true)
-        if (decodeResult.isError) {
-          decodeResult.throwException()
-        }
-        val flushResult = decoder.flush(finalBuffer)
-        if (flushResult.isError) {
-          flushResult.throwException()
-        }
-        finalBuffer.flip()
-        if (finalBuffer.hasRemaining) {
-          emit(finalBuffer.toString)
-        }
       }
     }
   }
