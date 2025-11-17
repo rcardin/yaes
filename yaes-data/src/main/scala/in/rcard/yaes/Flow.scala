@@ -515,6 +515,7 @@ object Flow {
         val inputBuffer = java.nio.CharBuffer.wrap(str)
         val minBufferSize = Math.max(
           (str.length * encoder.maxBytesPerChar()).toInt,
+          // Ensure minimum buffer size for charsets with BOM (e.g., UTF-16)
           encoder.maxBytesPerChar().toInt * 4
         )
         val outputBuffer = java.nio.ByteBuffer.allocate(minBufferSize)
