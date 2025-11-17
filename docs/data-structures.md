@@ -424,10 +424,10 @@ import java.nio.charset.StandardCharsets
 val flow = Flow("Hello", "世界")
 
 val encoded = flow
-  .encodeTo(StandardCharsets.UTF_16)
+  .encodeTo(StandardCharsets.UTF_16BE)
   .fold(Array.empty[Byte])(_ ++ _)
 
-val decoded = new String(encoded, StandardCharsets.UTF_16)
+val decoded = new String(encoded, StandardCharsets.UTF_16BE)
 // decoded == "Hello世界"
 ```
 

@@ -175,7 +175,7 @@ class FlowStringEncodingSpec extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "encode multiple strings with different charsets correctly" in {
+  it should "encode multiple strings separately with UTF-16" in {
     val strings = Seq("Hello", "World", "!")
     val flow    = Flow(strings*)
 
