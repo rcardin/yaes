@@ -407,23 +407,23 @@ object Flow {
     }
 
     /** Returns a flow that pairs each element of the original flow with its index beginning at 0
-     *
-     * Example:
-     * {{{
-     * val originalFlow = Flow("a", "b", "c")
-     * val result = scala.collection.mutable.ArrayBuffer[(String, Long)]()
-     *
-     * originalFlow
-     *   .zipWithIndex()
-     *   .collect { value =>
-     *     result += value
-     *   }
-     * // result contains: ("a", 0), ("b", 1), ("c", 2)
-     * }}}
-     *
-     * @return
-     * A flow that pairs each element of the original flow with its index beginning at 0
-     */
+      *
+      * Example:
+      * {{{
+      * val originalFlow = Flow("a", "b", "c")
+      * val result = scala.collection.mutable.ArrayBuffer[(String, Long)]()
+      *
+      * originalFlow
+      *   .zipWithIndex()
+      *   .collect { value =>
+      *     result += value
+      *   }
+      * // result contains: ("a", 0), ("b", 1), ("c", 2)
+      * }}}
+      *
+      * @return
+      *   A flow that pairs each element of the original flow with its index beginning at 0
+      */
     def zipWithIndex(): Flow[(A, Long)] = Flow.flow {
       var index: Long = 0L
       originalFlow.collect { a =>
@@ -432,6 +432,145 @@ object Flow {
       }
     }
 
+  }
+
+  extension (byteFlow: Flow[Array[Byte]]) {
+
+    /** Decodes byte arrays from this flow into UTF-8 strings. This method correctly handles
+      * multi-byte UTF-8 character sequences that may be split across chunk boundaries.
+      *
+      * The method uses a CharsetDecoder to properly buffer incomplete character sequences and emit
+      * them when complete. This ensures that characters are never corrupted when reading data in
+      * chunks from streams.
+      *
+      * Example:
+      * {{{
+      * import java.io.FileInputStream
+      * import scala.collection.mutable.ArrayBuffer
+      * import scala.util.Using
+      *
+      * // Reading a UTF-8 text file
+      * Using(new FileInputStream("data.txt")) { inputStream =>
+      *   val result = ArrayBuffer[String]()
+      *   Flow.fromInputStream(inputStream, bufferSize = 1024)
+      *     .asUtf8String()
+      *     .collect { str =>
+      *       result += str
+      *     }
+      *   // result contains decoded strings
+      * }
+      *
+      * // Processing JSON from a network socket
+      * val jsonBytes = """{"name":"世界","emoji":"😀"}""".getBytes("UTF-8")
+      * val input = new java.io.ByteArrayInputStream(jsonBytes)
+      * val json = Flow.fromInputStream(input, bufferSize = 5)
+      *   .asUtf8String()
+      *   .fold("")(_ + _)
+      * // json contains the complete, correctly decoded JSON string
+      * }}}
+      *
+      * @return
+      *   A flow that emits decoded UTF-8 strings
+      */
+    def asUtf8String(): Flow[String] = {
+      asString(java.nio.charset.StandardCharsets.UTF_8)
+    }
+
+    /** Decodes byte arrays from this flow into strings using the specified charset. This method
+      * correctly handles multi-byte character sequences that may be split across chunk boundaries.
+      *
+      * The method uses a CharsetDecoder to properly buffer incomplete character sequences and emit
+      * them when complete. This ensures that characters are never corrupted when reading data in
+      * chunks from streams.
+      *
+      * '''Error Handling:''' The decoder is configured to report malformed input and unmappable
+      * characters. If malformed or invalid byte sequences are encountered, the flow will throw a
+      * `java.nio.charset.MalformedInputException` or
+      * `java.nio.charset.UnmappableCharacterException`. Any valid data decoded before the error
+      * will be emitted before the exception is thrown.
+      *
+      * Example:
+      * {{{
+      * import java.io.ByteArrayInputStream
+      * import java.nio.charset.StandardCharsets
+      * import scala.collection.mutable.ArrayBuffer
+      *
+      * // Reading ISO-8859-1 encoded data
+      * val data = "café".getBytes(StandardCharsets.ISO_8859_1)
+      * val input = new ByteArrayInputStream(data)
+      * val result = ArrayBuffer[String]()
+      *
+      * Flow.fromInputStream(input, bufferSize = 2)
+      *   .asString(StandardCharsets.ISO_8859_1)
+      *   .collect { str =>
+      *     result += str
+      *   }
+      * // result contains correctly decoded strings
+      *
+      * // Reading UTF-16 data
+      * val utf16Data = "Hello 世界".getBytes(StandardCharsets.UTF_16)
+      * val utf16Input = new ByteArrayInputStream(utf16Data)
+      * val utf16Result = Flow.fromInputStream(utf16Input)
+      *   .asString(StandardCharsets.UTF_16)
+      *   .fold("")(_ + _)
+      * // utf16Result contains the complete decoded string
+      * }}}
+      *
+      * @param charset
+      *   The charset to use for decoding
+      * @return
+      *   A flow that emits decoded strings
+      */
+    def asString(charset: java.nio.charset.Charset): Flow[String] = flow {
+
+      val decoder = charset
+        .newDecoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+
+      var incompleteBytes = Array.empty[Byte]
+
+      byteFlow.collect { bytes =>
+        val fullBytes   = incompleteBytes ++ bytes
+        val inputBuffer = java.nio.ByteBuffer.wrap(fullBytes)
+        val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length)
+
+        val result = decoder.decode(inputBuffer, outputBuffer, false)
+        if (result.isError) {
+          result.throwException()
+        }
+
+        if (inputBuffer.hasRemaining) {
+          val remaining = new Array[Byte](inputBuffer.remaining())
+          inputBuffer.get(remaining)
+          incompleteBytes = remaining
+        } else {
+          incompleteBytes = Array.empty[Byte]
+        }
+
+        outputBuffer.flip()
+        if (outputBuffer.hasRemaining) {
+          emit(outputBuffer.toString)
+        }
+      }
+
+      if (incompleteBytes.nonEmpty) {
+        val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
+        val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length)
+        val decodeResult = decoder.decode(inputBuffer, outputBuffer, true)
+        if (decodeResult.isError) {
+          decodeResult.throwException()
+        }
+        val flushResult = decoder.flush(outputBuffer)
+        if (flushResult.isError) {
+          flushResult.throwException()
+        }
+        outputBuffer.flip()
+        if (outputBuffer.hasRemaining) {
+          emit(outputBuffer.toString)
+        }
+      }
+    }
   }
 
   /** Creates a flow using the given builder block that emits values through the FlowCollector. The
@@ -508,30 +647,33 @@ object Flow {
     collector.emit(value)
   }
 
-  /**
-   * Creates a flow by successively applying a function to a seed value to generate elements and a new state.
-   *
-   * Example:
-   * {{{
-   * // Creating a flow via unfold
-   * val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
-   *   if (a > 50) None
-   *   else Some((a, (b, a + b)))
-   * }
-   *
-   * val result = scala.collection.mutable.ArrayBuffer[Int]()
-   * fibonacciFlow.collect { value =>
-   *   actualResult += value
-   * }
-   *
-   * // result contains: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
-   * }}}
- *
-   * @param seed the initial state used to generate the first element
-   * @param step a function that takes the current state and returns an `Option` containing a tuple of 
-   *             the next element and the new state, or `None` to terminate the flow
-   * @return a flow containing the sequence of elements generated
-   */
+  /** Creates a flow by successively applying a function to a seed value to generate elements and a
+    * new state.
+    *
+    * Example:
+    * {{{
+    * // Creating a flow via unfold
+    * val fibonacciFlow = Flow.unfold((0, 1)) { case (a, b) =>
+    *   if (a > 50) None
+    *   else Some((a, (b, a + b)))
+    * }
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * fibonacciFlow.collect { value =>
+    *   actualResult += value
+    * }
+    *
+    * // result contains: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
+    * }}}
+    *
+    * @param seed
+    *   the initial state used to generate the first element
+    * @param step
+    *   a function that takes the current state and returns an `Option` containing a tuple of the
+    *   next element and the new state, or `None` to terminate the flow
+    * @return
+    *   a flow containing the sequence of elements generated
+    */
   def unfold[S, A](seed: S)(step: S => Option[(A, S)]): Flow[A] = flow {
     var next = step(seed)
     while (next.isDefined) {
@@ -539,7 +681,70 @@ object Flow {
       next = step(next.get._2)
     }
   }
-  
+
+  /** Creates a flow that reads data from an InputStream and emits it as byte arrays (chunks). The
+    * flow will continue reading until the end of the stream is reached (when read returns -1).
+    *
+    * This method does NOT automatically close the InputStream. The caller is responsible for
+    * managing the stream lifecycle using try-finally or resource management patterns.
+    *
+    * Example:
+    * {{{
+    * import java.io.FileInputStream
+    * import scala.util.Using
+    *
+    * // Reading from a file with resource management
+    * Using(new FileInputStream("data.txt")) { inputStream =>
+    *   val chunks = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+    *   Flow.fromInputStream(inputStream, bufferSize = 1024).collect { chunk =>
+    *     chunks += chunk
+    *   }
+    *   // Process chunks...
+    * }
+    *
+    * // Reading with custom buffer size
+    * val inputStream = new java.io.ByteArrayInputStream("Hello, World!".getBytes())
+    * val result = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+    * Flow.fromInputStream(inputStream, bufferSize = 5).collect { chunk =>
+    *   result += chunk
+    * }
+    * // result contains chunks of up to 5 bytes each
+    * }}}
+    *
+    * @param inputStream
+    *   The InputStream to read from
+    * @param bufferSize
+    *   The size of the buffer used for reading chunks (default: 8192 bytes)
+    * @return
+    *   A flow that emits byte arrays read from the stream
+    * @throws IllegalArgumentException
+    *   if bufferSize is less than or equal to 0
+    * @throws java.io.IOException
+    *   if an I/O error occurs during reading
+    */
+  def fromInputStream(
+      inputStream: java.io.InputStream,
+      bufferSize: Int = 8192
+  ): Flow[Array[Byte]] = {
+    if (bufferSize <= 0) {
+      throw new IllegalArgumentException(s"bufferSize must be greater than 0, but was $bufferSize")
+    }
+
+    flow {
+      val buffer    = new Array[Byte](bufferSize)
+      var bytesRead = inputStream.read(buffer)
+
+      while (bytesRead != -1) {
+        if (bytesRead > 0) {
+          val chunk = new Array[Byte](bytesRead)
+          System.arraycopy(buffer, 0, chunk, 0, bytesRead)
+          emit(chunk)
+        }
+        bytesRead = inputStream.read(buffer)
+      }
+    }
+  }
+
   /** Creates a flow that emits the given varargs elements.
     *
     * Example:
