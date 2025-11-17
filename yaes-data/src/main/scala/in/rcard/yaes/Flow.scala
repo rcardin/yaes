@@ -478,6 +478,12 @@ object Flow {
       * characters. If unmappable characters are encountered for the specified charset, the flow
       * will throw a `java.nio.charset.UnmappableCharacterException`.
       *
+      * '''Buffer Allocation:''' The buffer size is calculated to accommodate both the encoded
+      * string content and any charset-specific overhead such as Byte Order Marks (BOM). For empty
+      * strings or very short strings, a minimum buffer size of `maxBytesPerChar * 4` is allocated
+      * to ensure sufficient space for BOMs (UTF-16: 2 bytes, UTF-8 BOM: 3 bytes) and other
+      * charset preambles, with a safety margin to handle various charset implementations.
+      *
       * Example:
       * {{{
       * import scala.collection.mutable.ArrayBuffer
@@ -511,12 +517,13 @@ object Flow {
         .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
         .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
 
+      val minBomBufferMultiplier = 4
+
       stringFlow.collect { str =>
         val inputBuffer = java.nio.CharBuffer.wrap(str)
         val minBufferSize = Math.max(
           (str.length * encoder.maxBytesPerChar()).toInt,
-          // Ensure minimum buffer size for charsets with BOM (e.g., UTF-16)
-          encoder.maxBytesPerChar().toInt * 4
+          encoder.maxBytesPerChar().toInt * minBomBufferMultiplier
         )
         val outputBuffer = java.nio.ByteBuffer.allocate(minBufferSize)
 
