@@ -535,8 +535,8 @@ object Flow {
         // Prepend any incomplete bytes from the previous chunk
         val fullBytes   = incompleteBytes ++ bytes
         val inputBuffer = java.nio.ByteBuffer.wrap(fullBytes)
-        // Allocate enough space for worst case
-        val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length * 3)
+        // Allocate buffer: for most charsets, bytes to chars ratio is at most 1:1
+        val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length)
 
         // Decode with endOfInput=false to handle incomplete sequences
         val result = decoder.decode(inputBuffer, outputBuffer, false)
@@ -563,7 +563,7 @@ object Flow {
       // Process any remaining incomplete bytes at the end
       if (incompleteBytes.nonEmpty) {
         val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
-        val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length * 3)
+        val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length)
         val decodeResult = decoder.decode(inputBuffer, outputBuffer, true)
         if (decodeResult.isError) {
           decodeResult.throwException()
