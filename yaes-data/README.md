@@ -258,6 +258,98 @@ val result = Flow.fromInputStream(input, bufferSize = 2)
 // result contains the decoded string
 ```
 
+### Encoding Strings
+
+Flow provides support for encoding strings into byte arrays with various character encodings.
+
+#### encodeToUtf8
+
+Encodes strings from a flow into UTF-8 byte arrays:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+val flow = Flow("Hello", "World", "!")
+
+val result = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+flow
+  .encodeToUtf8()
+  .collect { bytes =>
+    result += bytes
+  }
+
+// Each string is encoded separately as a byte array
+// Decode back to verify
+val decoded = result.map(bytes => new String(bytes, StandardCharsets.UTF_8))
+// decoded contains: "Hello", "World", "!"
+```
+
+#### encodeTo
+
+Encodes strings using a specific charset:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+// Encoding with UTF-16
+val flow = Flow("Hello", "世界")
+
+val encoded = flow
+  .encodeTo(StandardCharsets.UTF_16BE)
+  .fold(Array.empty[Byte])(_ ++ _)
+
+val decoded = new String(encoded, StandardCharsets.UTF_16BE)
+// decoded contains: "Hello世界"
+
+// Encoding with ISO-8859-1
+val isoFlow = Flow("café")
+val isoEncoded = isoFlow
+  .encodeTo(StandardCharsets.ISO_8859_1)
+  .fold(Array.empty[Byte])(_ ++ _)
+```
+
+The encoder will throw an `UnmappableCharacterException` if a character cannot be represented in the target charset:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+// This will throw an exception because Chinese characters
+// cannot be represented in US-ASCII
+try {
+  Flow("世界").encodeTo(StandardCharsets.US_ASCII).collect { _ => }
+} catch {
+  case e: java.nio.charset.UnmappableCharacterException =>
+    println(s"Cannot encode: ${e.getMessage}")
+}
+```
+
+#### Round-trip Encoding/Decoding
+
+You can combine encoding and decoding for round-trip operations:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+val originalText = "Hello 世界! 😀"
+
+// Encode to bytes
+val encoded = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+Flow(originalText)
+  .encodeToUtf8()
+  .collect { bytes => encoded += bytes }
+
+// Decode back to string
+val decoded = Flow(encoded.toSeq*)
+  .asUtf8String()
+  .fold("")(_ + _)
+
+// decoded == originalText
+```
+
 ## Dependency
 
 To use the `yaes-data` module, add the following dependency to your build.sbt file:

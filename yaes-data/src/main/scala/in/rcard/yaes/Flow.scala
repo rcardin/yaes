@@ -434,6 +434,120 @@ object Flow {
 
   }
 
+  extension (stringFlow: Flow[String]) {
+
+    /** Encodes strings from this flow into UTF-8 byte arrays. Each string is encoded separately
+      * and emitted as a separate byte array.
+      *
+      * The method uses a CharsetEncoder configured to report malformed input and unmappable
+      * characters. If unmappable characters are encountered, the flow will throw a
+      * `java.nio.charset.UnmappableCharacterException`.
+      *
+      * Example:
+      * {{{
+      * import scala.collection.mutable.ArrayBuffer
+      * import java.nio.charset.StandardCharsets
+      *
+      * // Encoding simple text
+      * val flow = Flow("Hello", "World")
+      * val result = ArrayBuffer[Array[Byte]]()
+      *
+      * flow.encodeToUtf8().collect { bytes =>
+      *   result += bytes
+      * }
+      * // result contains byte arrays for each string
+      *
+      * // Encoding with multi-byte characters
+      * val utf8Flow = Flow("Hello 世界! 😀")
+      * val encoded = utf8Flow.encodeToUtf8().fold(Array.empty[Byte])(_ ++ _)
+      * val decoded = new String(encoded, StandardCharsets.UTF_8)
+      * // decoded == "Hello 世界! 😀"
+      * }}}
+      *
+      * @return
+      *   A flow that emits UTF-8 encoded byte arrays
+      */
+    def encodeToUtf8(): Flow[Array[Byte]] = {
+      encodeTo(java.nio.charset.StandardCharsets.UTF_8)
+    }
+
+    /** Encodes strings from this flow into byte arrays using the specified charset. Each string is
+      * encoded separately and emitted as a separate byte array.
+      *
+      * The method uses a CharsetEncoder configured to report malformed input and unmappable
+      * characters. If unmappable characters are encountered for the specified charset, the flow
+      * will throw a `java.nio.charset.UnmappableCharacterException`.
+      *
+      * '''Buffer Allocation:''' The buffer size is calculated to accommodate both the encoded
+      * string content and any charset-specific overhead such as Byte Order Marks (BOM). For empty
+      * strings or very short strings, a minimum buffer size of `maxBytesPerChar * 4` is allocated
+      * to ensure sufficient space for BOMs (UTF-16: 2 bytes, UTF-8 BOM: 3 bytes) and other
+      * charset preambles, with a safety margin to handle various charset implementations.
+      *
+      * Example:
+      * {{{
+      * import scala.collection.mutable.ArrayBuffer
+      * import java.nio.charset.StandardCharsets
+      *
+      * // Encoding with UTF-16
+      * val flow = Flow("Hello", "World")
+      * val result = ArrayBuffer[Array[Byte]]()
+      *
+      * flow.encodeTo(StandardCharsets.UTF_16).collect { bytes =>
+      *   result += bytes
+      * }
+      * // result contains UTF-16 encoded byte arrays
+      *
+      * // Encoding with ISO-8859-1
+      * val isoFlow = Flow("café")
+      * val encoded = isoFlow.encodeTo(StandardCharsets.ISO_8859_1)
+      *   .fold(Array.empty[Byte])(_ ++ _)
+      * val decoded = new String(encoded, StandardCharsets.ISO_8859_1)
+      * // decoded == "café"
+      * }}}
+      *
+      * @param charset
+      *   The charset to use for encoding
+      * @return
+      *   A flow that emits encoded byte arrays
+      */
+    def encodeTo(charset: java.nio.charset.Charset): Flow[Array[Byte]] = flow {
+      val encoder = charset
+        .newEncoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+
+      val minBomBufferMultiplier = 4
+
+      stringFlow.collect { str =>
+        val inputBuffer = java.nio.CharBuffer.wrap(str)
+        val minBufferSize = Math.max(
+          (str.length * encoder.maxBytesPerChar()).toInt,
+          encoder.maxBytesPerChar().toInt * minBomBufferMultiplier
+        )
+        val outputBuffer = java.nio.ByteBuffer.allocate(minBufferSize)
+
+        val encodeResult = encoder.encode(inputBuffer, outputBuffer, true)
+        if (encodeResult.isError) {
+          encodeResult.throwException()
+        }
+
+        val flushResult = encoder.flush(outputBuffer)
+        if (flushResult.isError) {
+          flushResult.throwException()
+        }
+
+        outputBuffer.flip()
+        val bytes = new Array[Byte](outputBuffer.remaining())
+        outputBuffer.get(bytes)
+
+        encoder.reset()
+
+        emit(bytes)
+      }
+    }
+  }
+
   extension (byteFlow: Flow[Array[Byte]]) {
 
     /** Decodes byte arrays from this flow into UTF-8 strings. This method correctly handles
