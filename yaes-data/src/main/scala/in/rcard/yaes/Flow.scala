@@ -528,25 +528,19 @@ object Flow {
         .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
         .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
 
-      // Buffer to accumulate incomplete byte sequences
       var incompleteBytes = Array.empty[Byte]
 
       byteFlow.collect { bytes =>
-        // Prepend any incomplete bytes from the previous chunk
         val fullBytes   = incompleteBytes ++ bytes
         val inputBuffer = java.nio.ByteBuffer.wrap(fullBytes)
-        // Allocate buffer: for most charsets, bytes to chars ratio is at most 1:1
         val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length)
 
-        // Decode with endOfInput=false to handle incomplete sequences
         val result = decoder.decode(inputBuffer, outputBuffer, false)
         if (result.isError) {
           result.throwException()
         }
 
-        // Check if there are remaining bytes (incomplete character sequence)
         if (inputBuffer.hasRemaining) {
-          // Save incomplete bytes for next chunk
           val remaining = new Array[Byte](inputBuffer.remaining())
           inputBuffer.get(remaining)
           incompleteBytes = remaining
@@ -560,7 +554,6 @@ object Flow {
         }
       }
 
-      // Process any remaining incomplete bytes at the end
       if (incompleteBytes.nonEmpty) {
         val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
         val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length)
