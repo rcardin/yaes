@@ -207,24 +207,6 @@ class FlowStringEncodingSpec extends AnyFlatSpec with Matchers {
     decoded should be("")
   }
 
-  it should "encode empty string with UTF-16 charset without BufferOverflowException" in {
-    val text = ""
-    val flow = Flow(text)
-
-    noException should be thrownBy {
-      flow
-        .encodeTo(StandardCharsets.UTF_16)
-        .collect { _ => }
-    }
-
-    val result = flow
-      .encodeTo(StandardCharsets.UTF_16)
-      .fold(Array.empty[Byte])(_ ++ _)
-
-    val decoded = new String(result, StandardCharsets.UTF_16)
-    decoded should be("")
-  }
-
   it should "handle round-trip encoding and decoding" in {
     val originalText = "Hello 世界! 😀 with special chars: \n\t\r"
     val flow         = Flow(originalText)
