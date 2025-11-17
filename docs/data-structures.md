@@ -381,6 +381,111 @@ Using(new FileInputStream("mixed-data.txt")) { inputStream =>
 }
 ```
 
+## Encoding Strings to Bytes
+
+Flow provides methods to encode strings into byte arrays with various character encodings.
+
+### Encoding to UTF-8
+
+Use `encodeToUtf8()` to convert strings to UTF-8 byte arrays:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+val flow = Flow("Hello", "World", "!")
+
+val result = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+flow
+  .encodeToUtf8()
+  .collect { bytes =>
+    result += bytes
+  }
+
+// Each string is encoded separately as a byte array
+// result.length == 3
+```
+
+This is particularly useful when you need to:
+- Write text data to files or network streams
+- Prepare data for HTTP requests or responses
+- Serialize text data for storage or transmission
+- Convert strings for binary protocols
+
+### Encoding with Custom Charsets
+
+Use `encodeTo()` to encode strings with a specific charset:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+// Encoding with UTF-16
+val flow = Flow("Hello", "世界")
+
+val encoded = flow
+  .encodeTo(StandardCharsets.UTF_16)
+  .fold(Array.empty[Byte])(_ ++ _)
+
+val decoded = new String(encoded, StandardCharsets.UTF_16)
+// decoded == "Hello世界"
+```
+
+Supported charsets include:
+- `StandardCharsets.UTF_8` - UTF-8 encoding (most common)
+- `StandardCharsets.UTF_16` - UTF-16 encoding
+- `StandardCharsets.UTF_16BE` - UTF-16 Big Endian
+- `StandardCharsets.UTF_16LE` - UTF-16 Little Endian
+- `StandardCharsets.ISO_8859_1` - ISO Latin-1
+- `StandardCharsets.US_ASCII` - US ASCII
+
+### Error Handling with Unmappable Characters
+
+The encoder throws an `UnmappableCharacterException` if a character cannot be represented in the target charset:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+// This will throw an exception because Chinese characters
+// cannot be represented in US-ASCII
+try {
+  Flow("世界")
+    .encodeTo(StandardCharsets.US_ASCII)
+    .collect { _ => }
+} catch {
+  case e: java.nio.charset.UnmappableCharacterException =>
+    println(s"Cannot encode: ${e.getMessage}")
+}
+```
+
+This strict error handling ensures data integrity and prevents silent data corruption.
+
+### Round-trip Encoding and Decoding
+
+Combine encoding and decoding for round-trip operations:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+val originalText = "Hello 世界! 😀"
+
+// Encode to bytes
+val encoded = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+Flow(originalText)
+  .encodeToUtf8()
+  .collect { bytes => encoded += bytes }
+
+// Decode back to string
+val decoded = Flow(encoded.toSeq*)
+  .asUtf8String()
+  .fold("")(_ + _)
+
+// decoded == originalText
+assert(decoded == originalText)
+```
+
 ## Practical Examples
 
 ### Data Processing Pipeline
