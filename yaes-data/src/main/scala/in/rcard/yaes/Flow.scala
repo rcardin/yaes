@@ -512,8 +512,12 @@ object Flow {
         .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
 
       stringFlow.collect { str =>
-        val inputBuffer  = java.nio.CharBuffer.wrap(str)
-        val outputBuffer = java.nio.ByteBuffer.allocate((str.length * encoder.maxBytesPerChar()).toInt)
+        val inputBuffer = java.nio.CharBuffer.wrap(str)
+        val minBufferSize = Math.max(
+          (str.length * encoder.maxBytesPerChar()).toInt,
+          encoder.maxBytesPerChar().toInt * 4
+        )
+        val outputBuffer = java.nio.ByteBuffer.allocate(minBufferSize)
 
         val encodeResult = encoder.encode(inputBuffer, outputBuffer, true)
         if (encodeResult.isError) {
