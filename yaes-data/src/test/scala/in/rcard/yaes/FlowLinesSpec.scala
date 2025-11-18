@@ -8,8 +8,6 @@ import java.nio.charset.StandardCharsets
 
 class FlowLinesSpec extends AnyFlatSpec with Matchers {
 
-  // Category 1: Basic Line Splitting
-
   "linesInUtf8" should "split simple single line with LF" in {
     val data  = "Hello\n".getBytes(StandardCharsets.UTF_8)
     val input = new ByteArrayInputStream(data)
@@ -115,8 +113,6 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
     actualResult should contain theSameElementsInOrderAs Seq("Line1", "Line2", "Line3", "Line4")
   }
 
-  // Category 2: Edge Cases
-
   it should "emit last line without trailing separator" in {
     val data  = "Line1\nLine2".getBytes(StandardCharsets.UTF_8)
     val input = new ByteArrayInputStream(data)
@@ -207,8 +203,6 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
     actualResult should contain theSameElementsInOrderAs Seq("Line1", "", "Line3")
   }
 
-  // Category 3: Multi-byte Character Handling
-
   it should "handle UTF-8 multi-byte characters within lines" in {
     val data  = "Hello 世界\nCafé ☕\n".getBytes(StandardCharsets.UTF_8)
     val input = new ByteArrayInputStream(data)
@@ -269,15 +263,13 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
     actualResult should contain theSameElementsInOrderAs Seq("日本", "語")
   }
 
-  // Category 4: Line Separator Split Across Chunks
-
   it should "handle CRLF split across chunks" in {
     val data  = "Line1\r\nLine2\n".getBytes(StandardCharsets.UTF_8)
     val input = new ByteArrayInputStream(data)
 
     val actualResult = scala.collection.mutable.ArrayBuffer[String]()
     Flow
-      .fromInputStream(input, bufferSize = 6) // Split right after \r
+      .fromInputStream(input, bufferSize = 6)
       .linesInUtf8()
       .collect { line =>
         actualResult += line
@@ -300,8 +292,6 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
 
     actualResult should contain theSameElementsInOrderAs Seq("A", "B", "C")
   }
-
-  // Category 5: Large Data Handling
 
   it should "handle long lines exceeding buffer size" in {
     val longLine = "a" * 10000
@@ -338,8 +328,6 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
     actualResult.head shouldBe "test1"
     actualResult.last shouldBe "test1000"
   }
-
-  // Category 6: Different Encodings (linesIn)
 
   "linesIn" should "decode ISO-8859-1 encoding" in {
     val data  = "café\nlatte\n".getBytes(StandardCharsets.ISO_8859_1)
@@ -386,10 +374,7 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
     actualResult should contain theSameElementsInOrderAs Seq("世界", "日本")
   }
 
-  // Category 7: Error Handling
-
   it should "throw exception on malformed UTF-8 sequence" in {
-    // Invalid UTF-8: 0xFF is not a valid UTF-8 byte
     val data  = Array[Byte](0x48, 0x65, 0x6C, 0x6C, 0x6F, 0xFF.toByte, 0x0A)
     val input = new ByteArrayInputStream(data)
 
@@ -402,8 +387,6 @@ class FlowLinesSpec extends AnyFlatSpec with Matchers {
         }
     }
   }
-
-  // Category 8: Integration with Other Flow Operations
 
   it should "chain with map to convert strings to integers" in {
     val data  = "1\n2\n3\n".getBytes(StandardCharsets.UTF_8)
