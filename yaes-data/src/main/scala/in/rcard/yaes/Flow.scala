@@ -860,7 +860,6 @@ object Flow {
           }
         }
       }
-      
       // Emit the last line if there's any content left and not ending with CR
       if (!lastCharWasCR && lineBuffer.nonEmpty) {
         emit(lineBuffer.toString)
