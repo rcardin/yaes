@@ -326,24 +326,63 @@ try {
 }
 ```
 
-#### Round-trip Encoding/Decoding
+### Writing to OutputStreams
 
-You can combine encoding and decoding for round-trip operations:
+Flow provides the `toOutputStream` method to write byte arrays directly to an OutputStream.
+
+#### toOutputStream
+
+Writes all byte arrays from a flow to an OutputStream:
 
 ```scala
 import in.rcard.yaes.Flow
+import java.io.FileOutputStream
+import scala.util.Using
+
+// Write binary data to a file
+val data = Array[Byte](1, 2, 3, 4, 5)
+Using(new FileOutputStream("output.bin")) { outputStream =>
+  Flow(data).toOutputStream(outputStream)
+}
+
+// Write encoded strings to a text file
+val strings = List("Hello", " ", "World", "!")
+Using(new FileOutputStream("output.txt")) { outputStream =>
+  Flow(strings: _*)
+    .encodeToUtf8()
+    .toOutputStream(outputStream)
+}
+```
+
+Key characteristics:
+- Terminal operator (returns `Unit`)
+- Skips empty byte arrays
+- Flushes the stream once at the end
+- Does NOT close the stream (caller manages lifecycle)
+- Propagates any `IOException` from write or flush operations
+
+Note: The caller is responsible for closing the OutputStream, similar to how `fromInputStream` doesn't close the InputStream.
+
+#### Round-trip Encoding/Decoding
+
+You can combine encoding, writing, reading, and decoding for complete round-trip operations:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.charset.StandardCharsets
 
 val originalText = "Hello 世界! 😀"
 
-// Encode to bytes
-val encoded = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+// Encode and write to output stream
+val output = new ByteArrayOutputStream()
 Flow(originalText)
   .encodeToUtf8()
-  .collect { bytes => encoded += bytes }
+  .toOutputStream(output)
 
-// Decode back to string
-val decoded = Flow(encoded.toSeq*)
+// Read back and decode
+val input = new ByteArrayInputStream(output.toByteArray)
+val decoded = Flow.fromInputStream(input)
   .asUtf8String()
   .fold("")(_ + _)
 
