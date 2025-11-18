@@ -635,7 +635,7 @@ Using(new FileInputStream("utf16-data.txt")) { inputStream =>
 - **Empty line preservation**: Empty lines are maintained in the output
 - **Last line handling**: Emits the last line even without a trailing separator
 - **Chunk boundary safety**: Correctly handles multi-byte characters and CRLF sequences split across chunk boundaries
-- **Strict error handling**: Throws `MalformedInputException` or `UnmappableCharacterException` on invalid input
+- **Strict error handling**: Throws `java.nio.charset.MalformedInputException` or `java.nio.charset.UnmappableCharacterException` on invalid input
 
 ## Practical Examples
 
