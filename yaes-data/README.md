@@ -389,6 +389,59 @@ val decoded = Flow.fromInputStream(input)
 // decoded == originalText
 ```
 
+### Processing Text Line by Line
+
+Flow provides methods to split byte streams into lines, making it easy to process text files and streams line by line.
+
+#### linesInUtf8
+
+Splits a UTF-8 encoded byte stream into lines:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+// Read lines from a text file
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val lines = scala.collection.mutable.ArrayBuffer[String]()
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .linesInUtf8()
+    .collect { line =>
+      lines += line
+    }
+  // lines contains all lines from the file
+}
+```
+
+#### linesIn
+
+Splits a byte stream into lines using a specific charset:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import java.nio.charset.StandardCharsets
+import scala.util.Using
+
+// Read lines from an ISO-8859-1 encoded file
+Using(new FileInputStream("data.txt")) { inputStream =>
+  Flow.fromInputStream(inputStream)
+    .linesIn(StandardCharsets.ISO_8859_1)
+    .collect { line =>
+      println(line)
+    }
+}
+```
+
+Key characteristics:
+- Recognizes all common line separators: `\n` (LF), `\r\n` (CRLF), and `\r` (CR)
+- Line separators are removed from emitted strings
+- Empty lines are preserved
+- Last line is emitted even without a trailing separator
+- Correctly handles multi-byte characters and line separators split across chunk boundaries
+- Throws `MalformedInputException` or `UnmappableCharacterException` on invalid input
+
 ## Dependency
 
 To use the `yaes-data` module, add the following dependency to your build.sbt file:

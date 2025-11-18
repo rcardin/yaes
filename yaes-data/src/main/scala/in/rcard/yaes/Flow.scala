@@ -733,6 +733,196 @@ object Flow {
       }
       outputStream.flush()
     }
+
+    /** Decodes byte arrays from this flow into UTF-8 strings and splits them into lines. This
+      * method correctly handles multi-byte UTF-8 character sequences and line separators that may
+      * be split across chunk boundaries.
+      *
+      * The method recognizes all common line separators: LF (`\n`), CRLF (`\r\n`), and CR (`\r`).
+      * Line separators are removed from the emitted strings. Empty lines are preserved.
+      *
+      * If the stream ends without a trailing line separator, the last line is still emitted. If
+      * the stream is empty, no lines are emitted.
+      *
+      * Example:
+      * {{{
+      * import java.io.FileInputStream
+      * import scala.collection.mutable.ArrayBuffer
+      * import scala.util.Using
+      *
+      * // Reading lines from a text file
+      * Using(new FileInputStream("data.txt")) { inputStream =>
+      *   val lines = ArrayBuffer[String]()
+      *   Flow.fromInputStream(inputStream, bufferSize = 1024)
+      *     .linesInUtf8()
+      *     .collect { line =>
+      *       lines += line
+      *     }
+      *   // lines contains all lines from the file
+      * }
+      *
+      * // Processing CSV data line by line
+      * val csvData = "name,age\nAlice,30\nBob,25\n".getBytes("UTF-8")
+      * val input = new java.io.ByteArrayInputStream(csvData)
+      * Flow.fromInputStream(input)
+      *   .linesInUtf8()
+      *   .filter(_.nonEmpty)
+      *   .map(_.split(","))
+      *   .collect { fields =>
+      *     println(s"Name: ${fields(0)}, Age: ${fields(1)}")
+      *   }
+      * }}}
+      *
+      * @return
+      *   A flow that emits decoded UTF-8 strings split into lines
+      * @throws java.nio.charset.MalformedInputException
+      *   if malformed UTF-8 byte sequences are encountered
+      */
+    def linesInUtf8(): Flow[String] = {
+      linesIn(java.nio.charset.StandardCharsets.UTF_8)
+    }
+
+    /** Decodes byte arrays from this flow into strings using the specified charset and splits them
+      * into lines. This method correctly handles multi-byte character sequences and line separators
+      * that may be split across chunk boundaries.
+      *
+      * The method recognizes all common line separators: LF (`\n`), CRLF (`\r\n`), and CR (`\r`).
+      * Line separators are removed from the emitted strings. Empty lines are preserved.
+      *
+      * If the stream ends without a trailing line separator, the last line is still emitted. If
+      * the stream is empty, no lines are emitted.
+      *
+      * '''Error Handling:''' The decoder is configured to report malformed input and unmappable
+      * characters. If malformed or invalid byte sequences are encountered, the flow will throw a
+      * `java.nio.charset.MalformedInputException` or
+      * `java.nio.charset.UnmappableCharacterException`. Any valid lines decoded before the error
+      * will be emitted before the exception is thrown.
+      *
+      * Example:
+      * {{{
+      * import java.io.ByteArrayInputStream
+      * import java.nio.charset.StandardCharsets
+      * import scala.collection.mutable.ArrayBuffer
+      *
+      * // Reading ISO-8859-1 encoded file
+      * val data = "café\nlatte\n".getBytes(StandardCharsets.ISO_8859_1)
+      * val input = new ByteArrayInputStream(data)
+      * val lines = ArrayBuffer[String]()
+      *
+      * Flow.fromInputStream(input, bufferSize = 1024)
+      *   .linesIn(StandardCharsets.ISO_8859_1)
+      *   .collect { line =>
+      *     lines += line
+      *   }
+      * // lines contains: "café", "latte"
+      *
+      * // Reading UTF-16 data
+      * val utf16Data = "Hello\nWorld\n".getBytes(StandardCharsets.UTF_16)
+      * val utf16Input = new ByteArrayInputStream(utf16Data)
+      * Flow.fromInputStream(utf16Input)
+      *   .linesIn(StandardCharsets.UTF_16)
+      *   .collect { line =>
+      *     println(line)
+      *   }
+      * }}}
+      *
+      * @param charset
+      *   The charset to use for decoding
+      * @return
+      *   A flow that emits decoded strings split into lines
+      */
+    def linesIn(charset: java.nio.charset.Charset): Flow[String] = flow {
+
+      val decoder = charset
+        .newDecoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+
+      var incompleteBytes = Array.empty[Byte]
+      var lineBuffer      = new StringBuilder()
+      var lastCharWasCR   = false
+
+      def emitLine(line: String): Unit = {
+        emit(line)
+        lineBuffer.clear()
+      }
+
+      def processChar(ch: Char): Unit = {
+        if (lastCharWasCR) {
+          // Previous character was CR
+          if (ch == '\n') {
+            // CRLF sequence - already emitted the line, skip the LF
+            lastCharWasCR = false
+          } else if (ch == '\r') {
+            // Consecutive CRs - emit empty line and keep CR state
+            emitLine("")
+          } else {
+            // CR followed by regular character - start new line
+            lastCharWasCR = false
+            lineBuffer.append(ch)
+          }
+        } else {
+          // Normal processing
+          if (ch == '\n') {
+            emitLine(lineBuffer.toString)
+          } else if (ch == '\r') {
+            emitLine(lineBuffer.toString)
+            lastCharWasCR = true
+          } else {
+            lineBuffer.append(ch)
+          }
+        }
+      }
+
+      byteFlow.collect { bytes =>
+        val fullBytes    = incompleteBytes ++ bytes
+        val inputBuffer  = java.nio.ByteBuffer.wrap(fullBytes)
+        val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length)
+
+        val result = decoder.decode(inputBuffer, outputBuffer, false)
+        if (result.isError) {
+          result.throwException()
+        }
+
+        if (inputBuffer.hasRemaining) {
+          val remaining = new Array[Byte](inputBuffer.remaining())
+          inputBuffer.get(remaining)
+          incompleteBytes = remaining
+        } else {
+          incompleteBytes = Array.empty[Byte]
+        }
+
+        outputBuffer.flip()
+        while (outputBuffer.hasRemaining) {
+          processChar(outputBuffer.get())
+        }
+      }
+
+      // Process any remaining incomplete bytes
+      if (incompleteBytes.nonEmpty) {
+        val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
+        val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length)
+        val decodeResult = decoder.decode(inputBuffer, outputBuffer, true)
+        if (decodeResult.isError) {
+          decodeResult.throwException()
+        }
+        val flushResult = decoder.flush(outputBuffer)
+        if (flushResult.isError) {
+          flushResult.throwException()
+        }
+        outputBuffer.flip()
+        while (outputBuffer.hasRemaining) {
+          processChar(outputBuffer.get())
+        }
+      }
+
+      // Emit the last line if there's any content left and not ending with CR
+      if (lastCharWasCR) {
+        // Stream ended with CR - already emitted the line
+      } else if (lineBuffer.nonEmpty) {
+        emitLine(lineBuffer.toString)
+      }
+    }
   }
 
   /** Creates a flow using the given builder block that emits values through the FlowCollector. The
