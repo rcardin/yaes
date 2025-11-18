@@ -574,6 +574,69 @@ val logs = List(
 writeLogFile(logs, "app.log")
 ```
 
+## Processing Text Line by Line
+
+Flow provides methods to split byte streams into lines, making it easy to process text files and data streams line by line. This is essential for working with structured text data like CSV files, log files, and configuration files.
+
+### Reading Lines from Files
+
+Use `linesInUtf8()` to read UTF-8 encoded text files line by line:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val lines = scala.collection.mutable.ArrayBuffer[String]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .linesInUtf8()
+    .collect { line =>
+      lines += line
+    }
+  // lines contains all lines from the file
+}
+```
+
+### Reading Lines with Custom Encoding
+
+Use `linesIn()` to handle files with different character encodings:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import java.nio.charset.StandardCharsets
+import scala.util.Using
+
+// Read ISO-8859-1 encoded file
+Using(new FileInputStream("legacy-data.txt")) { inputStream =>
+  Flow.fromInputStream(inputStream)
+    .linesIn(StandardCharsets.ISO_8859_1)
+    .collect { line =>
+      println(line)
+    }
+}
+
+// Read UTF-16 encoded file
+Using(new FileInputStream("utf16-data.txt")) { inputStream =>
+  Flow.fromInputStream(inputStream)
+    .linesIn(StandardCharsets.UTF_16)
+    .collect { line =>
+      println(line)
+    }
+}
+```
+
+### Key Characteristics
+
+- **Universal line separator support**: Recognizes `\n` (LF), `\r\n` (CRLF), and `\r` (CR)
+- **Clean output**: Line separators are removed from emitted strings
+- **Empty line preservation**: Empty lines are maintained in the output
+- **Last line handling**: Emits the last line even without a trailing separator
+- **Chunk boundary safety**: Correctly handles multi-byte characters and CRLF sequences split across chunk boundaries
+- **Strict error handling**: Throws `java.nio.charset.MalformedInputException` or `java.nio.charset.UnmappableCharacterException` on invalid input
+
 ## Practical Examples
 
 ### Data Processing Pipeline
