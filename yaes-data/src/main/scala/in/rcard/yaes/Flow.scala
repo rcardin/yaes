@@ -685,6 +685,54 @@ object Flow {
         }
       }
     }
+
+    /** Writes all byte arrays from this flow to the given OutputStream. This is a terminal
+      * operator that processes all elements emitted by the flow.
+      *
+      * Empty byte arrays are skipped and not written to the stream. After all data is written, the
+      * stream is flushed once. The stream is NOT closed - the caller is responsible for managing
+      * the stream lifecycle.
+      *
+      * Example:
+      * {{{
+      * import java.io.FileOutputStream
+      * import scala.util.Using
+      *
+      * // Writing binary data to a file
+      * val data = Array[Byte](1, 2, 3, 4, 5)
+      * val flow = Flow(data)
+      *
+      * Using(new FileOutputStream("output.bin")) { outputStream =>
+      *   flow.toOutputStream(outputStream)
+      * }
+      *
+      * // Writing encoded strings to a file
+      * val strings = List("Hello", " ", "World", "!")
+      * Using(new FileOutputStream("output.txt")) { outputStream =>
+      *   Flow(strings: _*)
+      *     .encodeToUtf8()
+      *     .toOutputStream(outputStream)
+      * }
+      *
+      * // Writing to a ByteArrayOutputStream
+      * val output = new java.io.ByteArrayOutputStream()
+      * Flow("Test".getBytes()).toOutputStream(output)
+      * val result = output.toByteArray
+      * }}}
+      *
+      * @param outputStream
+      *   The OutputStream to write data to
+      * @throws java.io.IOException
+      *   if an I/O error occurs during writing or flushing
+      */
+    def toOutputStream(outputStream: java.io.OutputStream): Unit = {
+      byteFlow.collect { bytes =>
+        if (bytes.nonEmpty) {
+          outputStream.write(bytes)
+        }
+      }
+      outputStream.flush()
+    }
   }
 
   /** Creates a flow using the given builder block that emits values through the FlowCollector. The

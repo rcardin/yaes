@@ -461,29 +461,117 @@ try {
 
 This strict error handling ensures data integrity and prevents silent data corruption.
 
-### Round-trip Encoding and Decoding
+## Writing to OutputStreams
 
-Combine encoding and decoding for round-trip operations:
+Flow provides the `toOutputStream` method to write byte arrays directly to an `OutputStream`, completing the I/O workflow alongside `fromInputStream`.
+
+### Basic Usage
+
+Write byte arrays from a flow to any `OutputStream`:
 
 ```scala 3
 import in.rcard.yaes.Flow
+import java.io.FileOutputStream
+import scala.util.Using
+
+// Write binary data to a file
+val data = Array[Byte](1, 2, 3, 4, 5)
+Using(new FileOutputStream("output.bin")) { outputStream =>
+  Flow(data).toOutputStream(outputStream)
+}
+```
+
+### Writing Encoded Text
+
+Combine string encoding with `toOutputStream` to write text files:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileOutputStream
+import scala.util.Using
+
+val lines = List(
+  "First line",
+  "Second line",
+  "Third line with Unicode: 世界 😀"
+)
+
+Using(new FileOutputStream("output.txt")) { outputStream =>
+  lines.asFlow()
+    .map(_ + "\n") // Add newlines
+    .encodeToUtf8()
+    .toOutputStream(outputStream)
+}
+```
+
+### Key Characteristics
+
+- **Terminal operator**: Returns `Unit` and processes all flow elements
+- **Skips empty arrays**: Empty byte arrays are not written to the stream
+- **Single flush**: Flushes the stream once after all data is written
+- **No auto-close**: Caller is responsible for closing the stream (consistent with `fromInputStream`)
+- **Exception propagation**: Any `IOException` from write or flush operations is propagated to the caller
+
+### Round-trip Encoding and Decoding
+
+Combine encoding, writing, reading, and decoding for complete round-trip operations:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.charset.StandardCharsets
 
 val originalText = "Hello 世界! 😀"
 
-// Encode to bytes
-val encoded = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+// Encode and write to output stream
+val output = new ByteArrayOutputStream()
 Flow(originalText)
   .encodeToUtf8()
-  .collect { bytes => encoded += bytes }
+  .toOutputStream(output)
 
-// Decode back to string
-val decoded = Flow(encoded.toSeq*)
+// Read back and decode
+val input = new ByteArrayInputStream(output.toByteArray)
+val decoded = Flow.fromInputStream(input)
   .asUtf8String()
   .fold("")(_ + _)
 
-// decoded == originalText
+// Verify round-trip
 assert(decoded == originalText)
+```
+
+### Practical Example: Log File Writer
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.{FileOutputStream, BufferedOutputStream}
+import scala.util.Using
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+case class LogEntry(timestamp: LocalDateTime, level: String, message: String)
+
+def writeLogFile(entries: List[LogEntry], filename: String): Unit = {
+  val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+  
+  Using(new BufferedOutputStream(new FileOutputStream(filename))) { output =>
+    entries.asFlow()
+      .map { entry =>
+        val timestamp = entry.timestamp.format(formatter)
+        s"[$timestamp] ${entry.level}: ${entry.message}\n"
+      }
+      .encodeToUtf8()
+      .toOutputStream(output)
+  }
+}
+
+// Usage
+val logs = List(
+  LogEntry(LocalDateTime.now(), "INFO", "Application started"),
+  LogEntry(LocalDateTime.now(), "DEBUG", "Processing data"),
+  LogEntry(LocalDateTime.now(), "ERROR", "Connection failed")
+)
+
+writeLogFile(logs, "app.log")
 ```
 
 ## Practical Examples
