@@ -832,95 +832,38 @@ object Flow {
       *   A flow that emits decoded strings split into lines
       */
     def linesIn(charset: java.nio.charset.Charset): Flow[String] = flow {
+      var lineBuffer    = new StringBuilder()
+      var lastCharWasCR = false
 
-      val decoder = charset
-        .newDecoder()
-        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-
-      var incompleteBytes = Array.empty[Byte]
-      var lineBuffer      = new StringBuilder()
-      var lastCharWasCR   = false
-
-      def emitLine(line: String): Unit = {
-        emit(line)
-        lineBuffer.clear()
-      }
-
-      def processChar(ch: Char): Unit = {
-        if (lastCharWasCR) {
-          // Previous character was CR
-          if (ch == '\n') {
-            // CRLF sequence - already emitted the line, skip the LF
-            lastCharWasCR = false
-          } else if (ch == '\r') {
-            // Consecutive CRs - emit empty line and keep CR state
-            emitLine("")
+      byteFlow.asString(charset).collect { chunk =>
+        chunk.foreach { ch =>
+          if (lastCharWasCR) {
+            if (ch == '\n') {
+              lastCharWasCR = false
+            } else if (ch == '\r') {
+              emit("")
+            } else {
+              lastCharWasCR = false
+              lineBuffer.append(ch)
+            }
           } else {
-            // CR followed by regular character - start new line
-            lastCharWasCR = false
-            lineBuffer.append(ch)
-          }
-        } else {
-          // Normal processing
-          if (ch == '\n') {
-            emitLine(lineBuffer.toString)
-          } else if (ch == '\r') {
-            emitLine(lineBuffer.toString)
-            lastCharWasCR = true
-          } else {
-            lineBuffer.append(ch)
+            if (ch == '\n') {
+              emit(lineBuffer.toString)
+              lineBuffer.clear()
+            } else if (ch == '\r') {
+              emit(lineBuffer.toString)
+              lineBuffer.clear()
+              lastCharWasCR = true
+            } else {
+              lineBuffer.append(ch)
+            }
           }
         }
       }
-
-      byteFlow.collect { bytes =>
-        val fullBytes    = incompleteBytes ++ bytes
-        val inputBuffer  = java.nio.ByteBuffer.wrap(fullBytes)
-        val outputBuffer = java.nio.CharBuffer.allocate(fullBytes.length)
-
-        val result = decoder.decode(inputBuffer, outputBuffer, false)
-        if (result.isError) {
-          result.throwException()
-        }
-
-        if (inputBuffer.hasRemaining) {
-          val remaining = new Array[Byte](inputBuffer.remaining())
-          inputBuffer.get(remaining)
-          incompleteBytes = remaining
-        } else {
-          incompleteBytes = Array.empty[Byte]
-        }
-
-        outputBuffer.flip()
-        while (outputBuffer.hasRemaining) {
-          processChar(outputBuffer.get())
-        }
-      }
-
-      // Process any remaining incomplete bytes
-      if (incompleteBytes.nonEmpty) {
-        val inputBuffer  = java.nio.ByteBuffer.wrap(incompleteBytes)
-        val outputBuffer = java.nio.CharBuffer.allocate(incompleteBytes.length)
-        val decodeResult = decoder.decode(inputBuffer, outputBuffer, true)
-        if (decodeResult.isError) {
-          decodeResult.throwException()
-        }
-        val flushResult = decoder.flush(outputBuffer)
-        if (flushResult.isError) {
-          flushResult.throwException()
-        }
-        outputBuffer.flip()
-        while (outputBuffer.hasRemaining) {
-          processChar(outputBuffer.get())
-        }
-      }
-
+      
       // Emit the last line if there's any content left and not ending with CR
-      if (lastCharWasCR) {
-        // Stream ended with CR - already emitted the line
-      } else if (lineBuffer.nonEmpty) {
-        emitLine(lineBuffer.toString)
+      if (!lastCharWasCR && lineBuffer.nonEmpty) {
+        emit(lineBuffer.toString)
       }
     }
   }
