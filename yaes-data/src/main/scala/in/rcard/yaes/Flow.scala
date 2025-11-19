@@ -747,7 +747,6 @@ object Flow {
       * Example:
       * {{{
       * import java.nio.file.Paths
-      * import scala.collection.mutable.ArrayBuffer
       *
       * // Writing binary data to a file
       * val data = Array[Byte](1, 2, 3, 4, 5)
