@@ -77,14 +77,62 @@ import in.rcard.yaes.Flow
 val flow: Flow[String] = Flow("hello", "world", "!")
 ```
 
-### Empty and Single Value Flows
+### From InputStream
+
+Create a flow that reads data from an InputStream as byte chunks:
 
 ```scala
 import in.rcard.yaes.Flow
+import java.io.FileInputStream
 
-val emptyFlow: Flow[Int] = Flow.empty[Int]
-val singleFlow: Flow[String] = Flow.just("single value")
+val inputStream = new FileInputStream("data.bin")
+val byteFlow: Flow[Array[Byte]] = Flow.fromInputStream(inputStream, bufferSize = 8192)
 ```
+
+Note: The `fromInputStream` method does NOT automatically close the InputStream. Use resource management patterns like `Using` to ensure proper cleanup.
+
+### From File
+
+Create a flow that reads data from a file with automatic resource management:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+val fileFlow: Flow[Array[Byte]] = Flow.fromFile(Paths.get("data.txt"), bufferSize = 8192)
+```
+
+The `fromFile` method automatically manages the file's InputStream lifecycle - it opens the stream when collection starts and closes it when collection completes (either successfully or due to an exception). This makes it more convenient than `fromInputStream` for file operations:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+// Read entire file as UTF-8 string (stream automatically closed)
+val content = Flow.fromFile(Paths.get("data.txt"))
+  .asUtf8String()
+  .fold("")(_ + _)
+
+// Process file line by line
+Flow.fromFile(Paths.get("data.txt"))
+  .linesInUtf8()
+  .filter(_.nonEmpty)
+  .collect { line => println(line) }
+
+// Copy file
+import java.nio.file.Files
+import scala.util.Using
+
+val destPath = Paths.get("copy.txt")
+Using(Files.newOutputStream(destPath)) { outputStream =>
+  Flow.fromFile(Paths.get("source.txt")).toOutputStream(outputStream)
+}
+```
+
+Key differences from `fromInputStream`:
+- **Automatic cleanup**: Stream is closed automatically after collection
+- **Error context**: `IOException` includes the file path for better debugging
+- **File-focused**: Designed specifically for file I/O operations
 
 ## Collecting Flow Values
 
@@ -240,6 +288,397 @@ val count = Flow("a", "b", "c", "d")
 
 // Result: 4
 ```
+
+## Working with Binary Data and Text
+
+Flow provides powerful capabilities for working with InputStreams and decoding binary data into text.
+
+### Reading from InputStream
+
+Use `fromInputStream` to create a flow from any InputStream:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val chunks = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .collect { chunk =>
+      chunks += chunk
+    }
+}
+```
+
+The `bufferSize` parameter controls how much data is read at once. Larger buffers can improve performance for large files, while smaller buffers use less memory.
+
+### Decoding UTF-8 Text
+
+The `asUtf8String()` method correctly handles multi-byte UTF-8 character sequences that may be split across chunk boundaries:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("text.txt")) { inputStream =>
+  val result = scala.collection.mutable.ArrayBuffer[String]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .asUtf8String()
+    .collect { str =>
+      result += str
+    }
+}
+```
+
+This is especially important when processing files that contain:
+- Emoji characters (e.g., 😀, 🌍)
+- Non-Latin scripts (e.g., 世界, العالم, Мир)
+- Special symbols and mathematical notation
+
+### Decoding with Custom Charsets
+
+Use `asString()` to decode text with a specific charset:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
+
+// Reading ISO-8859-1 encoded data
+val data = "café".getBytes(StandardCharsets.ISO_8859_1)
+val input = new ByteArrayInputStream(data)
+
+val result = Flow.fromInputStream(input, bufferSize = 2)
+  .asString(StandardCharsets.ISO_8859_1)
+  .fold("")(_ + _)
+
+// result contains: "café"
+```
+
+### Processing Large Text Files
+
+Combine Flow operators to efficiently process large text files:
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("large-file.txt")) { inputStream =>
+  val lineCount = Flow.fromInputStream(inputStream, bufferSize = 8192)
+    .asUtf8String()
+    .fold(0) { (count, str) =>
+      count + str.count(_ == '\n')
+    }
+  
+  println(s"File contains $lineCount lines")
+}
+```
+
+### Processing JSON from Network
+
+```scala
+import in.rcard.yaes.Flow
+import java.net.URL
+import scala.util.Using
+
+val url = new URL("https://api.example.com/data.json")
+
+Using(url.openStream()) { inputStream =>
+  val json = Flow.fromInputStream(inputStream, bufferSize = 4096)
+    .asUtf8String()
+    .fold("")(_ + _)
+  
+  // Parse JSON string
+  println(s"Received JSON: $json")
+}
+```
+
+### Reading Binary Files with Text Processing
+
+```scala
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+case class FileMetadata(totalBytes: Int, textContent: String)
+
+Using(new FileInputStream("mixed-data.txt")) { inputStream =>
+  var totalBytes = 0
+  val textParts = scala.collection.mutable.ArrayBuffer[String]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 512)
+    .onEach { chunk =>
+      totalBytes += chunk.length
+    }
+    .asUtf8String()
+    .collect { text =>
+      textParts += text
+    }
+  
+  FileMetadata(totalBytes, textParts.mkString)
+}
+```
+
+## Encoding Strings to Bytes
+
+Flow provides methods to encode strings into byte arrays with various character encodings.
+
+### Encoding to UTF-8
+
+Use `encodeToUtf8()` to convert strings to UTF-8 byte arrays:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+val flow = Flow("Hello", "World", "!")
+
+val result = scala.collection.mutable.ArrayBuffer[Array[Byte]]()
+flow
+  .encodeToUtf8()
+  .collect { bytes =>
+    result += bytes
+  }
+
+// Each string is encoded separately as a byte array
+// result.length == 3
+```
+
+This is particularly useful when you need to:
+- Write text data to files or network streams
+- Prepare data for HTTP requests or responses
+- Serialize text data for storage or transmission
+- Convert strings for binary protocols
+
+### Encoding with Custom Charsets
+
+Use `encodeTo()` to encode strings with a specific charset:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+// Encoding with UTF-16
+val flow = Flow("Hello", "世界")
+
+val encoded = flow
+  .encodeTo(StandardCharsets.UTF_16BE)
+  .fold(Array.empty[Byte])(_ ++ _)
+
+val decoded = new String(encoded, StandardCharsets.UTF_16BE)
+// decoded == "Hello世界"
+```
+
+Supported charsets include:
+- `StandardCharsets.UTF_8` - UTF-8 encoding (most common)
+- `StandardCharsets.UTF_16` - UTF-16 encoding
+- `StandardCharsets.UTF_16BE` - UTF-16 Big Endian
+- `StandardCharsets.UTF_16LE` - UTF-16 Little Endian
+- `StandardCharsets.ISO_8859_1` - ISO Latin-1
+- `StandardCharsets.US_ASCII` - US ASCII
+
+### Error Handling with Unmappable Characters
+
+The encoder throws an `UnmappableCharacterException` if a character cannot be represented in the target charset:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.charset.StandardCharsets
+
+// This will throw an exception because Chinese characters
+// cannot be represented in US-ASCII
+try {
+  Flow("世界")
+    .encodeTo(StandardCharsets.US_ASCII)
+    .collect { _ => }
+} catch {
+  case e: java.nio.charset.UnmappableCharacterException =>
+    println(s"Cannot encode: ${e.getMessage}")
+}
+```
+
+This strict error handling ensures data integrity and prevents silent data corruption.
+
+## Writing to OutputStreams
+
+Flow provides the `toOutputStream` method to write byte arrays directly to an `OutputStream`, completing the I/O workflow alongside `fromInputStream`.
+
+### Basic Usage
+
+Write byte arrays from a flow to any `OutputStream`:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileOutputStream
+import scala.util.Using
+
+// Write binary data to a file
+val data = Array[Byte](1, 2, 3, 4, 5)
+Using(new FileOutputStream("output.bin")) { outputStream =>
+  Flow(data).toOutputStream(outputStream)
+}
+```
+
+### Writing Encoded Text
+
+Combine string encoding with `toOutputStream` to write text files:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileOutputStream
+import scala.util.Using
+
+val lines = List(
+  "First line",
+  "Second line",
+  "Third line with Unicode: 世界 😀"
+)
+
+Using(new FileOutputStream("output.txt")) { outputStream =>
+  lines.asFlow()
+    .map(_ + "\n") // Add newlines
+    .encodeToUtf8()
+    .toOutputStream(outputStream)
+}
+```
+
+### Key Characteristics
+
+- **Terminal operator**: Returns `Unit` and processes all flow elements
+- **Skips empty arrays**: Empty byte arrays are not written to the stream
+- **Single flush**: Flushes the stream once after all data is written
+- **No auto-close**: Caller is responsible for closing the stream (consistent with `fromInputStream`)
+- **Exception propagation**: Any `IOException` from write or flush operations is propagated to the caller
+
+### Round-trip Encoding and Decoding
+
+Combine encoding, writing, reading, and decoding for complete round-trip operations:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.nio.charset.StandardCharsets
+
+val originalText = "Hello 世界! 😀"
+
+// Encode and write to output stream
+val output = new ByteArrayOutputStream()
+Flow(originalText)
+  .encodeToUtf8()
+  .toOutputStream(output)
+
+// Read back and decode
+val input = new ByteArrayInputStream(output.toByteArray)
+val decoded = Flow.fromInputStream(input)
+  .asUtf8String()
+  .fold("")(_ + _)
+
+// Verify round-trip
+assert(decoded == originalText)
+```
+
+### Practical Example: Log File Writer
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.{FileOutputStream, BufferedOutputStream}
+import scala.util.Using
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+case class LogEntry(timestamp: LocalDateTime, level: String, message: String)
+
+def writeLogFile(entries: List[LogEntry], filename: String): Unit = {
+  val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+  
+  Using(new BufferedOutputStream(new FileOutputStream(filename))) { output =>
+    entries.asFlow()
+      .map { entry =>
+        val timestamp = entry.timestamp.format(formatter)
+        s"[$timestamp] ${entry.level}: ${entry.message}\n"
+      }
+      .encodeToUtf8()
+      .toOutputStream(output)
+  }
+}
+
+// Usage
+val logs = List(
+  LogEntry(LocalDateTime.now(), "INFO", "Application started"),
+  LogEntry(LocalDateTime.now(), "DEBUG", "Processing data"),
+  LogEntry(LocalDateTime.now(), "ERROR", "Connection failed")
+)
+
+writeLogFile(logs, "app.log")
+```
+
+## Processing Text Line by Line
+
+Flow provides methods to split byte streams into lines, making it easy to process text files and data streams line by line. This is essential for working with structured text data like CSV files, log files, and configuration files.
+
+### Reading Lines from Files
+
+Use `linesInUtf8()` to read UTF-8 encoded text files line by line:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import scala.util.Using
+
+Using(new FileInputStream("data.txt")) { inputStream =>
+  val lines = scala.collection.mutable.ArrayBuffer[String]()
+  
+  Flow.fromInputStream(inputStream, bufferSize = 1024)
+    .linesInUtf8()
+    .collect { line =>
+      lines += line
+    }
+  // lines contains all lines from the file
+}
+```
+
+### Reading Lines with Custom Encoding
+
+Use `linesIn()` to handle files with different character encodings:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.io.FileInputStream
+import java.nio.charset.StandardCharsets
+import scala.util.Using
+
+// Read ISO-8859-1 encoded file
+Using(new FileInputStream("legacy-data.txt")) { inputStream =>
+  Flow.fromInputStream(inputStream)
+    .linesIn(StandardCharsets.ISO_8859_1)
+    .collect { line =>
+      println(line)
+    }
+}
+
+// Read UTF-16 encoded file
+Using(new FileInputStream("utf16-data.txt")) { inputStream =>
+  Flow.fromInputStream(inputStream)
+    .linesIn(StandardCharsets.UTF_16)
+    .collect { line =>
+      println(line)
+    }
+}
+```
+
+### Key Characteristics
+
+- **Universal line separator support**: Recognizes `\n` (LF), `\r\n` (CRLF), and `\r` (CR)
+- **Clean output**: Line separators are removed from emitted strings
+- **Empty line preservation**: Empty lines are maintained in the output
+- **Last line handling**: Emits the last line even without a trailing separator
+- **Chunk boundary safety**: Correctly handles multi-byte characters and CRLF sequences split across chunk boundaries
+- **Strict error handling**: Throws `java.nio.charset.MalformedInputException` or `java.nio.charset.UnmappableCharacterException` on invalid input
 
 ## Practical Examples
 
