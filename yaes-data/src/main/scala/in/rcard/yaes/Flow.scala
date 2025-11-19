@@ -709,7 +709,7 @@ object Flow {
       * // Writing encoded strings to a file
       * val strings = List("Hello", " ", "World", "!")
       * Using(new FileOutputStream("output.txt")) { outputStream =>
-      *   Flow(strings: _*)
+      *   Flow(strings*)
       *     .encodeToUtf8()
       *     .toOutputStream(outputStream)
       * }
@@ -757,13 +757,13 @@ object Flow {
       *
       * // Writing encoded strings to a file
       * val strings = List("Hello", " ", "World", "!")
-      * Flow(strings: _*)
+      * Flow(strings*)
       *   .encodeToUtf8()
       *   .toFile(Paths.get("output.txt"))
       *
       * // Writing lines to a file
       * val lines = List("Line 1", "Line 2", "Line 3")
-      * Flow(lines: _*)
+      * Flow(lines*)
       *   .map(line => (line + "\n").getBytes("UTF-8"))
       *   .toFile(Paths.get("lines.txt"))
       *

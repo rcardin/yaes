@@ -141,13 +141,6 @@ class FlowToFileSpec extends AnyFlatSpec with Matchers {
       Files.exists(tempFile) should be(true)
       Files.readAllBytes(tempFile) should be(data)
     } finally {
-      // Clean up nested directories recursively
-      def deleteRecursively(path: Path): Unit = {
-        if (Files.isDirectory(path)) {
-          Files.list(path).forEach(deleteRecursively)
-        }
-        Files.deleteIfExists(path)
-      }
       deleteRecursively(tempDir)
     }
   }
@@ -412,13 +405,6 @@ class FlowToFileSpec extends AnyFlatSpec with Matchers {
       Files.exists(tempFile) should be(true)
       Files.readAllBytes(tempFile) should be(data)
     } finally {
-      // Clean up nested directories
-      def deleteRecursively(path: Path): Unit = {
-        if (Files.isDirectory(path)) {
-          Files.list(path).forEach(deleteRecursively)
-        }
-        Files.deleteIfExists(path)
-      }
       deleteRecursively(tempDir)
     }
   }
@@ -476,5 +462,12 @@ class FlowToFileSpec extends AnyFlatSpec with Matchers {
       Files.deleteIfExists(tempFile1)
       Files.deleteIfExists(tempFile2)
     }
+  }
+
+  def deleteRecursively(path: Path): Unit = {
+    if (Files.isDirectory(path)) {
+      Files.list(path).forEach(deleteRecursively)
+    }
+    Files.deleteIfExists(path)
   }
 }
