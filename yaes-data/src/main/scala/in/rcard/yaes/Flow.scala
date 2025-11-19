@@ -762,7 +762,7 @@ object Flow {
       *
       * // Writing lines to a file
       * val lines = List("Line 1", "Line 2", "Line 3")
-      * Flow(lines: _*)
+      * Flow(lines*)
       *   .map(line => (line + "\n").getBytes("UTF-8"))
       *   .toFile(Paths.get("lines.txt"))
       *
