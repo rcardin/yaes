@@ -6,6 +6,7 @@ import org.scalatest.matchers.should.Matchers
 import java.io.IOException
 import java.nio.file.{Files, Path, Paths}
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Using
 
 class FlowToFileSpec extends AnyFlatSpec with Matchers {
 
@@ -466,7 +467,9 @@ class FlowToFileSpec extends AnyFlatSpec with Matchers {
 
   def deleteRecursively(path: Path): Unit = {
     if (Files.isDirectory(path)) {
-      Files.list(path).forEach(deleteRecursively)
+      Using(Files.list(path)) {
+        _.forEach(deleteRecursively)
+      }
     }
     Files.deleteIfExists(path)
   }
