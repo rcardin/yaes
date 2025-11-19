@@ -48,6 +48,11 @@ import java.io.FileInputStream
 
 val inputStream = new FileInputStream("data.bin")
 val flow4: Flow[Array[Byte]] = Flow.fromInputStream(inputStream, bufferSize = 1024)
+
+// Create from file
+import java.nio.file.Paths
+
+val flow5: Flow[Array[Byte]] = Flow.fromFile(Paths.get("data.txt"), bufferSize = 8192)
 ```
 
 ### Collecting Flow Values
@@ -219,6 +224,42 @@ Using(new FileInputStream("data.txt")) { inputStream =>
     chunks += chunk
   }
 }
+```
+
+#### fromFile
+
+Creates a flow from a file that emits byte arrays, with automatic resource management:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+// Read entire file as UTF-8 string
+val content = Flow.fromFile(Paths.get("data.txt"))
+  .asUtf8String()
+  .fold("")(_ + _)
+
+// Process file line by line
+Flow.fromFile(Paths.get("data.txt"))
+  .linesInUtf8()
+  .filter(_.nonEmpty)
+  .collect { line => println(line) }
+
+// Copy file
+import java.nio.file.Files
+import scala.util.Using
+
+val destPath = Paths.get("copy.txt")
+Using(Files.newOutputStream(destPath)) { outputStream =>
+  Flow.fromFile(Paths.get("source.txt")).toOutputStream(outputStream)
+}
+```
+
+Key characteristics:
+- Automatically closes the file's InputStream after collection (success or error)
+- Throws `IOException` with the file path context on errors
+- Built on top of `fromInputStream` for consistency
+- Default buffer size: 8192 bytes
 ```
 
 #### asUtf8String

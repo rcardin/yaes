@@ -91,6 +91,49 @@ val byteFlow: Flow[Array[Byte]] = Flow.fromInputStream(inputStream, bufferSize =
 
 Note: The `fromInputStream` method does NOT automatically close the InputStream. Use resource management patterns like `Using` to ensure proper cleanup.
 
+### From File
+
+Create a flow that reads data from a file with automatic resource management:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+val fileFlow: Flow[Array[Byte]] = Flow.fromFile(Paths.get("data.txt"), bufferSize = 8192)
+```
+
+The `fromFile` method automatically manages the file's InputStream lifecycle - it opens the stream when collection starts and closes it when collection completes (either successfully or due to an exception). This makes it more convenient than `fromInputStream` for file operations:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+// Read entire file as UTF-8 string (stream automatically closed)
+val content = Flow.fromFile(Paths.get("data.txt"))
+  .asUtf8String()
+  .fold("")(_ + _)
+
+// Process file line by line
+Flow.fromFile(Paths.get("data.txt"))
+  .linesInUtf8()
+  .filter(_.nonEmpty)
+  .collect { line => println(line) }
+
+// Copy file
+import java.nio.file.Files
+import scala.util.Using
+
+val destPath = Paths.get("copy.txt")
+Using(Files.newOutputStream(destPath)) { outputStream =>
+  Flow.fromFile(Paths.get("source.txt")).toOutputStream(outputStream)
+}
+```
+
+Key differences from `fromInputStream`:
+- **Automatic cleanup**: Stream is closed automatically after collection
+- **Error context**: `IOException` includes the file path for better debugging
+- **File-focused**: Designed specifically for file I/O operations
+
 ## Collecting Flow Values
 
 Use the `collect` method to observe and consume flow values:

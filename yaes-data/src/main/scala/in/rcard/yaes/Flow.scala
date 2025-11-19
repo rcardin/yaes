@@ -1039,6 +1039,89 @@ object Flow {
     }
   }
 
+  /** Creates a flow that reads data from a file at the given path and emits it as byte arrays
+    * (chunks). The flow will continue reading until the end of the file is reached.
+    *
+    * This method automatically manages the file's InputStream lifecycle - the stream is opened
+    * when collection starts and is automatically closed when collection completes (either
+    * successfully or due to an exception).
+    *
+    * Example:
+    * {{{
+    * import java.nio.file.Paths
+    * import scala.collection.mutable.ArrayBuffer
+    *
+    * // Reading a text file
+    * val path = Paths.get("data.txt")
+    * val content = Flow.fromFile(path)
+    *   .asUtf8String()
+    *   .fold("")(_ + _)
+    *
+    * // Reading and processing lines
+    * val lines = ArrayBuffer[String]()
+    * Flow.fromFile(path)
+    *   .linesInUtf8()
+    *   .collect { line =>
+    *     lines += line
+    *   }
+    *
+    * // Copying a file
+    * import java.nio.file.Files
+    * import scala.util.Using
+    *
+    * val destPath = Paths.get("copy.txt")
+    * Using(Files.newOutputStream(destPath)) { outputStream =>
+    *   Flow.fromFile(path).toOutputStream(outputStream)
+    * }
+    *
+    * // Processing with custom buffer size
+    * Flow.fromFile(path, bufferSize = 4096)
+    *   .asUtf8String()
+    *   .collect { chunk => println(chunk) }
+    * }}}
+    *
+    * @param path
+    *   The path to the file to read
+    * @param bufferSize
+    *   The size of the buffer used for reading chunks (default: 8192 bytes)
+    * @return
+    *   A flow that emits byte arrays read from the file
+    * @throws IllegalArgumentException
+    *   if bufferSize is less than or equal to 0
+    * @throws java.io.IOException
+    *   if the file does not exist, is a directory, cannot be read, or if an I/O error occurs
+    *   during reading. The exception message includes the file path for context.
+    */
+  def fromFile(
+      path: java.nio.file.Path,
+      bufferSize: Int = 8192
+  ): Flow[Array[Byte]] = {
+    if (bufferSize <= 0) {
+      throw new IllegalArgumentException(s"bufferSize must be greater than 0, but was $bufferSize")
+    }
+
+    flow {
+      var inputStream: java.io.InputStream = null
+      try {
+        inputStream = java.nio.file.Files.newInputStream(path)
+        fromInputStream(inputStream, bufferSize).collect { chunk =>
+          emit(chunk)
+        }
+      } catch {
+        case e: java.io.IOException =>
+          throw new java.io.IOException(s"Failed to read file: $path", e)
+      } finally {
+        if (inputStream != null) {
+          try {
+            inputStream.close()
+          } catch {
+            case _: java.io.IOException => // Ignore close exceptions
+          }
+        }
+      }
+    }
+  }
+
   /** Creates a flow that emits the given varargs elements.
     *
     * Example:
