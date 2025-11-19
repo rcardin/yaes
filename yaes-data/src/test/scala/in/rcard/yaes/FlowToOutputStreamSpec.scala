@@ -171,7 +171,7 @@ class FlowToOutputStreamSpec extends AnyFlatSpec with Matchers {
 
   it should "work with UTF-8 encoding round-trip" in {
     val originalStrings = List("Hello", " ", "World", "! ", "世界", " ", "😀")
-    val stringFlow      = Flow(originalStrings: _*)
+    val stringFlow      = Flow(originalStrings*)
     val output          = new ByteArrayOutputStream()
 
     stringFlow.encodeToUtf8().toOutputStream(output)
@@ -219,7 +219,7 @@ class FlowToOutputStreamSpec extends AnyFlatSpec with Matchers {
 
   it should "work with data transformed through map" in {
     val numbers = List(1, 2, 3)
-    val flow    = Flow(numbers: _*).map(n => Array(n.toByte))
+    val flow    = Flow(numbers*).map(n => Array(n.toByte))
     val output  = new ByteArrayOutputStream()
 
     flow.toOutputStream(output)
@@ -229,7 +229,7 @@ class FlowToOutputStreamSpec extends AnyFlatSpec with Matchers {
 
   it should "work with filtered data" in {
     val chunks = List("A".getBytes(), "B".getBytes(), "C".getBytes(), "D".getBytes())
-    val flow   = Flow(chunks: _*).filter(arr => arr(0) != 'B'.toByte)
+    val flow   = Flow(chunks*).filter(arr => arr(0) != 'B'.toByte)
     val output = new ByteArrayOutputStream()
 
     flow.toOutputStream(output)

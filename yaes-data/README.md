@@ -245,11 +245,15 @@ Flow.fromFile(Paths.get("data.txt"))
   .filter(_.nonEmpty)
   .collect { line => println(line) }
 
-// Copy file
+// Copy file using toFile (automatic resource management)
+Flow.fromFile(Paths.get("source.txt"))
+  .toFile(Paths.get("copy.txt"))
+
+// Or copy file using toOutputStream (manual resource management)
 import java.nio.file.Files
 import scala.util.Using
 
-val destPath = Paths.get("copy.txt")
+val destPath = Paths.get("copy2.txt")
 Using(Files.newOutputStream(destPath)) { outputStream =>
   Flow.fromFile(Paths.get("source.txt")).toOutputStream(outputStream)
 }
@@ -402,6 +406,37 @@ Key characteristics:
 - Propagates any `IOException` from write or flush operations
 
 Note: The caller is responsible for closing the OutputStream, similar to how `fromInputStream` doesn't close the InputStream.
+
+#### toFile
+
+Writes all byte arrays from a flow directly to a file with automatic resource management:
+
+```scala
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+// Write binary data to a file
+val data = Array[Byte](1, 2, 3, 4, 5)
+Flow(data).toFile(Paths.get("output.bin"))
+
+// Write encoded strings to a text file
+val strings = List("Hello", " ", "World", "!")
+Flow(strings*)
+  .encodeToUtf8()
+  .toFile(Paths.get("output.txt"))
+
+// Copy a file
+Flow.fromFile(Paths.get("source.txt"))
+  .toFile(Paths.get("destination.txt"))
+```
+
+Key characteristics:
+- Terminal operator (returns `Unit`)
+- Automatically manages the OutputStream (opens and closes)
+- Creates parent directories if they don't exist
+- Overwrites existing files
+- Skips empty byte arrays
+- Throws `IOException` with file path context on errors
 
 #### Round-trip Encoding/Decoding
 

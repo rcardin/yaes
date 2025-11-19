@@ -119,11 +119,15 @@ Flow.fromFile(Paths.get("data.txt"))
   .filter(_.nonEmpty)
   .collect { line => println(line) }
 
-// Copy file
+// Copy file using toFile (recommended - automatic resource management)
+Flow.fromFile(Paths.get("source.txt"))
+  .toFile(Paths.get("copy.txt"))
+
+// Or copy file using toOutputStream (manual resource management)
 import java.nio.file.Files
 import scala.util.Using
 
-val destPath = Paths.get("copy.txt")
+val destPath = Paths.get("copy2.txt")
 Using(Files.newOutputStream(destPath)) { outputStream =>
   Flow.fromFile(Paths.get("source.txt")).toOutputStream(outputStream)
 }
@@ -616,6 +620,57 @@ val logs = List(
 
 writeLogFile(logs, "app.log")
 ```
+
+## Writing to Files
+
+Flow provides the `toFile` method to write byte arrays directly to files with automatic resource management, complementing the `fromFile` method.
+
+### Basic Usage
+
+Write byte arrays from a flow to a file:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+// Write binary data
+val data = Array[Byte](1, 2, 3, 4, 5)
+Flow(data).toFile(Paths.get("output.bin"))
+
+// Write text data
+val text = "Hello, World!"
+Flow(text.getBytes("UTF-8"))
+  .toFile(Paths.get("output.txt"))
+```
+
+### Writing Encoded Text
+
+Combine string encoding with `toFile` for convenient text file writing:
+
+```scala 3
+import in.rcard.yaes.Flow
+import java.nio.file.Paths
+
+val lines = List(
+  "First line",
+  "Second line",
+  "Third line with Unicode: 世界 😀"
+)
+
+lines.asFlow()
+  .map(_ + "\n") // Add newlines
+  .encodeToUtf8()
+  .toFile(Paths.get("output.txt"))
+```
+
+### Key Characteristics
+
+- **Terminal operator**: Returns `Unit` and processes all flow elements
+- **Automatic resource management**: Opens and closes the OutputStream automatically
+- **Creates directories**: Parent directories are created if they don't exist
+- **Overwrites files**: Existing files are overwritten (use with caution)
+- **Skips empty arrays**: Empty byte arrays are not written to the file
+- **Exception handling**: Throws `IOException` with file path context on errors
 
 ## Processing Text Line by Line
 
