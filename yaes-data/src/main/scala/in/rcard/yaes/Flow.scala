@@ -842,6 +842,7 @@ object Flow {
               lastCharWasCR = false
             } else if (ch == '\r') {
               emit("")
+              lastCharWasCR = true
             } else {
               lastCharWasCR = false
               lineBuffer.append(ch)
