@@ -260,7 +260,6 @@ Key characteristics:
 - Throws `IOException` with the file path context on errors
 - Built on top of `fromInputStream` for consistency
 - Default buffer size: 8192 bytes
-```
 
 #### asUtf8String
 
