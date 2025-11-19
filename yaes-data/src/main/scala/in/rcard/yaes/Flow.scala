@@ -734,6 +734,77 @@ object Flow {
       outputStream.flush()
     }
 
+    /** Writes all byte arrays from this flow to a file at the given path. This is a terminal
+      * operator that processes all elements emitted by the flow.
+      *
+      * Empty byte arrays are skipped and not written to the file. The method automatically manages
+      * the OutputStream lifecycle - the stream is opened when the method is called and is
+      * automatically closed when writing completes (either successfully or due to an exception).
+      *
+      * If the file already exists, it will be overwritten. If parent directories don't exist, they
+      * will be created automatically.
+      *
+      * Example:
+      * {{{
+      * import java.nio.file.Paths
+      * import scala.collection.mutable.ArrayBuffer
+      *
+      * // Writing binary data to a file
+      * val data = Array[Byte](1, 2, 3, 4, 5)
+      * val flow = Flow(data)
+      * val path = Paths.get("output.bin")
+      * flow.toFile(path)
+      *
+      * // Writing encoded strings to a file
+      * val strings = List("Hello", " ", "World", "!")
+      * Flow(strings: _*)
+      *   .encodeToUtf8()
+      *   .toFile(Paths.get("output.txt"))
+      *
+      * // Writing lines to a file
+      * val lines = List("Line 1", "Line 2", "Line 3")
+      * Flow(lines: _*)
+      *   .map(line => (line + "\n").getBytes("UTF-8"))
+      *   .toFile(Paths.get("lines.txt"))
+      *
+      * // Copying a file
+      * val sourcePath = Paths.get("source.txt")
+      * val destPath = Paths.get("destination.txt")
+      * Flow.fromFile(sourcePath).toFile(destPath)
+      * }}}
+      *
+      * @param path
+      *   The path to the file to write data to
+      * @throws java.io.IOException
+      *   if an I/O error occurs during writing, if the file exists but is a directory, or if the
+      *   file cannot be created or opened for writing. The exception message includes the file
+      *   path for context.
+      */
+    def toFile(path: java.nio.file.Path): Unit = {
+      var outputStream: java.io.OutputStream = null
+      try {
+        // Create parent directories if they don't exist
+        val parent = path.getParent
+        if (parent != null && !java.nio.file.Files.exists(parent)) {
+          java.nio.file.Files.createDirectories(parent)
+        }
+
+        outputStream = java.nio.file.Files.newOutputStream(path)
+        toOutputStream(outputStream)
+      } catch {
+        case e: java.io.IOException =>
+          throw new java.io.IOException(s"Failed to write to file: $path", e)
+      } finally {
+        if (outputStream != null) {
+          try {
+            outputStream.close()
+          } catch {
+            case _: java.io.IOException => // Ignore close exceptions
+          }
+        }
+      }
+    }
+
     /** Decodes byte arrays from this flow into UTF-8 strings and splits them into lines. This
       * method correctly handles multi-byte UTF-8 character sequences and line separators that may
       * be split across chunk boundaries.
