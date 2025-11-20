@@ -277,6 +277,152 @@ Raise.run {
 }
 ```
 
+### Channel Flow Builder
+
+The `channelFlow` and `channelFlowWith` functions create a bridge between channels and flows. They build cold flows where elements are emitted through a `Producer` context parameter. This approach combines the concurrent communication power of channels with the composability of flows.
+
+#### Basic Usage
+
+The `channelFlow` function creates a flow with an unbounded channel:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+
+Async.run {
+  val flow = Channel.channelFlow[Int] {
+    Channel.Producer.send(1)
+    Channel.Producer.send(2)
+    Channel.Producer.send(3)
+  }
+
+  val result = scala.collection.mutable.ArrayBuffer[Int]()
+  flow.collect { value => result += value }
+  // result: ArrayBuffer(1, 2, 3)
+}
+```
+
+The `Producer[T]` is available as a context parameter using Scala 3's context function syntax (`?=>`), allowing you to call `Channel.Producer.send()` directly within the builder block.
+
+#### Custom Channel Types
+
+Use `channelFlowWith` to specify a different channel type (bounded with overflow strategy or rendezvous):
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+Async.run {
+  // Using a bounded channel with capacity 5
+  val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
+    (1 to 100).foreach(Channel.Producer.send)
+  }
+
+  val result = scala.collection.mutable.ArrayBuffer[Int]()
+  flow.collect { value => result += value }
+  // result: ArrayBuffer(1, 2, ..., 100)
+}
+```
+
+Available channel types:
+- `Channel.Type.Unbounded`: No capacity limit (default for `channelFlow`)
+- `Channel.Type.Bounded(capacity)`: Limited capacity with SUSPEND overflow strategy
+- `Channel.Type.Bounded(capacity, overflowStrategy)`: Custom overflow behavior
+- `Channel.Type.Rendezvous`: Zero capacity, requires sender-receiver rendezvous
+
+#### Concurrent Emission
+
+One of the key advantages of `channelFlow` is support for concurrent emission from multiple fibers:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+Async.run {
+  val flow = Channel.channelFlow[Int] {
+    val fiber1 = Async.fork {
+      Channel.Producer.send(1)
+      Async.delay(50) // Simulate work
+      Channel.Producer.send(2)
+    }
+
+    val fiber2 = Async.fork {
+      Channel.Producer.send(3)
+      Async.delay(50) // Simulate work
+      Channel.Producer.send(4)
+    }
+  }
+
+  val result = scala.collection.mutable.ArrayBuffer[Int]()
+  flow.collect { value => result += value }
+  // result contains all four values (order may vary due to concurrency)
+}
+```
+
+#### Merging Multiple Flows
+
+`channelFlow` is excellent for implementing flow operators that merge multiple sources:
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
+  Channel.channelFlow[T] {
+    val fiber1 = Async.fork {
+      flow1.collect { value => Channel.Producer.send(value) }
+    }
+
+    val fiber2 = Async.fork {
+      flow2.collect { value => Channel.Producer.send(value) }
+    }
+  }
+
+Async.run {
+  val numbers = Flow(1, 2, 3)
+  val letters = Flow("a", "b", "c")
+  
+  val combined = scala.collection.mutable.ArrayBuffer[Any]()
+  merge(numbers, letters).collect { value => combined += value }
+  // combined contains all six elements
+}
+```
+
+#### Cold Flow Behavior
+
+Like all flows in yaes, `channelFlow` creates a cold flow. The builder block executes every time `collect` is called:
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+
+Async.run {
+  val flow = Channel.channelFlow[Int] {
+    println("Executing builder")
+    Channel.Producer.send(1)
+    Channel.Producer.send(2)
+}
+
+  flow.collect { _ => } // Prints "Executing builder"
+  flow.collect { _ => } // Prints "Executing builder" again
+}
+```
+
+#### Comparison with Producer Pattern
+
+| Feature | `produce`/`produceWith` | `channelFlow`/`channelFlowWith` |
+|---------|------------------------|--------------------------------|
+| Return type | `ReceiveChannel[T]` | `Flow[T]` |
+| Execution | Hot (starts immediately) | Cold (starts on collect) |
+| Composition | Channel operations | Flow operators (map, filter, etc.) |
+| Concurrency | Supported | Supported |
+| Use case | Direct channel consumption | Flow pipelines and transformations |
+
+Choose `channelFlow` when you need flow composition and cold execution semantics. Choose `produce` when you need a hot channel that starts producing immediately.
+
 ## Iteration
 
 Use the `foreach` extension method to iterate over all elements in a channel:
