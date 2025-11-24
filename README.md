@@ -1183,6 +1183,110 @@ Raise.run {
 }
 ```
 
+#### Channel Flow Builder
+
+The `channelFlow` and `channelFlowWith` functions provide a bridge between channels and flows, creating cold flows where elements are emitted through a `Producer` context. Unlike `produce`, which returns a `ReceiveChannel`, `channelFlow` returns a `Flow` that can be composed with flow operators.
+
+**Basic usage with `channelFlow`:**
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+
+val flow = Channel.channelFlow[Int] {
+  Channel.Producer.send(1)
+  Channel.Producer.send(2)
+  Channel.Producer.send(3)
+}
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains: 1, 2, 3
+```
+
+**With custom channel type using `channelFlowWith`:**
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
+  (1 to 100).foreach(Channel.Producer.send)
+}
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains: 1 to 100
+```
+
+**Concurrent emission from multiple fibers:**
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val flow = Channel.channelFlow[Int] {
+  Async.fork {
+    Channel.Producer.send(1)
+    Channel.Producer.send(2)
+  }
+
+  Async.fork {
+    Channel.Producer.send(3)
+    Channel.Producer.send(4)
+  }
+}
+
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains all four values
+```
+
+**Merging multiple flows:**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
+  Channel.channelFlow[T] {
+    Async.fork {
+      flow1.collect { value => Channel.Producer.send(value) }
+    }
+
+    Async.fork {
+      flow2.collect { value => Channel.Producer.send(value) }
+    }
+  }
+
+val flow1 = Flow(1, 2, 3)
+val flow2 = Flow(4, 5, 6)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+merge(flow1, flow2).collect { value => result += value }
+// result contains all six values
+```
+
+Key features:
+- **Cold execution**: The builder block executes every time `collect` is called on the flow
+- **Concurrent emission**: Supports multiple fibers sending to the same producer
+- **Flow composition**: Returns a `Flow` that can be used with all flow operators (map, filter, take, etc.)
+
+**Design Decision: Internal vs External `Async` Context**
+
+You might notice that `channelFlow` doesn't require an external `Async` effect to run, unlike combinators such as `par` and `race`. This is intentional:
+
+| Category | Examples | `Async` Required | Reason |
+|----------|----------|------------------|--------|
+| **Combinators** | `par`, `race`, `zipWith` | Yes (external) | Compose existing computations; caller controls concurrency scope |
+| **Builders** | `channelFlow`, `Flow.flow` | No (internal) | Encapsulate their own effects; `Async.run` is part of `collect` implementation |
+
+This design ensures that `channelFlow` produces a standard `Flow[T]` that can be used anywhere a `Flow` is expected, without leaking concurrency requirements to callers. The `Async.run` is invoked internally when `collect` is called, making each collection trigger a fresh concurrent computation.
+
 #### Error Handling
 
 Channel operations can raise `ChannelClosed` errors. These must be handled using the `Raise` effect:
