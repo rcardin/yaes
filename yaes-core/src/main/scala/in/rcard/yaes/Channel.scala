@@ -1065,13 +1065,15 @@ object Channel {
     Async
       .fork {
         try {
-          block(using
-            new Producer[T] {
-              override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
-                channel.send(value)
-              override def close(): Boolean = channel.close()
-            }
-          )
+          Async.run {
+            block(using
+              new Producer[T] {
+                override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
+                  channel.send(value)
+                override def close(): Boolean = channel.close()
+              }
+            )
+          }
         } finally {
           channel.close()
         }
@@ -1093,19 +1095,12 @@ object Channel {
     * The resulting flow completes as soon as the builder block and all child fibers complete. The
     * channel is automatically closed when the block finishes.
     *
-    * '''Note:''' The caller is responsible for handling the [[Async]] and [[Raise]] effects. The
-    * builder block should wrap its logic in appropriate effect handlers.
-    *
     * Example - Basic usage:
     * {{{
     * val flow = Channel.channelFlow[Int] {
-    *   Raise.run {
-    *     Async.run {
-    *       Channel.Producer.send(1)
-    *       Channel.Producer.send(2)
-    *       Channel.Producer.send(3)
-    *     }
-    *   }
+    *   Channel.Producer.send(1)
+    *   Channel.Producer.send(2)
+    *   Channel.Producer.send(3)
     * }
     *
     * val result = scala.collection.mutable.ArrayBuffer[Int]()
@@ -1116,20 +1111,16 @@ object Channel {
     * Example - Concurrent emission from multiple fibers:
     * {{{
     * val flow = Channel.channelFlow[Int] {
-    *   Raise.run {
-    *     Async.run {
-    *       // Emit from first fiber
-    *       Async.fork {
-    *         Channel.Producer.send(1)
-    *         Channel.Producer.send(2)
-    *       }
+    *   // Emit from first fiber
+    *   Async.fork {
+    *     Channel.Producer.send(1)
+    *     Channel.Producer.send(2)
+    *   }
     *
-    *       // Emit from second fiber concurrently
-    *       Async.fork {
-    *         Channel.Producer.send(3)
-    *         Channel.Producer.send(4)
-    *       }
-    *     }
+    *   // Emit from second fiber concurrently
+    *   Async.fork {
+    *     Channel.Producer.send(3)
+    *     Channel.Producer.send(4)
     *   }
     * }
     *
@@ -1142,18 +1133,14 @@ object Channel {
     * {{{
     * def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
     *   Channel.channelFlow[T] {
-    *     Raise.run {
-    *       Async.run {
-    *         // Collect from first flow in a separate fiber
-    *         Async.fork {
-    *           flow1.collect { value => Channel.Producer.send(value) }
-    *         }
+    *     // Collect from first flow in a separate fiber
+    *     Async.fork {
+    *       flow1.collect { value => Channel.Producer.send(value) }
+    *     }
     *
-    *         // Collect from second flow concurrently
-    *         Async.fork {
-    *           flow2.collect { value => Channel.Producer.send(value) }
-    *         }
-    *       }
+    *     // Collect from second flow concurrently
+    *     Async.fork {
+    *       flow2.collect { value => Channel.Producer.send(value) }
     *     }
     *   }
     *
@@ -1162,8 +1149,7 @@ object Channel {
     * }}}
     *
     * @param block
-    *   A context function that receives an implicit [[Producer]] and executes the flow logic. The
-    *   caller must handle [[Async]] and [[Raise]] effects within this block.
+    *   A context function that receives an implicit [[Producer]] and executes the flow logic.
     * @tparam T
     *   The type of elements in the flow
     * @return
@@ -1171,7 +1157,7 @@ object Channel {
     * @see
     *   [[channelFlowWith]] for a version that accepts a custom channel type
     */
-  def channelFlow[T](block: (Raise[ChannelClosed], Producer[T]) ?=> Unit)(using Async): Flow[T] =
+  def channelFlow[T](block: (Async, Raise[ChannelClosed], Producer[T]) ?=> Unit): Flow[T] =
     channelFlowWith(Channel.Type.Unbounded)(block)
 
   /** Creates a cold Flow with a specific channel type that uses a [[Producer]] context parameter.
@@ -1187,17 +1173,10 @@ object Channel {
     * The resulting flow completes as soon as the builder block and all child fibers complete. The
     * channel is automatically closed when the block finishes.
     *
-    * '''Note:''' The caller is responsible for handling the [[Async]] and [[Raise]] effects. The
-    * builder block should wrap its logic in appropriate effect handlers.
-    *
     * Example - Bounded channel with backpressure:
     * {{{
     * val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
-    *   Raise.run {
-    *     Async.run {
-    *       (1 to 100).foreach(Channel.Producer.send)
-    *     }
-    *   }
+    *    (1 to 100).foreach(Channel.Producer.send)
     * }
     *
     * val result = scala.collection.mutable.ArrayBuffer[Int]()
@@ -1208,15 +1187,9 @@ object Channel {
     * Example - Rendezvous channel (zero buffer):
     * {{{
     * val flow = Channel.channelFlowWith[Int](Channel.Type.Rendezvous) {
-    *   Raise.run {
-    *     Async.run {
-    *       Async.fork {
-    *         Channel.Producer.send(1)
-    *         Channel.Producer.send(2)
-    *         Channel.Producer.send(3)
-    *       }
-    *     }
-    *   }
+    *   Channel.Producer.send(1)
+    *   Channel.Producer.send(2)
+    *   Channel.Producer.send(3)
     * }
     *
     * val result = scala.collection.mutable.ArrayBuffer[Int]()
@@ -1230,8 +1203,7 @@ object Channel {
     *   - [[Type.Bounded]]: Suspends producer when buffer is full (provides backpressure)
     *   - [[Type.Rendezvous]]: Producer and consumer must meet (zero buffer)
     * @param block
-    *   A context function that receives an implicit [[Producer]] and executes the flow logic. The
-    *   caller must handle [[Async]] and [[Raise]] effects within this block.
+    *   A context function that receives an implicit [[Producer]] and executes the flow logic.
     * @tparam T
     *   The type of elements in the flow
     * @return
@@ -1241,17 +1213,17 @@ object Channel {
     */
   def channelFlowWith[T](
       channelType: Channel.Type
-  )(block: (Raise[ChannelClosed], Producer[T]) ?=> Unit)(using Async): Flow[T] =
+  )(block: (Async, Raise[ChannelClosed], Producer[T]) ?=> Unit): Flow[T] =
     Flow.flow {
       Raise.run[ChannelClosed, Unit] {
-        val producer = Channel.produceWith(channelType) {
-          block
-        }
+        Async.run {
+          val producer = Channel.produceWith(channelType) {
+            block
+          }
 
-        // Collect from the channel and emit to the flow collector
-
-        for (value <- producer) {
-          Flow.emit(value)
+          for (value <- producer) {
+            Flow.emit(value)
+          }
         }
       }
     }

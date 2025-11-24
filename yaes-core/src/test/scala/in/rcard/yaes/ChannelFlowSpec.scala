@@ -22,14 +22,14 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
         result += value
       }
     }
-    
+
     result should contain theSameElementsInOrderAs Seq(1, 2, 3)
   }
 
   it should "be cold - execute the block on each collection" in {
     var executionCount = 0
-    val result1 = scala.collection.mutable.ArrayBuffer[Int]()
-    val result2 = scala.collection.mutable.ArrayBuffer[Int]()
+    val result1        = scala.collection.mutable.ArrayBuffer[Int]()
+    val result2        = scala.collection.mutable.ArrayBuffer[Int]()
 
     Async.run {
       val flow = Channel.channelFlow[Int] {
@@ -76,25 +76,19 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
 
   it should "support concurrent emission from multiple fibers" in {
     val result = scala.collection.mutable.ArrayBuffer[Int]()
-    Async.run {
-      val flow = Channel.channelFlow[Int] {
-        Raise.run {
-          Async.run {
-            Async.fork {
-              Channel.Producer.send(1)
-              Channel.Producer.send(2)
-            }
-
-            Async.fork {
-              Channel.Producer.send(3)
-              Channel.Producer.send(4)
-            }
-          }
-        }
+    val flow = Channel.channelFlow[Int] {
+      Async.fork {
+        Channel.Producer.send(1)
+        Channel.Producer.send(2)
       }
 
-      flow.collect { value => result += value }
+      Async.fork {
+        Channel.Producer.send(3)
+        Channel.Producer.send(4)
+      }
     }
+
+    flow.collect { value => result += value }
 
     result should contain allOf (1, 2, 3, 4)
     result should have size 4
@@ -102,24 +96,19 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
 
   it should "emit values from forked fibers in arrival order" in {
     val result = scala.collection.mutable.ArrayBuffer[String]()
-    Async.run {
-      val flow = Channel.channelFlow[String] {
-        Raise.run {
-          Async.run {
-            Async.fork {
-              Async.delay(50.millis)
-              Channel.Producer.send("slow")
-            }
-
-            Async.fork {
-              Channel.Producer.send("fast")
-            }
-          }
-        }
+    
+    val flow = Channel.channelFlow[String] {
+      Async.fork {
+        Async.delay(50.millis)
+        Channel.Producer.send("slow")
       }
 
-      flow.collect { value => result += value }
+      Async.fork {
+        Channel.Producer.send("fast")
+      }
     }
+
+    flow.collect { value => result += value }
 
     // Fast should arrive before slow
     result should contain theSameElementsInOrderAs Seq("fast", "slow")
@@ -127,27 +116,23 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
 
   it should "complete after all forked fibers complete" in {
     val result = scala.collection.mutable.ArrayBuffer[Int]()
-    Async.run {
-      val flow = Channel.channelFlow[Int] {
-        Raise.run {
-          Async.run {
-            Async.fork {
-              Async.delay(100.millis)
-              Channel.Producer.send(1)
-            }
-
-            Async.fork {
-              Async.delay(50.millis)
-              Channel.Producer.send(2)
-            }
-
-            Channel.Producer.send(3)
-          }
+    
+    val flow = Channel.channelFlow[Int] {
+      
+        Async.fork {
+          Async.delay(100.millis)
+          Channel.Producer.send(1)
         }
-      }
 
-      flow.collect { value => result += value }
+        Async.fork {
+          Async.delay(50.millis)
+          Channel.Producer.send(2)
+        }
+
+        Channel.Producer.send(3)
     }
+
+    flow.collect { value => result += value }
 
     result should contain allOf (1, 2, 3)
     result should have size 3
@@ -458,7 +443,7 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
   it should "handle rapid collection and cancellation" in {
     val result1 = scala.collection.mutable.ArrayBuffer[Int]()
     val result2 = scala.collection.mutable.ArrayBuffer[Int]()
-    
+
     Async.run {
       val flow = Channel.channelFlow[Int] {
         var i = 0

@@ -1193,17 +1193,15 @@ The `channelFlow` and `channelFlowWith` functions provide a bridge between chann
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 
-Async.run {
-  val flow = Channel.channelFlow[Int] {
-    Channel.Producer.send(1)
-    Channel.Producer.send(2)
-    Channel.Producer.send(3)
-  }
-
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  flow.collect { value => result += value }
-  // result contains: 1, 2, 3
+val flow = Channel.channelFlow[Int] {
+  Channel.Producer.send(1)
+  Channel.Producer.send(2)
+  Channel.Producer.send(3)
 }
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains: 1, 2, 3
 ```
 
 **With custom channel type using `channelFlowWith`:**
@@ -1213,15 +1211,13 @@ import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 
-Async.run {
-  val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
-    (1 to 100).foreach(Channel.Producer.send)
-  }
-
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  flow.collect { value => result += value }
-  // result contains: 1 to 100
+val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
+  (1 to 100).foreach(Channel.Producer.send)
 }
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains: 1 to 100
 ```
 
 **Concurrent emission from multiple fibers:**
@@ -1231,23 +1227,22 @@ import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 
-Async.run {
-  val flow = Channel.channelFlow[Int] {
-    Async.fork {
-      Channel.Producer.send(1)
-      Channel.Producer.send(2)
-    }
-
-    Async.fork {
-      Channel.Producer.send(3)
-      Channel.Producer.send(4)
-    }
+val flow = Channel.channelFlow[Int] {
+  Async.fork {
+    Channel.Producer.send(1)
+    Channel.Producer.send(2)
   }
 
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  flow.collect { value => result += value }
-  // result contains all four values
+  Async.fork {
+    Channel.Producer.send(3)
+    Channel.Producer.send(4)
+  }
 }
+
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains all four values
 ```
 
 **Merging multiple flows:**
@@ -1268,14 +1263,12 @@ def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
     }
   }
 
-Async.run {
-  val flow1 = Flow(1, 2, 3)
-  val flow2 = Flow(4, 5, 6)
-  
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  merge(flow1, flow2).collect { value => result += value }
-  // result contains all six values
-}
+val flow1 = Flow(1, 2, 3)
+val flow2 = Flow(4, 5, 6)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+merge(flow1, flow2).collect { value => result += value }
+// result contains all six values
 ```
 
 Key features:

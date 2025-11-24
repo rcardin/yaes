@@ -289,17 +289,15 @@ The `channelFlow` function creates a flow with an unbounded channel:
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 
-Async.run {
-  val flow = Channel.channelFlow[Int] {
-    Channel.Producer.send(1)
-    Channel.Producer.send(2)
-    Channel.Producer.send(3)
-  }
-
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  flow.collect { value => result += value }
-  // result: ArrayBuffer(1, 2, 3)
+val flow = Channel.channelFlow[Int] {
+  Channel.Producer.send(1)
+  Channel.Producer.send(2)
+  Channel.Producer.send(3)
 }
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result: ArrayBuffer(1, 2, 3)
 ```
 
 The `Producer[T]` is available as a context parameter using Scala 3's context function syntax (`?=>`), allowing you to call `Channel.Producer.send()` directly within the builder block.
@@ -313,16 +311,14 @@ import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 
-Async.run {
-  // Using a bounded channel with capacity 5
-  val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
-    (1 to 100).foreach(Channel.Producer.send)
-  }
-
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  flow.collect { value => result += value }
-  // result: ArrayBuffer(1, 2, ..., 100)
+// Using a bounded channel with capacity 5
+val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
+  (1 to 100).foreach(Channel.Producer.send)
 }
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result: ArrayBuffer(1, 2, ..., 100)
 ```
 
 Available channel types:
@@ -340,25 +336,23 @@ import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 
-Async.run {
-  val flow = Channel.channelFlow[Int] {
-    val fiber1 = Async.fork {
-      Channel.Producer.send(1)
-      Async.delay(50) // Simulate work
-      Channel.Producer.send(2)
-    }
-
-    val fiber2 = Async.fork {
-      Channel.Producer.send(3)
-      Async.delay(50) // Simulate work
-      Channel.Producer.send(4)
-    }
+val flow = Channel.channelFlow[Int] {
+  val fiber1 = Async.fork {
+    Channel.Producer.send(1)
+    Async.delay(50) // Simulate work
+    Channel.Producer.send(2)
   }
 
-  val result = scala.collection.mutable.ArrayBuffer[Int]()
-  flow.collect { value => result += value }
-  // result contains all four values (order may vary due to concurrency)
+  val fiber2 = Async.fork {
+    Channel.Producer.send(3)
+    Async.delay(50) // Simulate work
+    Channel.Producer.send(4)
+  }
 }
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains all four values (order may vary due to concurrency)
 ```
 
 #### Merging Multiple Flows
@@ -381,14 +375,12 @@ def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
     }
   }
 
-Async.run {
-  val numbers = Flow(1, 2, 3)
-  val letters = Flow("a", "b", "c")
-  
-  val combined = scala.collection.mutable.ArrayBuffer[Any]()
-  merge(numbers, letters).collect { value => combined += value }
-  // combined contains all six elements
-}
+val numbers = Flow(1, 2, 3)
+val letters = Flow("a", "b", "c")
+
+val combined = scala.collection.mutable.ArrayBuffer[Any]()
+merge(numbers, letters).collect { value => combined += value }
+// combined contains all six elements
 ```
 
 #### Cold Flow Behavior
@@ -399,16 +391,14 @@ Like all flows in yaes, `channelFlow` creates a cold flow. The builder block exe
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 
-Async.run {
-  val flow = Channel.channelFlow[Int] {
-    println("Executing builder")
-    Channel.Producer.send(1)
-    Channel.Producer.send(2)
+val flow = Channel.channelFlow[Int] {
+  println("Executing builder")
+  Channel.Producer.send(1)
+  Channel.Producer.send(2)
 }
 
-  flow.collect { _ => } // Prints "Executing builder"
-  flow.collect { _ => } // Prints "Executing builder" again
-}
+flow.collect { _ => } // Prints "Executing builder"
+flow.collect { _ => } // Prints "Executing builder" again
 ```
 
 #### Comparison with Producer Pattern
