@@ -413,6 +413,27 @@ flow.collect { _ => } // Prints "Executing builder" again
 
 Choose `channelFlow` when you need flow composition and cold execution semantics. Choose `produce` when you need a hot channel that starts producing immediately.
 
+#### Design Decision: Internal vs External `Async` Context
+
+You might notice that `channelFlow` doesn't require an external `Async` effect to run, unlike combinators such as `par`, `race`, or `zipWith`. This is an intentional design choice based on the distinction between **builders** and **combinators**:
+
+| Category | Examples | `Async` Required | Reason |
+|----------|----------|------------------|--------|
+| **Combinators** | `par`, `race`, `zipWith` | Yes (external) | Compose existing computations; caller controls concurrency scope |
+| **Builders** | `channelFlow`, `Flow.flow` | No (internal) | Encapsulate their own effects; `Async.run` is part of `collect` implementation |
+
+**Why this matters:**
+
+1. **API Consistency**: All `Flow` operations (like `map`, `filter`, `collect`) don't require `Async` externally. If `channelFlow` required it, the resulting flow would leak implementation details to callers.
+
+2. **Composability**: A flow created by `channelFlow` can be used anywhere a `Flow[T]` is expected, without special handling.
+
+3. **Cold Semantics**: The `Async.run` is invoked internally when `collect` is called, ensuring each collection triggers a fresh concurrent computation—preserving the cold flow contract.
+
+4. **Encapsulation**: The builder pattern encapsulates complexity. Users of the flow don't need to know (or care) that channels and fibers are used internally.
+
+This approach mirrors how Kotlin's `channelFlow` manages its own coroutine scope internally, providing a clean separation between flow creation and flow consumption.
+
 ## Iteration
 
 Use the `foreach` extension method to iterate over all elements in a channel:

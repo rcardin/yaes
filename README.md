@@ -1276,6 +1276,17 @@ Key features:
 - **Concurrent emission**: Supports multiple fibers sending to the same producer
 - **Flow composition**: Returns a `Flow` that can be used with all flow operators (map, filter, take, etc.)
 
+**Design Decision: Internal vs External `Async` Context**
+
+You might notice that `channelFlow` doesn't require an external `Async` effect to run, unlike combinators such as `par` and `race`. This is intentional:
+
+| Category | Examples | `Async` Required | Reason |
+|----------|----------|------------------|--------|
+| **Combinators** | `par`, `race`, `zipWith` | Yes (external) | Compose existing computations; caller controls concurrency scope |
+| **Builders** | `channelFlow`, `Flow.flow` | No (internal) | Encapsulate their own effects; `Async.run` is part of `collect` implementation |
+
+This design ensures that `channelFlow` produces a standard `Flow[T]` that can be used anywhere a `Flow` is expected, without leaking concurrency requirements to callers. The `Async.run` is invoked internally when `collect` is called, making each collection trigger a fresh concurrent computation.
+
 #### Error Handling
 
 Channel operations can raise `ChannelClosed` errors. These must be handled using the `Raise` effect:
