@@ -1326,18 +1326,22 @@ import in.rcard.yaes.Async.*
 import scala.concurrent.duration.*
 
 // DROP_OLDEST: drops oldest buffered values when full
-val flow1 = Flow(1, 2, 3, 4, 5)
-flow1.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_OLDEST)).collect { value =>
-  Async.delay(100.millis) // Slow consumer
-  println(value)
+Async.run {
+  val flow1 = Flow(1, 2, 3, 4, 5)
+  flow1.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_OLDEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
 }
 // May print: 1, 4, 5 (oldest values dropped)
 
 // DROP_LATEST: drops new values when buffer is full
-val flow2 = Flow(1, 2, 3, 4, 5)
-flow2.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_LATEST)).collect { value =>
-  Async.delay(100.millis) // Slow consumer
-  println(value)
+Async.run {
+  val flow2 = Flow(1, 2, 3, 4, 5)
+  flow2.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_LATEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
 }
 // May print: 1, 2, 3 (latest values dropped)
 ```
