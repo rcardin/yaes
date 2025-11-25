@@ -434,6 +434,104 @@ You might notice that `channelFlow` doesn't require an external `Async` effect t
 
 This approach mirrors how Kotlin's `channelFlow` manages its own coroutine scope internally, providing a clean separation between flow creation and flow consumption.
 
+### Flow Buffering with `buffer`
+
+The `buffer` operator buffers flow emissions via a channel, allowing the producer (upstream flow) and consumer (downstream collector) to run concurrently. This can significantly improve performance when emissions and collection have different speeds.
+
+#### Basic Usage
+
+```scala
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer().collect { value => result += value }
+// result contains: 1, 2, 3, 4, 5
+```
+
+By default, `buffer` uses an unbounded channel, meaning the producer will never suspend due to buffer capacity.
+
+#### With Bounded Buffer
+
+For backpressure control, use a bounded channel:
+
+```scala
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer(Channel.Type.Bounded(2)).collect { value => result += value }
+// result contains: 1, 2, 3, 4, 5
+```
+
+With a bounded buffer and the default `SUSPEND` strategy, the producer will suspend when the buffer is full, providing natural backpressure.
+
+#### With Rendezvous Channel
+
+For strict synchronization between producer and consumer:
+
+```scala
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer(Channel.Type.Rendezvous).collect { value => result += value }
+// result contains: 1, 2, 3
+```
+
+#### Overflow Strategies
+
+Bounded channels support different overflow strategies:
+
+```scala
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.{buffer, OverflowStrategy}
+import in.rcard.yaes.Async.*
+import scala.concurrent.duration.*
+
+// DROP_OLDEST: drops oldest buffered values when full
+Async.run {
+  val flow1 = Flow(1, 2, 3, 4, 5)
+  flow1.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_OLDEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
+}
+// May print: 1, 4, 5 (oldest values dropped when buffer overflows)
+
+// DROP_LATEST: drops new values when buffer is full  
+Async.run {
+  val flow2 = Flow(1, 2, 3, 4, 5)
+  flow2.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_LATEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
+}
+// May print: 1, 2, 3 (latest values dropped when buffer overflows)
+```
+
+#### Key Characteristics
+
+| Feature | Description |
+|---------|-------------|
+| **Cold operator** | The producer doesn't start until `collect` is called |
+| **Concurrent execution** | Producer and consumer run in separate fibers |
+| **Error propagation** | Errors from producer or consumer are properly propagated |
+| **Channel cleanup** | The underlying channel is properly closed on completion or error |
+
+#### When to Use `buffer`
+
+- **Performance**: When producer is faster than consumer and you want to avoid blocking
+- **Decoupling**: When you want to decouple the emission and collection rates
+- **Backpressure**: Use bounded buffer with `SUSPEND` to apply backpressure to fast producers
+- **Sampling**: Use `DROP_OLDEST` or `DROP_LATEST` when you can tolerate data loss
+
 ## Iteration
 
 Use the `foreach` extension method to iterate over all elements in a channel:
