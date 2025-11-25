@@ -505,7 +505,7 @@ Async.run {
 }
 // May print: 1, 4, 5 (oldest values dropped when buffer overflows)
 
-// DROP_LATEST: drops new values when buffer is full  
+// DROP_LATEST: drops new values when buffer is full
 Async.run {
   val flow2 = Flow(1, 2, 3, 4, 5)
   flow2.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_LATEST)).collect { value =>
