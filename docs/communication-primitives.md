@@ -285,7 +285,7 @@ The `channelFlow` and `channelFlowWith` functions create a bridge between channe
 
 The `channelFlow` function creates a flow with an unbounded channel:
 
-```scala 3
+```scala
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 
@@ -306,7 +306,7 @@ The `Producer[T]` is available as a context parameter using Scala 3's context fu
 
 Use `channelFlowWith` to specify a different channel type (bounded with overflow strategy or rendezvous):
 
-```scala 3
+```scala
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
@@ -331,7 +331,7 @@ Available channel types:
 
 One of the key advantages of `channelFlow` is support for concurrent emission from multiple fibers:
 
-```scala 3
+```scala
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
@@ -359,7 +359,7 @@ flow.collect { value => result += value }
 
 `channelFlow` is excellent for implementing flow operators that merge multiple sources:
 
-```scala 3
+```scala
 import in.rcard.yaes.{Channel, Flow}
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
@@ -387,7 +387,7 @@ merge(numbers, letters).collect { value => combined += value }
 
 Like all flows in yaes, `channelFlow` creates a cold flow. The builder block executes every time `collect` is called:
 
-```scala 3
+```scala
 import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 

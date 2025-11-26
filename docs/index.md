@@ -51,7 +51,7 @@ The data module provides functional data structures optimized for use with effec
 
 Add the dependencies to your `build.sbt`:
 
-```scala 3
+```scala
 libraryDependencies ++= Seq(
   "in.rcard.yaes" %% "yaes-core" % "0.9.0",
   "in.rcard.yaes" %% "yaes-data" % "0.9.0"  // Optional: for Flow and other data structures
@@ -62,7 +62,7 @@ libraryDependencies ++= Seq(
 
 You can choose between **monadic style**:
 
-```scala 3
+```scala
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Yaes.*
@@ -75,7 +75,7 @@ def drunkFlip(using Random, Raise[String]): String = for {
 
 Or a more **direct style**:
 
-```scala 3
+```scala
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Raise.*
 
@@ -104,7 +104,7 @@ In λÆS, types like `Random` and `Raise` are **Effects**:
 
 Effects are managed using **Handlers**:
 
-```scala 3
+```scala
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Raise.*
 
@@ -135,7 +135,7 @@ val result: String = Raise.run {
 
 `YaesApp` provides a unified entry point for building complete applications:
 
-```scala 3
+```scala
 import in.rcard.yaes.*
 
 object MyApp extends YaesApp {

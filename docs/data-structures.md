@@ -436,7 +436,7 @@ Flow provides methods to encode strings into byte arrays with various character 
 
 Use `encodeToUtf8()` to convert strings to UTF-8 byte arrays:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.nio.charset.StandardCharsets
 
@@ -463,7 +463,7 @@ This is particularly useful when you need to:
 
 Use `encodeTo()` to encode strings with a specific charset:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.nio.charset.StandardCharsets
 
@@ -490,7 +490,7 @@ Supported charsets include:
 
 The encoder throws an `UnmappableCharacterException` if a character cannot be represented in the target charset:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.nio.charset.StandardCharsets
 
@@ -516,7 +516,7 @@ Flow provides the `toOutputStream` method to write byte arrays directly to an `O
 
 Write byte arrays from a flow to any `OutputStream`:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.io.FileOutputStream
 import scala.util.Using
@@ -532,7 +532,7 @@ Using(new FileOutputStream("output.bin")) { outputStream =>
 
 Combine string encoding with `toOutputStream` to write text files:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.io.FileOutputStream
 import scala.util.Using
@@ -563,7 +563,7 @@ Using(new FileOutputStream("output.txt")) { outputStream =>
 
 Combine encoding, writing, reading, and decoding for complete round-trip operations:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.charset.StandardCharsets
@@ -588,7 +588,7 @@ assert(decoded == originalText)
 
 ### Practical Example: Log File Writer
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.io.{FileOutputStream, BufferedOutputStream}
 import scala.util.Using
@@ -629,7 +629,7 @@ Flow provides the `toFile` method to write byte arrays directly to files with au
 
 Write byte arrays from a flow to a file:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.nio.file.Paths
 
@@ -647,7 +647,7 @@ Flow(text.getBytes("UTF-8"))
 
 Combine string encoding with `toFile` for convenient text file writing:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.nio.file.Paths
 
@@ -680,7 +680,7 @@ Flow provides methods to split byte streams into lines, making it easy to proces
 
 Use `linesInUtf8()` to read UTF-8 encoded text files line by line:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.io.FileInputStream
 import scala.util.Using
@@ -701,7 +701,7 @@ Using(new FileInputStream("data.txt")) { inputStream =>
 
 Use `linesIn()` to handle files with different character encodings:
 
-```scala 3
+```scala
 import in.rcard.yaes.Flow
 import java.io.FileInputStream
 import java.nio.charset.StandardCharsets
