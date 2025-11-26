@@ -904,6 +904,39 @@ object Channel {
     }
   }
 
+  /** Extension methods for [[Flow]] that use channels for buffering. */
+  extension [A](flow: Flow[A]) {
+
+    /** Buffers flow emissions via a channel of a specified capacity.
+      *
+      * The `buffer` operator creates a separate coroutine during execution for the flow it applies
+      * to. This allows the producer (upstream flow) and consumer (downstream collector) to run
+      * concurrently, potentially improving performance when emissions and collection have different
+      * speeds.
+      *
+      * @param capacity
+      *   the type/capacity of the buffer between coroutines (default: [[Type.Unbounded]])
+      * @return
+      *   a new flow that buffers emissions using the specified channel type
+      */
+    def buffer(capacity: Channel.Type = Channel.Type.Unbounded): Flow[A] =
+      Flow.flow {
+        Raise.run[ChannelClosed, Unit] {
+          Async.run {
+            val producer = Channel.produceWith[A](capacity) {
+              flow.collect { value =>
+                Channel.Producer.send(value)
+              }
+            }
+
+            for (value <- producer) {
+              Flow.emit(value)
+            }
+          }
+        }
+      }
+  }
+
   /** A producer is a [[SendChannel]] that can be used with context-bound syntax.
     *
     * This trait is used by the [[produce]] and [[produceWith]] functions to provide a convenient

@@ -1287,6 +1287,71 @@ You might notice that `channelFlow` doesn't require an external `Async` effect t
 
 This design ensures that `channelFlow` produces a standard `Flow[T]` that can be used anywhere a `Flow` is expected, without leaking concurrency requirements to callers. The `Async.run` is invoked internally when `collect` is called, making each collection trigger a fresh concurrent computation.
 
+#### Flow Buffering
+
+The `buffer` operator allows flow emissions to be buffered via a channel, enabling the producer (upstream flow) and consumer (downstream collector) to run concurrently. This can improve performance when emissions and collection have different speeds.
+
+**Basic usage with unbounded buffer (default):**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer().collect { value => result += value }
+// result contains: 1, 2, 3, 4, 5
+```
+
+**With bounded buffer for backpressure:**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer(Channel.Type.Bounded(2)).collect { value => result += value }
+// result contains: 1, 2, 3, 4, 5
+```
+
+**With overflow strategies:**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.{buffer, OverflowStrategy}
+import in.rcard.yaes.Async.*
+import scala.concurrent.duration.*
+
+// DROP_OLDEST: drops oldest buffered values when full
+Async.run {
+  val flow1 = Flow(1, 2, 3, 4, 5)
+  flow1.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_OLDEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
+}
+// May print: 1, 4, 5 (oldest values dropped)
+
+// DROP_LATEST: drops new values when buffer is full
+Async.run {
+  val flow2 = Flow(1, 2, 3, 4, 5)
+  flow2.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_LATEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
+}
+// May print: 1, 2, 3 (latest values dropped)
+```
+
+Key features:
+- **Cold operator**: The producer doesn't start until `collect` is called
+- **Concurrent execution**: Producer and consumer run in separate fibers
+- **Configurable buffering**: Supports unbounded, bounded, and rendezvous channels
+- **Overflow strategies**: SUSPEND (default), DROP_OLDEST, or DROP_LATEST for bounded channels
+
 #### Error Handling
 
 Channel operations can raise `ChannelClosed` errors. These must be handled using the `Raise` effect:
