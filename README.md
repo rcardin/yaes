@@ -83,7 +83,7 @@ The above code shows how to handle only the `Random` effect. The `Raise` effect 
 The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.7.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.9.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
@@ -1182,6 +1182,175 @@ Raise.run {
   }
 }
 ```
+
+#### Channel Flow Builder
+
+The `channelFlow` and `channelFlowWith` functions provide a bridge between channels and flows, creating cold flows where elements are emitted through a `Producer` context. Unlike `produce`, which returns a `ReceiveChannel`, `channelFlow` returns a `Flow` that can be composed with flow operators.
+
+**Basic usage with `channelFlow`:**
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+
+val flow = Channel.channelFlow[Int] {
+  Channel.Producer.send(1)
+  Channel.Producer.send(2)
+  Channel.Producer.send(3)
+}
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains: 1, 2, 3
+```
+
+**With custom channel type using `channelFlowWith`:**
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
+  (1 to 100).foreach(Channel.Producer.send)
+}
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains: 1 to 100
+```
+
+**Concurrent emission from multiple fibers:**
+
+```scala 3
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+val flow = Channel.channelFlow[Int] {
+  Async.fork {
+    Channel.Producer.send(1)
+    Channel.Producer.send(2)
+  }
+
+  Async.fork {
+    Channel.Producer.send(3)
+    Channel.Producer.send(4)
+  }
+}
+
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.collect { value => result += value }
+// result contains all four values
+```
+
+**Merging multiple flows:**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
+  Channel.channelFlow[T] {
+    Async.fork {
+      flow1.collect { value => Channel.Producer.send(value) }
+    }
+
+    Async.fork {
+      flow2.collect { value => Channel.Producer.send(value) }
+    }
+  }
+
+val flow1 = Flow(1, 2, 3)
+val flow2 = Flow(4, 5, 6)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+merge(flow1, flow2).collect { value => result += value }
+// result contains all six values
+```
+
+Key features:
+- **Cold execution**: The builder block executes every time `collect` is called on the flow
+- **Concurrent emission**: Supports multiple fibers sending to the same producer
+- **Flow composition**: Returns a `Flow` that can be used with all flow operators (map, filter, take, etc.)
+
+**Design Decision: Internal vs External `Async` Context**
+
+You might notice that `channelFlow` doesn't require an external `Async` effect to run, unlike combinators such as `par` and `race`. This is intentional:
+
+| Category | Examples | `Async` Required | Reason |
+|----------|----------|------------------|--------|
+| **Combinators** | `par`, `race`, `zipWith` | Yes (external) | Compose existing computations; caller controls concurrency scope |
+| **Builders** | `channelFlow`, `Flow.flow` | No (internal) | Encapsulate their own effects; `Async.run` is part of `collect` implementation |
+
+This design ensures that `channelFlow` produces a standard `Flow[T]` that can be used anywhere a `Flow` is expected, without leaking concurrency requirements to callers. The `Async.run` is invoked internally when `collect` is called, making each collection trigger a fresh concurrent computation.
+
+#### Flow Buffering
+
+The `buffer` operator allows flow emissions to be buffered via a channel, enabling the producer (upstream flow) and consumer (downstream collector) to run concurrently. This can improve performance when emissions and collection have different speeds.
+
+**Basic usage with unbounded buffer (default):**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer().collect { value => result += value }
+// result contains: 1, 2, 3, 4, 5
+```
+
+**With bounded buffer for backpressure:**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.buffer
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+flow.buffer(Channel.Type.Bounded(2)).collect { value => result += value }
+// result contains: 1, 2, 3, 4, 5
+```
+
+**With overflow strategies:**
+
+```scala 3
+import in.rcard.yaes.{Channel, Flow}
+import in.rcard.yaes.Channel.{buffer, OverflowStrategy}
+import in.rcard.yaes.Async.*
+import scala.concurrent.duration.*
+
+// DROP_OLDEST: drops oldest buffered values when full
+Async.run {
+  val flow1 = Flow(1, 2, 3, 4, 5)
+  flow1.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_OLDEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
+}
+// May print: 1, 4, 5 (oldest values dropped)
+
+// DROP_LATEST: drops new values when buffer is full
+Async.run {
+  val flow2 = Flow(1, 2, 3, 4, 5)
+  flow2.buffer(Channel.Type.Bounded(2, OverflowStrategy.DROP_LATEST)).collect { value =>
+    Async.delay(100.millis) // Slow consumer
+    println(value)
+  }
+}
+// May print: 1, 2, 3 (latest values dropped)
+```
+
+Key features:
+- **Cold operator**: The producer doesn't start until `collect` is called
+- **Concurrent execution**: Producer and consumer run in separate fibers
+- **Configurable buffering**: Supports unbounded, bounded, and rendezvous channels
+- **Overflow strategies**: SUSPEND (default), DROP_OLDEST, or DROP_LATEST for bounded channels
 
 #### Error Handling
 

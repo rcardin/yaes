@@ -904,6 +904,39 @@ object Channel {
     }
   }
 
+  /** Extension methods for [[Flow]] that use channels for buffering. */
+  extension [A](flow: Flow[A]) {
+
+    /** Buffers flow emissions via a channel of a specified capacity.
+      *
+      * The `buffer` operator creates a separate coroutine during execution for the flow it applies
+      * to. This allows the producer (upstream flow) and consumer (downstream collector) to run
+      * concurrently, potentially improving performance when emissions and collection have different
+      * speeds.
+      *
+      * @param capacity
+      *   the type/capacity of the buffer between coroutines (default: [[Type.Unbounded]])
+      * @return
+      *   a new flow that buffers emissions using the specified channel type
+      */
+    def buffer(capacity: Channel.Type = Channel.Type.Unbounded): Flow[A] =
+      Flow.flow {
+        Raise.run[ChannelClosed, Unit] {
+          Async.run {
+            val producer = Channel.produceWith[A](capacity) {
+              flow.collect { value =>
+                Channel.Producer.send(value)
+              }
+            }
+
+            for (value <- producer) {
+              Flow.emit(value)
+            }
+          }
+        }
+      }
+  }
+
   /** A producer is a [[SendChannel]] that can be used with context-bound syntax.
     *
     * This trait is used by the [[produce]] and [[produceWith]] functions to provide a convenient
@@ -1065,17 +1098,166 @@ object Channel {
     Async
       .fork {
         try {
-          block(using
-            new Producer[T] {
-              override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
-                channel.send(value)
-              override def close(): Boolean = channel.close()
-            }
-          )
+          Async.run {
+            block(using
+              new Producer[T] {
+                override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
+                  channel.send(value)
+                override def close(): Boolean = channel.close()
+              }
+            )
+          }
         } finally {
           channel.close()
         }
       }
     channel
   }
+
+  /** Creates a cold Flow with an unbounded channel that uses a [[Producer]] context parameter.
+    *
+    * A `channelFlow` is a bridge between channels and flows, allowing you to create a cold Flow
+    * where elements are sent to a channel via an implicit [[Producer]] context. The flow is cold,
+    * meaning the builder block is executed every time a terminal operator (like `collect`) is
+    * applied to the resulting flow.
+    *
+    * This builder supports concurrent emission: the [[Producer]] context can be used from multiple
+    * fibers launched within the builder block using [[Async.fork]]. All emissions are thread-safe
+    * and will be properly buffered in an unbounded channel.
+    *
+    * The resulting flow completes as soon as the builder block and all child fibers complete. The
+    * channel is automatically closed when the block finishes.
+    *
+    * Example - Basic usage:
+    * {{{
+    * val flow = Channel.channelFlow[Int] {
+    *   Channel.Producer.send(1)
+    *   Channel.Producer.send(2)
+    *   Channel.Producer.send(3)
+    * }
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * flow.collect { value => result += value }
+    * // result contains: 1, 2, 3
+    * }}}
+    *
+    * Example - Concurrent emission from multiple fibers:
+    * {{{
+    * val flow = Channel.channelFlow[Int] {
+    *   // Emit from first fiber
+    *   Async.fork {
+    *     Channel.Producer.send(1)
+    *     Channel.Producer.send(2)
+    *   }
+    *
+    *   // Emit from second fiber concurrently
+    *   Async.fork {
+    *     Channel.Producer.send(3)
+    *     Channel.Producer.send(4)
+    *   }
+    * }
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * flow.collect { value => result += value }
+    * // result contains all four values (order may vary based on fiber scheduling)
+    * }}}
+    *
+    * Example - Merging multiple flows:
+    * {{{
+    * def merge[T](flow1: Flow[T], flow2: Flow[T]): Flow[T] =
+    *   Channel.channelFlow[T] {
+    *     // Collect from first flow in a separate fiber
+    *     Async.fork {
+    *       flow1.collect { value => Channel.Producer.send(value) }
+    *     }
+    *
+    *     // Collect from second flow concurrently
+    *     Async.fork {
+    *       flow2.collect { value => Channel.Producer.send(value) }
+    *     }
+    *   }
+    *
+    * val merged = merge(Flow(1, 2, 3), Flow(4, 5, 6))
+    * merged.collect { value => println(value) }
+    * }}}
+    *
+    * @param block
+    *   A context function that receives an implicit [[Producer]] and executes the flow logic.
+    * @tparam T
+    *   The type of elements in the flow
+    * @return
+    *   A cold [[Flow]] that emits elements sent through the producer context
+    * @see
+    *   [[channelFlowWith]] for a version that accepts a custom channel type
+    */
+  def channelFlow[T](block: (Async, Raise[ChannelClosed], Producer[T]) ?=> Unit): Flow[T] =
+    channelFlowWith(Channel.Type.Unbounded)(block)
+
+  /** Creates a cold Flow with a specific channel type that uses a [[Producer]] context parameter.
+    *
+    * This function is similar to [[channelFlow]], but allows you to specify the channel type
+    * (bounded, unbounded, or rendezvous). The flow is cold, meaning the builder block is executed
+    * every time a terminal operator (like `collect`) is applied to the resulting flow.
+    *
+    * This builder supports concurrent emission: the [[Producer]] context can be used from multiple
+    * fibers launched within the builder block using [[Async.fork]]. All emissions are thread-safe
+    * and will be properly buffered according to the channel type.
+    *
+    * The resulting flow completes as soon as the builder block and all child fibers complete. The
+    * channel is automatically closed when the block finishes.
+    *
+    * Example - Bounded channel with backpressure:
+    * {{{
+    * val flow = Channel.channelFlowWith[Int](Channel.Type.Bounded(5)) {
+    *    (1 to 100).foreach(Channel.Producer.send)
+    * }
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * flow.collect { value => result += value }
+    * // result contains: 1 to 100
+    * }}}
+    *
+    * Example - Rendezvous channel (zero buffer):
+    * {{{
+    * val flow = Channel.channelFlowWith[Int](Channel.Type.Rendezvous) {
+    *   Channel.Producer.send(1)
+    *   Channel.Producer.send(2)
+    *   Channel.Producer.send(3)
+    * }
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * flow.collect { value => result += value }
+    * // result contains: 1, 2, 3
+    * }}}
+    *
+    * @param channelType
+    *   The type of channel to use for buffering. This controls backpressure behavior:
+    *   - [[Type.Unbounded]]: Never suspends the producer, unlimited buffer
+    *   - [[Type.Bounded]]: Suspends producer when buffer is full (provides backpressure)
+    *   - [[Type.Rendezvous]]: Producer and consumer must meet (zero buffer)
+    * @param block
+    *   A context function that receives an implicit [[Producer]] and executes the flow logic.
+    * @tparam T
+    *   The type of elements in the flow
+    * @return
+    *   A cold [[Flow]] that emits elements sent through the producer context
+    * @see
+    *   [[channelFlow]] for a version with default unbounded channel
+    */
+  def channelFlowWith[T](
+      channelType: Channel.Type
+  )(block: (Async, Raise[ChannelClosed], Producer[T]) ?=> Unit): Flow[T] =
+    Flow.flow {
+      Raise.run[ChannelClosed, Unit] {
+        Async.run {
+          val producer = Channel.produceWith(channelType) {
+            block
+          }
+
+          for (value <- producer) {
+            Flow.emit(value)
+          }
+        }
+      }
+    }
 }
