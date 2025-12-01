@@ -27,6 +27,7 @@ Watch the talk from **Scalar 2025** about the main concepts behind the library:
 
 - **`yaes-core`**: The main effects of the λÆS library
 - **`yaes-data`**: Functional data structures that complement the λÆS effects system
+- **`yaes-cats`**: Cats Effect integration for seamless interoperability
 
 ### λÆS Core
 The core module provides a comprehensive set of effects for functional programming:
@@ -40,6 +41,13 @@ The core module provides a comprehensive set of effects for functional programmi
 The data module provides functional data structures optimized for use with effects:
 - **Flow**: Cold asynchronous data streams with rich transformation operators
 - Future additions: Immutable collections, persistent data structures
+
+### λÆS Cats
+The [Cats Effect integration](cats-effect.html) module provides seamless interoperability between λÆS and Cats Effect 3:
+- **Bidirectional Conversions**: Convert between λÆS IO and Cats Effect IO
+- **Typed Error Handling**: Full integration with Raise[Throwable]
+- **Timeout Support**: Prevent indefinite blocking with configurable timeouts
+- **Fluent API**: Extension methods for natural chaining
 
 ## 🚀 Quick Start
 

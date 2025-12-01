@@ -24,6 +24,7 @@ collections:
 header_pages:
   - index.md
   - getting-started.md
+  - cats-effect.md
   - effects/index.md
   - data-structures.md
   - examples.md
