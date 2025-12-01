@@ -21,13 +21,13 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.9.0"
 ## Quick Start
 
 ```scala
-import in.rcard.yaes.{IO => YaesIO}
+import in.rcard.yaes.{IO => YaesIO, Raise, Cats}
+import in.rcard.yaes.Cats._
 import cats.effect.{IO => CatsIO}
-import in.rcard.yaes.interop.cats._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 // YAES IO → Cats Effect IO
-val yaesProgram: YaesIO ?=> Int = YaesIO {
+val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
   println("Hello from YAES")
   42
 }
@@ -39,7 +39,9 @@ val result = catsIO.unsafeRunSync()  // 42
 val catsProgram: CatsIO[String] = CatsIO.pure("Hello from Cats")
 
 val yaesResult = YaesIO.run {
-  catsProgram.value  // Extension method
+  Raise.either {
+    catsProgram.value  // Extension method
+  }
 }
 ```
 
@@ -52,12 +54,13 @@ Convert YAES IO programs to Cats Effect IO:
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
 
-val yaesProgram: YaesIO ?=> Int = YaesIO { 42 }
+val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO { 42 }
 val catsIO: CatsIO[Int] = Cats.run(yaesProgram)
 ```
 
 **Requirements:**
 - Requires an implicit `ExecutionContext` for running the YAES handler
+- The yaesProgram has access to `Raise[Throwable]` for typed error handling
 
 ### Cats Effect → YAES
 
@@ -68,14 +71,20 @@ val catsIO: CatsIO[Int] = CatsIO.pure(42)
 
 // Using object method
 val result1 = YaesIO.run {
-  Cats.value(catsIO)
+  Raise.either {
+    Cats.value(catsIO)
+  }
 }
 
 // Using extension method (fluent style)
 val result2 = YaesIO.run {
-  catsIO.value
+  Raise.either {
+    catsIO.value
+  }
 }
 ```
+
+**Note:** The conversion requires handling `Raise[Throwable]` using Raise combinators like `either`, `fold`, `recover`, etc.
 
 ### Timeout Support
 
@@ -86,18 +95,26 @@ import scala.concurrent.duration._
 
 val slowCatsIO = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
 
-// Using object method
+// Using object method with Raise.fold
 val result1 = YaesIO.run {
-  Cats.value(slowCatsIO, 5.seconds)  // Timeout after 5 seconds
+  Raise.fold(
+    Cats.value(slowCatsIO, 5.seconds)  // Timeout after 5 seconds
+  )(
+    error => -1  // Handle timeout
+  )(
+    value => value
+  )
 }
 
-// Using extension method
+// Using extension method with Raise.either
 val result2 = YaesIO.run {
-  slowCatsIO.value(5.seconds)  // Fluent style with timeout
+  Raise.either {
+    slowCatsIO.value(5.seconds)  // Fluent style with timeout
+  }
 }
 ```
 
-If the computation doesn't complete within the timeout, a `java.util.concurrent.TimeoutException` is thrown.
+If the computation doesn't complete within the timeout, a `java.util.concurrent.TimeoutException` is raised via `Raise[Throwable]`.
 
 ## Features
 
@@ -108,7 +125,7 @@ Effects are deferred until explicitly executed:
 ```scala
 var counter = 0
 
-val yaesProgram: YaesIO ?=> Int = YaesIO {
+val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
   counter += 1
   counter
 }
@@ -127,7 +144,7 @@ Errors are preserved across conversions:
 
 ```scala
 // YAES → Cats
-val yaesError: YaesIO ?=> Int = YaesIO {
+val yaesError: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
   throw new RuntimeException("YAES error")
 }
 
@@ -138,26 +155,120 @@ val catsIO = Cats.run(yaesError)
 val catsError = CatsIO.raiseError[Int](new RuntimeException("Cats error"))
 
 val result = YaesIO.run {
-  catsError.value
+  Raise.either {
+    catsError.value
+  }
 }
-// Error will be thrown when awaiting the result
+// Error will be available as Left in the Either
 ```
+
+### Typed Error Handling with Raise
+
+Both conversion methods support `Raise[Throwable]` for typed error handling, allowing you to use YAES's Raise combinators instead of raw exception handling.
+
+#### Handling Errors When Converting Cats Effect → YAES
+
+Use Raise combinators to handle exceptions in a type-safe way:
+
+```scala
+import in.rcard.yaes.{IO => YaesIO, Raise, Cats}
+import in.rcard.yaes.Cats._
+
+val catsIO = CatsIO.raiseError[Int](new RuntimeException("Oops"))
+
+// Using Raise.either
+val result1 = YaesIO.run {
+  Raise.either {
+    catsIO.value
+  } match {
+    case Right(value) => println(s"Success: $value")
+    case Left(error) => println(s"Error: ${error.getMessage}")
+  }
+}
+
+// Using Raise.fold
+val result2 = YaesIO.run {
+  Raise.fold(
+    catsIO.value
+  )(
+    error => println(s"Error: ${error.getMessage}")
+  )(
+    value => println(s"Success: $value")
+  )
+}
+
+// Using Raise.recover for default values
+val result3 = YaesIO.run {
+  Raise.recover {
+    catsIO.value
+  } { _ => 0 }  // Return 0 on any error
+}
+```
+
+#### Using Raise in YAES Programs Before Conversion
+
+YAES programs can use `Raise[Throwable]` for error handling before converting to Cats Effect:
+
+```scala
+val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
+  Raise.catching {
+    // Some operation that might throw
+    riskyOperation()
+  } { ex => ex }  // Catch and raise exceptions
+}
+
+val catsIO = Cats.run(yaesProgram)
+// Raised errors are converted to exceptions in Cats Effect IO
+```
+
+#### Handling Timeouts with Raise
+
+Timeouts from `Await.result` are raised as `TimeoutException`:
+
+```scala
+import scala.concurrent.duration._
+
+val slowComputation = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
+
+val result = YaesIO.run {
+  Raise.fold(
+    slowComputation.value(1.second)
+  )(
+    error => -1  // Default value on timeout or error
+  )(
+    value => value
+  )
+}
+```
+
+#### Common Exceptions Raised
+
+When converting Cats Effect IO to YAES IO, the following exceptions may be raised via `Raise[Throwable]`:
+
+- **`TimeoutException`** - When `Await.result` times out (if timeout specified)
+- **`ExecutionException`** - When the Future execution fails
+- **`RuntimeException`** - Generic runtime exceptions from computations
+- **Any other `Throwable`** - From the Cats Effect computation
+
+All exceptions are captured and raised via `Raise[Throwable]`, allowing you to handle them with any Raise combinator.
 
 ### Composition
 
 Conversions can be composed and chained:
 
 ```scala
-val originalYaes: YaesIO ?=> Int = YaesIO { 21 }
+val originalYaes: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO { 21 }
 
 // YAES → Cats → transformation → YAES
 val result = YaesIO.run {
-  Cats.run(originalYaes)
-    .map(_ * 2)
-    .flatMap(x => CatsIO.pure(x + 1))
-    .value
+  Raise.either {
+    Cats.run(originalYaes)
+      .map(_ * 2)
+      .flatMap(x => CatsIO.pure(x + 1))
+      .value
+  }
 }
-// result: Future[Int] = 43
+// result: Future[Either[Throwable, Int]] = Right(43)
 ```
 
 ### Fluent Chaining
@@ -166,10 +277,12 @@ Extension methods enable fluent chaining:
 
 ```scala
 val result = YaesIO.run {
-  CatsIO.pure(21)
-    .map(_ * 2)
-    .flatMap(x => CatsIO.pure(x + 1))
-    .value  // Convert to YAES at the end
+  Raise.either {
+    CatsIO.pure(21)
+      .map(_ * 2)
+      .flatMap(x => CatsIO.pure(x + 1))
+      .value  // Convert to YAES at the end
+  }
 }
 ```
 
@@ -229,12 +342,14 @@ The Cats → YAES conversion uses `Await.result`, which blocks the current threa
 // Cats → YAES
 val number: CatsIO[Int] = CatsIO.pure(42)
 val result = YaesIO.run {
-  number.value
+  Raise.either {
+    number.value
+  }
 }
-Await.result(result, 5.seconds)  // 42
+val either = Await.result(result, 5.seconds)  // Right(42)
 
 // YAES → Cats
-val yaesNumber: YaesIO ?=> Int = YaesIO { 42 }
+val yaesNumber: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO { 42 }
 val catsNumber = Cats.run(yaesNumber)
 catsNumber.unsafeRunSync()  // 42
 ```
@@ -250,10 +365,12 @@ val catsIO = CatsIO {
 }
 
 val result = YaesIO.run {
-  catsIO.value
+  Raise.either {
+    catsIO.value
+  }
 }
 
-Await.result(result, 5.seconds)  // "Count: 1"
+val either = Await.result(result, 5.seconds)  // Right("Count: 1")
 counter  // 1
 ```
 
@@ -262,7 +379,7 @@ counter  // 1
 ```scala
 var accumulator = 0
 
-val yaesProgram: YaesIO ?=> String = YaesIO {
+val yaesProgram: (YaesIO, Raise[Throwable]) ?=> String = YaesIO {
   accumulator += 1
   s"YAES: $accumulator"
 }
@@ -276,10 +393,12 @@ val complexComputation = Cats.run(yaesProgram)
   }
 
 val result = YaesIO.run {
-  complexComputation.value
+  Raise.either {
+    complexComputation.value
+  }
 }
 
-Await.result(result, 5.seconds)  // "YAES: 1, Cats: 11"
+val either = Await.result(result, 5.seconds)  // Right("YAES: 1, Cats: 11")
 accumulator  // 11
 ```
 
@@ -291,22 +410,25 @@ import scala.concurrent.duration._
 val slowComputation = CatsIO.sleep(10.seconds) *> CatsIO.pure("Done")
 
 val result = YaesIO.run {
-  slowComputation.value(1.second)  // Timeout after 1 second
+  Raise.fold(
+    slowComputation.value(1.second)  // Timeout after 1 second
+  )(
+    error => "Computation timed out!"
+  )(
+    value => s"Success: $value"
+  )
 }
 
-try {
-  Await.result(result, 5.seconds)
-} catch {
-  case _: TimeoutException => println("Computation timed out!")
-}
+Await.result(result, 5.seconds)  // "Computation timed out!"
 ```
 
 ## Type Aliases
 
-For convenience, the package object provides type aliases:
+For convenience, type aliases are available:
 
 ```scala
-import in.rcard.yaes.interop.cats._
+import in.rcard.yaes.Cats
+import in.rcard.yaes.Cats._
 
 // These are equivalent:
 val io1: in.rcard.yaes.IO = ???
