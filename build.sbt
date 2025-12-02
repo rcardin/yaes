@@ -22,11 +22,20 @@ scalaVersion := scala3Version
 scalacOptions += "-target:24"
 javacOptions ++= Seq("-source", "24", "-target", "24")
 
+// Capture checking settings for effect safety
+lazy val captureCheckingSettings = Seq(
+  scalacOptions ++= Seq(
+    "-language:experimental.captureChecking",
+    "-explain"
+  )
+)
+
 lazy val `yaes-data` = project
   .settings(
     name         := "yaes-data",
     scalaVersion := scala3Version,
     libraryDependencies ++= commonDependencies
+    // Note: Capture checking deferred for yaes-data until v0.11.0+
   )
 
 lazy val `yaes-core` = project
@@ -34,7 +43,10 @@ lazy val `yaes-core` = project
   .settings(
     name         := "yaes-core",
     scalaVersion := scala3Version,
-    libraryDependencies ++= commonDependencies
+    libraryDependencies ++= commonDependencies,
+    captureCheckingSettings
+    // Note: State.scala uses capture checking (POC complete)
+    // Raise.scala and YaesApp.scala have capture checking errors that need to be addressed in future versions
   )
 
 lazy val `yaes-cats` = project

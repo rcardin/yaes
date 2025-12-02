@@ -1,5 +1,8 @@
 package in.rcard.yaes
 
+import language.experimental.captureChecking
+import caps.{cap, Capability}
+
 /** Represents an effect built on top of an effect `F`. The effect is represented by the `unsafe`
   * field, and it should not be handled directly but through the [[Yaes.Handler]] interface.
   *
@@ -9,6 +12,20 @@ package in.rcard.yaes
   *   The effect type
   */
 class Yaes[+F](val unsafe: F)
+
+/** Represents a capability-aware effect built on top of an effect `F`. This wrapper extends
+  * `caps.Capability` to enable Scala 3 capture checking, preventing effect contexts from escaping
+  * their handler scopes.
+  *
+  * Used by effects that require compile-time guarantees against context leaking (e.g., Raise,
+  * State).
+  *
+  * @param unsafe
+  *   An instance of the effect `F`
+  * @tparam F
+  *   The effect type
+  */
+class CapableYaes[+F](override val unsafe: F) extends Yaes[F](unsafe) with Capability
 
 object Yaes {
 

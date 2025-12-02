@@ -116,10 +116,10 @@ object Raise {
 
       override def handle(program: (Raise[E]) ?=> A): B = {
         boundary {
-          given eff: Raise[E] = new Yaes(new Raise.Unsafe[E] {
+          given eff: Raise[E] = (new Yaes(new Raise.Unsafe[E] {
             def raise(error: => E): Nothing =
               break(onError(error))
-          })
+          }): @scala.annotation.unchecked.uncheckedCaptures)
           onSuccess(block)
         }
       }
@@ -454,12 +454,12 @@ object Raise {
       *   The mapping strategy
       */
     def apply[From, To](mapper: From => To)(using outer: Raise[To]): MapError[From, To] =
-      new Yaes(new UnsafeMapError[From, To] {
+      (new Yaes(new UnsafeMapError[From, To] {
 
         override def raise(error: => From): Nothing = outer.unsafe.raise(map(error))
 
         override def map(error: From): To = mapper(error)
-      })
+      })): @scala.annotation.unchecked.uncheckedCaptures
   }
 
   extension [Error, A](either: Either[Error, A]) {

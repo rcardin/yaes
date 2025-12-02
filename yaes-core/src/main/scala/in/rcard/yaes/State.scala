@@ -1,8 +1,10 @@
 package in.rcard.yaes
 
+import language.experimental.captureChecking
+import caps.cap
 import in.rcard.yaes.Yaes.Handler
 
-type State[S] = Yaes[State.Unsafe[S]]
+type State[S] = CapableYaes[State.Unsafe[S]]
 
 /**
  * State effect for managing stateful computations in a functional way.
@@ -39,7 +41,7 @@ object State {
    * }
    * }}}
    */
-  def get[S](using interpreter: State[S]): S = {
+  def get[S](using interpreter: State[S]^{cap}): S = {
     interpreter.unsafe.run(StateOp.Get())
   }
 
@@ -59,7 +61,7 @@ object State {
    * }
    * }}}
    */
-  def set[S](value: S)(using interpreter: State[S]): S = {
+  def set[S](value: S)(using interpreter: State[S]^{cap}): S = {
     interpreter.unsafe.run(StateOp.Set(value))
   }
 
@@ -78,7 +80,7 @@ object State {
    * }
    * }}}
    */
-  def update[S](f: S => S)(using interpreter: State[S]): S = {
+  def update[S](f: S -> S)(using interpreter: State[S]^{cap}): S = {
     interpreter.unsafe.run(StateOp.Update(f))
   }
 
@@ -99,7 +101,7 @@ object State {
    * }
    * }}}
    */
-  def use[S, A](f: S => A)(using interpreter: State[S]): A = {
+  def use[S, A](f: S -> A)(using interpreter: State[S]^{cap}): A = {
     interpreter.unsafe.run(StateOp.Use(f))
   }
 
@@ -111,13 +113,13 @@ object State {
    */
   enum StateOp[S, A] {
     /** Retrieves the current state value. */
-    case Get()             extends StateOp[S, S]
+    case Get()           extends StateOp[S, S]
     /** Sets the state to a new value, returning the previous value. */
-    case Set(value: S)     extends StateOp[S, S]
+    case Set(value: S)   extends StateOp[S, S]
     /** Updates the state using a transformation function, returning the new value. */
-    case Update(f: S => S) extends StateOp[S, S]
+    case Update(f: S -> S) extends StateOp[S, S]
     /** Applies a function to the current state without modifying it. */
-    case Use(f: S => A)    extends StateOp[S, A]
+    case Use(f: S -> A)  extends StateOp[S, A]
   }
 
   /**
@@ -147,34 +149,29 @@ object State {
    * // finalState = List(1, 2), result = 3
    * }}}
    */
-  def run[S, A](initialState: S)(block: State[S] ?=> A): (S, A) = {
+  def run[S, A](initialState: S)(block: State[S]^{cap} ?=> A): (S, A) = {
 
     var currentState = initialState
 
-    val handler = new Yaes.Handler[State.Unsafe[S], A, A] {
+    val interpreter = new Unsafe[S] {
 
-      override def handle(program: State[S] ?=> A): A = {
-        val interpreter = new Unsafe[S] {
-
-          override def run[A](op: StateOp[S, A]): A = op match {
-            case StateOp.Get() =>
-              currentState
-            case StateOp.Set(value) =>
-              val oldState = currentState
-              currentState = value
-              oldState
-            case StateOp.Update(f) =>
-              currentState = f(currentState)
-              currentState
-            case StateOp.Use(f) =>
-              f(currentState)
-          }
-        }
-        program(using Yaes(interpreter))
+      override def run[A](op: StateOp[S, A]): A = op match {
+        case StateOp.Get() =>
+          currentState
+        case StateOp.Set(value) =>
+          val oldState = currentState
+          currentState = value
+          oldState
+        case StateOp.Update(f) =>
+          currentState = f(currentState)
+          currentState
+        case StateOp.Use(f) =>
+          f(currentState)
       }
     }
 
-    val result = Yaes.handle(block)(using handler)
+    given state: State[S] = CapableYaes(interpreter)
+    val result = block
     (currentState, result)
   }
 

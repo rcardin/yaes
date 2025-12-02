@@ -170,7 +170,7 @@ object YaesApp {
           System,
           Log
       ) ?=> Unit
-  ): YaesApp = new YaesApp {
+  ): YaesApp = (new YaesApp {
     def run: (
         Output,
         Input,
@@ -179,5 +179,5 @@ object YaesApp {
         System,
         Log
     ) ?=> Unit = block
-  }
+  }): @scala.annotation.unchecked.uncheckedCaptures
 }
