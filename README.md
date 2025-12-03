@@ -720,7 +720,7 @@ val result: Either[IOException, String] = Raise.either {
 }
 ```
 
-In the above example, we use `Raise.catching` to catch the `IOException` and map it to `null`, which is then handled by `Raise.nullable`.
+In the above example, we use `Raise.either` to handle any `IOException` that may be thrown by the `Input` effect, returning an `Either[IOException, String]` that wraps the result or the exception.
 
 ### The `Output` Effect
 
