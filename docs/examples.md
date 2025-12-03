@@ -14,8 +14,9 @@ import in.rcard.yaes.Random.*
 import in.rcard.yaes.Output.*
 import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.*
+import java.io.IOException
 
-def coinFlipGame(using Random, Output, Input, Raise[String]): String = {
+def coinFlipGame(using Random, Output, Input, Raise[IOException]): String = {
   Output.printLn("Welcome to the Coin Flip Game!")
   Output.printLn("Guess: heads or tails?")
   
@@ -34,14 +35,16 @@ def coinFlipGame(using Random, Output, Input, Raise[String]): String = {
 }
 
 // Run the game
-val result = Raise.option {
-  Output.run {
-    Input.run {
-      Random.run {
-        coinFlipGame
+val result: Option[String] = Raise.option {
+  Raise.catching {
+    Output.run {
+      Input.run {
+        Random.run {
+          coinFlipGame
+        }
       }
     }
-  }
+  } { _ => None }
 }
 ```
 

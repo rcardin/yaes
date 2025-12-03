@@ -279,26 +279,36 @@ val result: Either[DivisionByZero, Int] = Raise.either {
 
 ### Option Handler
 
-Ignore error details and get `Option`:
+The `option` handler requires the block to raise `None` explicitly:
 
 ```scala
 import in.rcard.yaes.Raise.*
 
+def safeDivide(x: Int, y: Int)(using Raise[None.type]): Int =
+  if (y == 0) then Raise.raise(None)
+  else x / y
+
 val result: Option[Int] = Raise.option {
-  divide(10, 0)
+  safeDivide(10, 0)
 }
+// result will be None
 ```
 
 ### Nullable Handler
 
-Get nullable results:
+The `nullable` handler requires the block to raise `null` explicitly:
 
 ```scala
 import in.rcard.yaes.Raise.*
 
+def safeDivide(x: Int, y: Int)(using Raise[Null]): Int =
+  if (y == 0) then Raise.raise(null)
+  else x / y
+
 val result: Int | Null = Raise.nullable {
-  divide(10, 0)
+  safeDivide(10, 0)
 }
+// result will be null
 ```
 
 ## Error Tracing
