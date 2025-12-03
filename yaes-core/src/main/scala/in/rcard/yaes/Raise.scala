@@ -224,7 +224,7 @@ object Raise {
     * Example:
     * {{{
     * val result: Option[Int] = Raise.option {
-    *   divide(10, 0)
+    *   Raise.raise(None)
     * }
     * // result will be None
     * }}}
@@ -233,8 +233,6 @@ object Raise {
     *   the computation that may raise an error
     * @return
     *   the result of the computation as an [[Option]]
-    * @tparam E
-    *   the type of error that can be raised
     * @tparam A
     *   the type of the result of the block
     */
@@ -246,7 +244,7 @@ object Raise {
     * Example:
     * {{{
     * val result: Int | Null = Raise.nullable {
-    *   divide(10, 0)
+    *   Raise.raise(null)
     * }
     * // result will be null
     * }}}
@@ -255,8 +253,6 @@ object Raise {
     *   the computation that may raise an error
     * @return
     *   the result of the computation as a nullable value
-    * @tparam E
-    *   the type of error that can be raised
     * @tparam A
     *   the type of the result of the block
     */
