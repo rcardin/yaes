@@ -28,12 +28,10 @@ import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.*
 import java.io.IOException
 
-val result: Option[String] = Raise.option {
-  Raise.catching {
-    Input.run {
-      Input.readLn()
-    }
-  } { _ => None }
+val result: Either[IOException, String] = Raise.either {
+  Input.run {
+    Input.readLn()
+  }
 }
 ```
 
@@ -91,14 +89,12 @@ def greetUser(using Input, Output, Raise[IOException]): Unit = {
 }
 
 // Run the interactive program
-val result: Option[Unit] = Raise.option {
-  Raise.catching {
-    Output.run {
-      Input.run {
-        greetUser
-      }
+val result: Either[IOException, Unit] = Raise.either {
+  Output.run {
+    Input.run {
+      greetUser
     }
-  } { _ => None }
+  }
 }
 ```
 
@@ -236,16 +232,14 @@ def guessingGame(using Input, Output, Random, Raise[IOException]): Unit = {
 }
 
 // Run the game
-Raise.option {
-  Raise.catching {
-    Random.run {
-      Output.run {
-        Input.run {
-          guessingGame
-        }
+Raise.either {
+  Random.run {
+    Output.run {
+      Input.run {
+        guessingGame
       }
     }
-  } { _ => None }
+  }
 }
 ```
 

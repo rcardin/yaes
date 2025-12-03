@@ -35,16 +35,14 @@ def coinFlipGame(using Random, Output, Input, Raise[IOException]): String = {
 }
 
 // Run the game
-val result: Option[String] = Raise.option {
-  Raise.catching {
-    Output.run {
-      Input.run {
-        Random.run {
-          coinFlipGame
-        }
+val result: Either[IOException, String] = Raise.either {
+  Output.run {
+    Input.run {
+      Random.run {
+        coinFlipGame
       }
     }
-  } { _ => None }
+  }
 }
 ```
 

@@ -713,12 +713,10 @@ import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.*
 import java.io.IOException
 
-val result: String | Null = Raise.nullable {
-  Raise.catching {
-    Input.run {
-      name
-    }
-  } { _ => null }
+val result: Either[IOException, String] = Raise.either {
+  Input.run {
+    name
+  }
 }
 ```
 
