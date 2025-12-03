@@ -409,24 +409,34 @@ val divisionByZeroResult: Either[DivisionByZero, Int] = Raise.either {
 }
 ```
 
-If we're not interested in propagating the exact reason of error, we can use the `option` handler:
+If we're not interested in propagating the exact reason of error, we can use the `option` handler. The `option` handler requires the block to raise `None` explicitly:
 
 ```scala 3
 import in.rcard.yaes.Raise.*
+
+def safeDivide(x: Int, y: Int)(using Raise[None.type]): Int =
+  if (y == 0) then Raise.raise(None)
+  else x / y
 
 val divisionByZeroResult: Option[Int] = Raise.option {
-  divide(10, 0)
+  safeDivide(10, 0)
 }
+// divisionByZeroResult will be None
 ```
 
-We can even ignore the raised error returning a `Null` value:
+We can even ignore the raised error returning a `Null` value. The `nullable` handler requires the block to raise `null` explicitly:
 
 ```scala 3
 import in.rcard.yaes.Raise.*
 
+def safeDivide(x: Int, y: Int)(using Raise[Null]): Int =
+  if (y == 0) then Raise.raise(null)
+  else x / y
+
 val divisionByZeroResult: Int | Null = Raise.nullable {
-  divide(10, 0)
+  safeDivide(10, 0)
 }
+// divisionByZeroResult will be null
 ```
 
 #### Error Mapping with `MapError`
@@ -703,14 +713,14 @@ import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.*
 import java.io.IOException
 
-val result: String | Null = Raise.nullable {
+val result: Either[IOException, String] = Raise.either {
   Input.run {
     name
   }
 }
 ```
 
-In the above example, we decided to ignore the `IOException` error and return a `Null` value if an error occurs.
+In the above example, we use `Raise.either` to handle any `IOException` that may be thrown by the `Input` effect, returning an `Either[IOException, String]` that wraps the result or the exception.
 
 ### The `Output` Effect
 

@@ -26,24 +26,9 @@ val userInput: (Input, Raise[IOException]) ?=> String = Input.readLn()
 ```scala
 import in.rcard.yaes.Input.*
 import in.rcard.yaes.Raise.*
-
-val result: String | Null = Raise.nullable {
-  Input.run {
-    Input.readLn()
-  }
-}
-```
-
-### Error Handling
-
-Input operations can fail with `IOException`:
-
-```scala
-import in.rcard.yaes.Input.*
-import in.rcard.yaes.Raise.*
 import java.io.IOException
 
-val safeInput: Either[IOException, String] = Raise.either {
+val result: Either[IOException, String] = Raise.either {
   Input.run {
     Input.readLn()
   }
@@ -104,7 +89,7 @@ def greetUser(using Input, Output, Raise[IOException]): Unit = {
 }
 
 // Run the interactive program
-val result = Raise.option {
+val result: Either[IOException, Unit] = Raise.either {
   Output.run {
     Input.run {
       greetUser
@@ -247,7 +232,7 @@ def guessingGame(using Input, Output, Random, Raise[IOException]): Unit = {
 }
 
 // Run the game
-Raise.option {
+Raise.either {
   Random.run {
     Output.run {
       Input.run {

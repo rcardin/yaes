@@ -115,7 +115,7 @@ object Raise {
     val handler = new Yaes.Handler[Raise.Unsafe[E], A, B] {
 
       override def handle(program: (Raise[E]) ?=> A): B = {
-        boundary {
+        boundary[B] {
           given eff: Raise[E] = new Yaes(new Raise.Unsafe[E] {
             def raise(error: => E): Nothing =
               break(onError(error))
@@ -224,7 +224,7 @@ object Raise {
     * Example:
     * {{{
     * val result: Option[Int] = Raise.option {
-    *   divide(10, 0)
+    *   Raise.raise(None)
     * }
     * // result will be None
     * }}}
@@ -233,12 +233,10 @@ object Raise {
     *   the computation that may raise an error
     * @return
     *   the result of the computation as an [[Option]]
-    * @tparam E
-    *   the type of error that can be raised
     * @tparam A
     *   the type of the result of the block
     */
-  def option[E, A](block: Raise[E] ?=> A): Option[A] =
+  def option[A](block: Raise[None.type] ?=> A): Option[A] =
     fold(block)(onError_ => None)(onSuccess = Some(_))
 
   /** Returns the result of the computation as a nullable value.
@@ -246,7 +244,7 @@ object Raise {
     * Example:
     * {{{
     * val result: Int | Null = Raise.nullable {
-    *   divide(10, 0)
+    *   Raise.raise(null)
     * }
     * // result will be null
     * }}}
@@ -255,12 +253,10 @@ object Raise {
     *   the computation that may raise an error
     * @return
     *   the result of the computation as a nullable value
-    * @tparam E
-    *   the type of error that can be raised
     * @tparam A
     *   the type of the result of the block
     */
-  def nullable[E, A](block: Raise[E] ?=> A): A | Null =
+  def nullable[A](block: Raise[Null] ?=> A): A | Null =
     fold(block)(onError_ => null)(onSuccess = identity)
 
   /** Ensures that a condition is true and raises an error if it is not.
