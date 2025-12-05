@@ -57,6 +57,8 @@ lazy val dependencies =
     val scalatest         = "org.scalatest"     %% "scalatest"       % scalatestVersion
     val scalacheckVersion = "3.2.19.0"
     val scalacheck        = "org.scalatestplus" %% "scalacheck-1-18" % scalacheckVersion
+    val catsVersion       = "2.13.0"
+    val catsCore          = "org.typelevel"     %% "cats-core"       % catsVersion
     val catsEffectVersion = "3.6.3"
     val catsEffect        = "org.typelevel"     %% "cats-effect"     % catsEffectVersion
   }
@@ -67,5 +69,6 @@ lazy val commonDependencies = Seq(
 )
 
 lazy val catsDependencies = Seq(
+  dependencies.catsCore,
   dependencies.catsEffect
 )
