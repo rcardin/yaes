@@ -3,10 +3,11 @@ package in.rcard.yaes
 import cats.Semigroup
 import cats.data.NonEmptyList
 
-/** Error accumulation utilities using Cats Semigroup typeclass.
+/** Error accumulation utilities using Cats Semigroup typeclass and NonEmptyList.
   *
-  * This object provides functions to accumulate errors using Cats' Semigroup typeclass,
-  * enabling flexible error combining strategies.
+  * This object provides functions to accumulate errors using either:
+  * - Cats' Semigroup typeclass for flexible error combining strategies (methods ending with 'S')
+  * - NonEmptyList for collecting individual errors
   */
 object CatsAccumulate {
 
@@ -217,4 +218,186 @@ object CatsAccumulate {
       */
     inline def combineErrorsS(using semigroup: Semigroup[E], raise: Raise[E]): NonEmptyList[A] =
       CatsAccumulate.mapOrAccumulateS(nonEmptyList)(identity)
+
+  /** Transform every element of an iterable using the given transform, or accumulate all the
+    * occurred errors in a NonEmptyList.
+    *
+    * Example:
+    * {{{
+    * import in.rcard.yaes.{Raise, CatsAccumulate}
+    * import cats.data.NonEmptyList
+    *
+    * val block: List[Int] raises NonEmptyList[String] =
+    *   CatsAccumulate.mapOrAccumulate(List(1, 2, 3, 4, 5)) { value =>
+    *     if (value % 2 == 0) {
+    *       Raise.raise(value.toString)
+    *     } else {
+    *       value
+    *     }
+    *   }
+    *
+    * val actual = Raise.fold(
+    *   block,
+    *   identity,
+    *   identity
+    * )
+    * // actual will be NonEmptyList("2", "4")
+    * }}}
+    *
+    * @param iterable
+    *   The collection of elements to transform
+    * @param transform
+    *   The transformation to apply to each element that can raise an error of type `E`
+    * @param raise
+    *   The Raise context with NonEmptyList error channel
+    * @tparam E
+    *   The type of the logical error that can be raised
+    * @tparam A
+    *   The type of the elements in the iterable
+    * @tparam B
+    *   The type of the transformed elements
+    * @return
+    *   A list of transformed elements
+    */
+  inline def mapOrAccumulate[E, A, B](iterable: Iterable[A])(
+      inline transform: A => (Raise[E] ?=> B)
+  )(using raise: Raise[NonEmptyList[E]]): List[B] = {
+    val errors  = collection.mutable.ArrayBuffer.empty[E]
+    val results = collection.mutable.ArrayBuffer.empty[B]
+    iterable.foreach { a =>
+      Raise.fold[E, B, Unit](transform(a))(
+        error => errors += error
+      )(
+        result => results += result
+      )
+    }
+    NonEmptyList.fromList(errors.toList).fold(results.toList)(Raise.raise(_))
+  }
+
+  /** Transform every element of a NonEmptyList using the given transform, or accumulate all the
+    * occurred errors in a NonEmptyList.
+    *
+    * Example:
+    * {{{
+    * import in.rcard.yaes.{Raise, CatsAccumulate}
+    * import cats.data.NonEmptyList
+    *
+    * val block: NonEmptyList[Int] raises NonEmptyList[String] =
+    *   CatsAccumulate.mapOrAccumulate(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
+    *     if (value % 2 == 0) {
+    *       Raise.raise(value.toString)
+    *     } else {
+    *       value
+    *     }
+    *   }
+    *
+    * val actual = Raise.fold(
+    *   block,
+    *   identity,
+    *   identity
+    * )
+    * // actual will be NonEmptyList("2", "4")
+    * }}}
+    *
+    * @param nonEmptyList
+    *   The non-empty list of elements to transform
+    * @param transform
+    *   The transformation to apply to each element that can raise an error of type `E`
+    * @param raise
+    *   The Raise context with NonEmptyList error channel
+    * @tparam E
+    *   The type of the logical error that can be raised
+    * @tparam A
+    *   The type of the elements in the original non-empty list
+    * @tparam B
+    *   The type of the transformed elements
+    * @return
+    *   A non-empty list of transformed elements
+    */
+  inline def mapOrAccumulate[E, A, B](nonEmptyList: NonEmptyList[A])(
+      inline transform: A => (Raise[E] ?=> B)
+  )(using raise: Raise[NonEmptyList[E]]): NonEmptyList[B] = {
+    val resultAsList = CatsAccumulate.mapOrAccumulate(nonEmptyList.toList)(transform)
+    // We know it's safe to call get here because we started from a non-empty list
+    NonEmptyList.fromList(resultAsList).get
+  }
+
+  /** Extension methods for accumulating errors from collections of Raise computations
+    * using NonEmptyList error channel.
+    */
+  extension [E, A](iterable: Iterable[Raise[E] ?=> A])
+    /** Accumulates all the occurred errors in a NonEmptyList and returns the list of values
+      * or the accumulated errors.
+      *
+      * Example:
+      * {{{
+      * import in.rcard.yaes.{Raise, CatsAccumulate}
+      * import in.rcard.yaes.CatsAccumulate.combineErrors
+      * import cats.data.NonEmptyList
+      *
+      * val iterableWithInnerRaise: List[Int raises String] =
+      *   List(1, 2, 3, 4, 5).map { value =>
+      *     if (value % 2 == 0) {
+      *       Raise.raise(value.toString)
+      *     } else {
+      *       value
+      *     }
+      *   }
+      *
+      * val iterableWithOuterRaise: List[Int] raises NonEmptyList[String] =
+      *   iterableWithInnerRaise.combineErrors
+      *
+      * val actual = Raise.fold(
+      *   iterableWithOuterRaise,
+      *   identity,
+      *   identity
+      * )
+      * // actual will be NonEmptyList("2", "4")
+      * }}}
+      *
+      * @param raise
+      *   The Raise context with NonEmptyList error channel
+      * @return
+      *   The list of the values or the accumulated errors
+      */
+    inline def combineErrors(using raise: Raise[NonEmptyList[E]]): List[A] =
+      CatsAccumulate.mapOrAccumulate(iterable)(identity)
+
+  extension [E, A](nonEmptyList: NonEmptyList[Raise[E] ?=> A])
+    /** Accumulates all the occurred errors in a NonEmptyList and returns the non-empty list
+      * of values or the accumulated errors.
+      *
+      * Example:
+      * {{{
+      * import in.rcard.yaes.{Raise, CatsAccumulate}
+      * import in.rcard.yaes.CatsAccumulate.combineErrors
+      * import cats.data.NonEmptyList
+      *
+      * val iterableWithInnerRaise: NonEmptyList[Int raises String] =
+      *   NonEmptyList.of(1, 2, 3, 4, 5).map { value =>
+      *     if (value % 2 == 0) {
+      *       Raise.raise(value.toString)
+      *     } else {
+      *       value
+      *     }
+      *   }
+      *
+      * val iterableWithOuterRaise: NonEmptyList[Int] raises NonEmptyList[String] =
+      *   iterableWithInnerRaise.combineErrors
+      *
+      * val actual = Raise.fold(
+      *   iterableWithOuterRaise,
+      *   identity,
+      *   identity
+      * )
+      * // actual will be NonEmptyList("2", "4")
+      * }}}
+      *
+      * @param raise
+      *   The Raise context with NonEmptyList error channel
+      * @return
+      *   The non-empty list of the values or the accumulated errors
+      */
+    inline def combineErrors(using raise: Raise[NonEmptyList[E]]): NonEmptyList[A] =
+      CatsAccumulate.mapOrAccumulate(nonEmptyList)(identity)
 }

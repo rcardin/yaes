@@ -2,7 +2,7 @@ package in.rcard.yaes
 
 import cats.Semigroup
 import cats.data.NonEmptyList
-import in.rcard.yaes.CatsAccumulate.combineErrorsS
+import in.rcard.yaes.CatsAccumulate.{combineErrors, combineErrorsS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -154,5 +154,125 @@ class AccumulateSpec extends AnyFlatSpec with Matchers {
     val actual = Raise.fold[String, NonEmptyList[Int], String | NonEmptyList[Int]](iterableWithOuterRaise)(identity)(identity)
 
     actual shouldBe "24"
+  }
+
+  "mapOrAccumulate on Iterable with NonEmptyList[Error]" should "map all the elements of the iterable" in {
+    val block: List[Int] raises NonEmptyList[String] =
+      CatsAccumulate.mapOrAccumulate(List(1, 2, 3, 4, 5)) { value1 =>
+        value1 + 1
+      }
+
+    val actual = Raise.fold[NonEmptyList[String], List[Int], List[Int]](block) { error =>
+      fail(s"An error occurred: $error")
+    } { identity }
+
+    actual shouldBe List(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors in a NonEmptyList" in {
+    val block: List[Int] raises NonEmptyList[String] =
+      CatsAccumulate.mapOrAccumulate(List(1, 2, 3, 4, 5)) { value =>
+        if (value % 2 == 0) {
+          Raise.raise(value.toString)
+        } else {
+          value
+        }
+      }
+
+    val actual = Raise.fold[NonEmptyList[String], List[Int], NonEmptyList[String] | List[Int]](block)(identity)(identity)
+
+    actual shouldBe NonEmptyList.of("2", "4")
+  }
+
+  "mapOrAccumulate on NonEmptyList with NonEmptyList[Error]" should "map all the elements of the NonEmptyList" in {
+    val block: NonEmptyList[Int] raises NonEmptyList[String] =
+      CatsAccumulate.mapOrAccumulate(NonEmptyList.of(1, 2, 3, 4, 5)) { value1 =>
+        value1 + 1
+      }
+
+    val actual: NonEmptyList[Int] = Raise.fold[NonEmptyList[String], NonEmptyList[Int], NonEmptyList[Int]](block) { (error: NonEmptyList[String]) =>
+      fail(s"An error occurred: $error")
+    } { identity }
+
+    actual shouldBe NonEmptyList.of(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors in a NonEmptyList" in {
+    val block: NonEmptyList[Int] raises NonEmptyList[String] =
+      CatsAccumulate.mapOrAccumulate(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
+        if (value % 2 == 0) {
+          Raise.raise(value.toString)
+        } else {
+          value
+        }
+      }
+
+    val actual = Raise.fold[NonEmptyList[String], NonEmptyList[Int], NonEmptyList[String] | NonEmptyList[Int]](block)(identity)(identity)
+
+    actual shouldBe NonEmptyList.of("2", "4")
+  }
+
+  "combineErrors on Iterable" should "map all the elements of the iterable" in {
+    val iterableWithInnerRaise: List[Int raises String] =
+      List(1, 2, 3, 4, 5).map { value1 =>
+        value1 + 1
+      }
+
+    val iterableWithOuterRaise: List[Int] raises NonEmptyList[String] = iterableWithInnerRaise.combineErrors
+
+    val actual: List[Int] = Raise.fold[NonEmptyList[String], List[Int], List[Int]](iterableWithOuterRaise) { (error: NonEmptyList[String]) =>
+      fail(s"An error occurred: $error")
+    } { identity }
+
+    actual shouldBe List(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors in a NonEmptyList" in {
+    val iterableWithInnerRaise: List[Int raises String] =
+      List(1, 2, 3, 4, 5).map { value =>
+        if (value % 2 == 0) {
+          Raise.raise(value.toString)
+        } else {
+          value
+        }
+      }
+
+    val iterableWithOuterRaise: List[Int] raises NonEmptyList[String] = iterableWithInnerRaise.combineErrors
+
+    val actual = Raise.fold[NonEmptyList[String], List[Int], NonEmptyList[String] | List[Int]](iterableWithOuterRaise)(identity)(identity)
+
+    actual shouldBe NonEmptyList.of("2", "4")
+  }
+
+  "combineErrors on NonEmptyList" should "map all the elements of the NonEmptyList" in {
+    val iterableWithInnerRaise: NonEmptyList[Int raises String] =
+      NonEmptyList.of(1, 2, 3, 4, 5).map { value1 =>
+        value1 + 1
+      }
+
+    val iterableWithOuterRaise: NonEmptyList[Int] raises NonEmptyList[String] = iterableWithInnerRaise.combineErrors
+
+    val actual: NonEmptyList[Int] = Raise.fold[NonEmptyList[String], NonEmptyList[Int], NonEmptyList[Int]](iterableWithOuterRaise) { (error: NonEmptyList[String]) =>
+      fail(s"An error occurred: $error")
+    } { identity }
+
+    actual shouldBe NonEmptyList.of(2, 3, 4, 5, 6)
+  }
+
+  it should "accumulate all the errors in a NonEmptyList" in {
+    val iterableWithInnerRaise: NonEmptyList[Int raises String] =
+      NonEmptyList.of(1, 2, 3, 4, 5).map { value =>
+        if (value % 2 == 0) {
+          Raise.raise(value.toString)
+        } else {
+          value
+        }
+      }
+
+    val iterableWithOuterRaise: NonEmptyList[Int] raises NonEmptyList[String] = iterableWithInnerRaise.combineErrors
+
+    val actual = Raise.fold[NonEmptyList[String], NonEmptyList[Int], NonEmptyList[String] | NonEmptyList[Int]](iterableWithOuterRaise)(identity)(identity)
+
+    actual shouldBe NonEmptyList.of("2", "4")
   }
 }
