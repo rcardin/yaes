@@ -4,6 +4,23 @@ import cats.Semigroup
 import cats.data.NonEmptyList
 import in.rcard.yaes.{CatsAccumulate, Raise}
 
+/** Object providing accumulation syntax extensions.
+  *
+  * Import from this object to get `combineErrors` and `combineErrorsS` extension methods.
+  *
+  * Example:
+  * {{{
+  * import in.rcard.yaes.syntax.accumulate.*
+  * import cats.Semigroup
+  *
+  * given Semigroup[String] = Semigroup.instance(_ + _)
+  *
+  * val results: List[Int] raises String =
+  *   List(computation1, computation2).combineErrorsS
+  * }}}
+  */
+object accumulate extends AccumulateSyntax
+
 /** Syntax extensions for error accumulation with Cats types.
   *
   * Import these extensions to use fluent error accumulation methods on collections.
@@ -15,18 +32,18 @@ import in.rcard.yaes.{CatsAccumulate, Raise}
   *
   * given Semigroup[String] = Semigroup.instance(_ + _)
   *
-  * val results: List[Int] raises String = 
+  * val results: List[Int] raises String =
   *   List(computation1, computation2).combineErrorsS
   * }}}
   */
 trait AccumulateSyntax {
 
-  /** Extension methods for accumulating errors from collections of Raise computations
-    * using Semigroup to combine errors.
+  /** Extension methods for accumulating errors from collections of Raise computations using
+    * Semigroup to combine errors.
     */
   extension [E, A](iterable: Iterable[Raise[E] ?=> A])
-    /** Accumulates all the occurred errors using the combine operator of the implicit Semigroup
-      * and returns the list of the values or the accumulated errors.
+    /** Accumulates all the occurred errors using the combine operator of the implicit Semigroup and
+      * returns the list of the values or the accumulated errors.
       *
       * Example:
       * {{{
@@ -66,12 +83,12 @@ trait AccumulateSyntax {
     inline def combineErrorsS(using semigroup: Semigroup[E], raise: Raise[E]): List[A] =
       CatsAccumulate.mapAccumulatingS(iterable)(identity)
 
-  /** Extension methods for accumulating errors from NonEmptyList of Raise computations
-    * using Semigroup to combine errors.
+  /** Extension methods for accumulating errors from NonEmptyList of Raise computations using
+    * Semigroup to combine errors.
     */
   extension [E, A](nonEmptyList: NonEmptyList[Raise[E] ?=> A])
-    /** Accumulates all the occurred errors using the combine operator of the implicit Semigroup
-      * and returns the non-empty list of the values or the accumulated errors.
+    /** Accumulates all the occurred errors using the combine operator of the implicit Semigroup and
+      * returns the non-empty list of the values or the accumulated errors.
       *
       * Example:
       * {{{
@@ -112,12 +129,12 @@ trait AccumulateSyntax {
     inline def combineErrorsS(using semigroup: Semigroup[E], raise: Raise[E]): NonEmptyList[A] =
       CatsAccumulate.mapAccumulatingS(nonEmptyList)(identity)
 
-  /** Extension methods for accumulating errors from collections of Raise computations
-    * using NonEmptyList error channel.
+  /** Extension methods for accumulating errors from collections of Raise computations using
+    * NonEmptyList error channel.
     */
   extension [E, A](iterable: Iterable[Raise[E] ?=> A])
-    /** Accumulates all the occurred errors in a NonEmptyList and returns the list of values
-      * or the accumulated errors.
+    /** Accumulates all the occurred errors in a NonEmptyList and returns the list of values or the
+      * accumulated errors.
       *
       * Example:
       * {{{
@@ -153,12 +170,12 @@ trait AccumulateSyntax {
     inline def combineErrors(using raise: Raise[NonEmptyList[E]]): List[A] =
       CatsAccumulate.mapAccumulating(iterable)(identity)
 
-  /** Extension methods for accumulating errors from NonEmptyList of Raise computations
-    * using NonEmptyList error channel.
+  /** Extension methods for accumulating errors from NonEmptyList of Raise computations using
+    * NonEmptyList error channel.
     */
   extension [E, A](nonEmptyList: NonEmptyList[Raise[E] ?=> A])
-    /** Accumulates all the occurred errors in a NonEmptyList and returns the non-empty list
-      * of values or the accumulated errors.
+    /** Accumulates all the occurred errors in a NonEmptyList and returns the non-empty list of
+      * values or the accumulated errors.
       *
       * Example:
       * {{{

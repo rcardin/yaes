@@ -8,6 +8,13 @@ import cats.data.{NonEmptyChain, NonEmptyList, ValidatedNec, ValidatedNel}
   *
   * This object provides functions to convert between YAES's Raise effect and Cats Validated,
   * ValidatedNec, and ValidatedNel types, enabling interoperability with Cats-based validation.
+  *
+  * For extension methods on Validated types, import the syntax:
+  * {{{
+  * import in.rcard.yaes.syntax.validated._
+  * // or
+  * import in.rcard.yaes.syntax.all._
+  * }}}
   */
 object CatsValidated {
 
@@ -123,44 +130,9 @@ object CatsValidated {
       Raise.withError[NonEmptyList[E], E, A](error => NonEmptyList.one(error))(block)
     )
 
-  /** Extension methods for converting Cats Validated types to YAES Raise computations.
-    *
-    * These extension methods provide a fluent API for extracting values from Validated,
-    * raising errors via Raise when the Validated is Invalid.
+  /** Re-export of syntax extensions for backward compatibility.
+    * 
+    * Prefer importing from `in.rcard.yaes.syntax.validated._` directly.
     */
-  extension [E, A](validated: Validated[E, A])
-    /** Extracts the value from a Validated or raises the error.
-      *
-      * Converts a Cats Validated to a YAES Raise computation:
-      * - Valid(value) returns the value
-      * - Invalid(error) raises the error via Raise
-      *
-      * Example:
-      * {{{
-      * import in.rcard.yaes.{Raise, CatsValidated}
-      * import in.rcard.yaes.CatsValidated.value
-      * import cats.data.Validated
-      *
-      * val result = Raise.either {
-      *   val v: Validated[String, Int] = Validated.invalid("error")
-      *   v.value  // Raises "error"
-      * }
-      * // result will be Left("error")
-      *
-      * val success = Raise.either {
-      *   val v: Validated[String, Int] = Validated.valid(42)
-      *   v.value  // Returns 42
-      * }
-      * // success will be Right(42)
-      * }}}
-      *
-      * @param raise
-      *   The Raise context for raising errors
-      * @return
-      *   The value if Valid, otherwise raises the error
-      */
-    inline def value(using raise: Raise[E]): A = validated match {
-      case Valid(value)   => value
-      case Invalid(error) => Raise.raise(error)
-    }
+  export in.rcard.yaes.syntax.validated.*
 }

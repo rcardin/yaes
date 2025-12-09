@@ -4,15 +4,21 @@ import in.rcard.yaes.{IO => YaesIO}
 import in.rcard.yaes.Raise
 import cats.effect.{IO => CatsIO}
 import cats.effect.Sync
-import scala.concurrent.{ExecutionContext, Future, Await}
+import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
-import scala.annotation.targetName
 import scala.util.Try
 
 /** Conversion utilities between YAES IO and Cats Effect IO.
   *
-  * This object provides extension methods to convert between YAES's context function-based IO
+  * This object provides methods to convert between YAES's context function-based IO
   * effect and Cats Effect's monadic IO.
+  *
+  * For extension methods on Cats Effect IO, import the syntax:
+  * {{{
+  * import in.rcard.yaes.syntax.catsIO._
+  * // or
+  * import in.rcard.yaes.syntax.all._
+  * }}}
   */
 object Cats {
 
@@ -283,71 +289,9 @@ object Cats {
     }
   }
 
-  /** Extension methods for converting Cats Effect IO to YAES IO.
-    *
-    * These extension methods provide a fluent API for converting Cats Effect computations to YAES
-    * IO programs. They delegate to the corresponding functions in Cats.
+  /** Re-export of syntax extensions for backward compatibility.
+    * 
+    * Prefer importing from `in.rcard.yaes.syntax.catsIO._` directly.
     */
-  extension [A](catsIO: CatsIO[A])
-    /** Converts this Cats Effect IO to a YAES IO program.
-      *
-      * This is an extension method that provides fluent syntax for the conversion. It delegates
-      * to [[value]]. Exceptions are raised via `Raise[Throwable]`.
-      *
-      * Example:
-      * {{{
-      * import cats.effect.{IO => CatsIO}
-      * import in.rcard.yaes.{IO => YaesIO, Raise}
-      * import in.rcard.yaes.Cats
-      *
-      * val catsIO: CatsIO[Int] = CatsIO.pure(42)
-      *
-      * val result = YaesIO.run {
-      *   Raise.either {
-      *     catsIO.value  // Fluent style
-      *   }
-      * }
-      * }}}
-      *
-      * @return
-      *   A YAES IO program that executes the Cats Effect computation
-      */
-    @targetName("valueExtension")
-    def value: (in.rcard.yaes.IO, Raise[Throwable]) ?=> A =
-      valueImpl(catsIO, Duration.Inf)
-
-    /** Converts this Cats Effect IO to a YAES IO program with a timeout.
-      *
-      * This is an extension method that provides fluent syntax for the conversion with timeout
-      * protection. It delegates to [[value]]. Exceptions including `TimeoutException` are raised
-      * via `Raise[Throwable]`.
-      *
-      * Example:
-      * {{{
-      * import cats.effect.{IO => CatsIO}
-      * import in.rcard.yaes.{IO => YaesIO, Raise}
-      * import in.rcard.yaes.Cats
-      * import scala.concurrent.duration._
-      *
-      * val catsIO: CatsIO[Int] = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
-      *
-      * val result = YaesIO.run {
-      *   Raise.fold(
-      *     catsIO.value(5.seconds)  // Fluent style with timeout
-      *   )(
-      *     error => -1  // Handle timeout
-      *   )(
-      *     value => value
-      *   )
-      * }
-      * }}}
-      *
-      * @param timeout
-      *   Maximum time to wait for completion
-      * @return
-      *   A YAES IO program with timeout protection
-      */
-    @targetName("valueWithTimeoutExtension")
-    def value(timeout: Duration): (in.rcard.yaes.IO, Raise[Throwable]) ?=> A =
-      valueImpl(catsIO, timeout)
+  export in.rcard.yaes.syntax.catsIO.*
 }

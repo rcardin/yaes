@@ -5,10 +5,18 @@ package in.rcard.yaes
   * Syntax extensions provide fluent APIs through extension methods.
   * Import from specific objects or use `all` for everything.
   *
+  * Available syntax:
+  *  - `accumulate` - Error accumulation extensions (`combineErrors`, `combineErrorsS`)
+  *  - `validated` - Cats Validated extensions (`value`)
+  *  - `catsIO` - Cats Effect IO extensions (`value`)
+  *  - `all` - All of the above
+  *
   * Example:
   * {{{
   * // Import specific syntax
   * import in.rcard.yaes.syntax.accumulate.*
+  * import in.rcard.yaes.syntax.validated.*
+  * import in.rcard.yaes.syntax.catsIO.*
   *
   * // Or import all syntax
   * import in.rcard.yaes.syntax.all.*
@@ -16,31 +24,29 @@ package in.rcard.yaes
   */
 package object syntax {
 
-  /** Object providing accumulation syntax extensions.
-    *
-    * Import from this object to get `combineErrors` and `combineErrorsS` extension methods.
-    *
-    * Example:
-    * {{{
-    * import in.rcard.yaes.syntax.accumulate.*
-    * import cats.Semigroup
-    *
-    * given Semigroup[String] = Semigroup.instance(_ + _)
-    *
-    * val results: List[Int] raises String = 
-    *   List(computation1, computation2).combineErrorsS
-    * }}}
-    */
-  object accumulate extends AccumulateSyntax
-
   /** Object providing all syntax extensions.
     *
-    * Import from this object to get all extension methods.
+    * Import from this object to get all extension methods:
+    * - `combineErrors`, `combineErrorsS` for error accumulation
+    * - `value` for Cats Validated types
+    * - `value` for Cats Effect IO
     *
     * Example:
     * {{{
     * import in.rcard.yaes.syntax.all.*
+    * import cats.effect.{IO => CatsIO}
+    * import cats.data.Validated
+    *
+    * val catsIO: CatsIO[Int] = CatsIO.pure(42)
+    * val validated: Validated[String, Int] = Validated.valid(42)
+    *
+    * YaesIO.run {
+    *   Raise.either {
+    *     catsIO.value      // From catsIO syntax
+    *     validated.value   // From validated syntax
+    *   }
+    * }
     * }}}
     */
-  object all extends AccumulateSyntax
+  object all extends AccumulateSyntax with ValidatedSyntax with CatsIOSyntax
 }
