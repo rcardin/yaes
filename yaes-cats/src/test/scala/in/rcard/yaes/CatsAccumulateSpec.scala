@@ -2,8 +2,8 @@ package in.rcard.yaes
 
 import cats.Semigroup
 import cats.data.NonEmptyList
-// Extension methods can be imported from syntax package or from CatsAccumulate (for backward compatibility)
-import in.rcard.yaes.syntax.accumulate.{combineErrors, combineErrorsS}
+import in.rcard.yaes.cats.accumulate
+import in.rcard.yaes.syntax.accumulate.given
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -16,7 +16,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
         MyError2(error1.errors ++ error2.errors)
     }
     val block: List[Int] raises MyError2 =
-      CatsAccumulate.mapAccumulatingS(List(1, 2, 3, 4, 5)) { value1 =>
+      accumulate.mapAccumulatingS(List(1, 2, 3, 4, 5)) { value1 =>
         value1 + 1
       }
 
@@ -34,7 +34,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
     }
 
     val block: List[Int] raises MyError2 =
-      CatsAccumulate.mapAccumulatingS(List(1, 2, 3, 4, 5)) { value =>
+      accumulate.mapAccumulatingS(List(1, 2, 3, 4, 5)) { value =>
         if (value % 2 == 0) {
           Raise.raise(MyError2(List(value.toString)))
         } else {
@@ -54,7 +54,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
     }
 
     val block: NonEmptyList[Int] raises MyError2 =
-      CatsAccumulate.mapAccumulatingS(NonEmptyList.of(1, 2, 3, 4, 5)) { value1 =>
+      accumulate.mapAccumulatingS(NonEmptyList.of(1, 2, 3, 4, 5)) { value1 =>
         value1 + 1
       }
 
@@ -72,7 +72,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
     }
 
     val block: NonEmptyList[Int] raises MyError2 =
-      CatsAccumulate.mapAccumulatingS(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
+      accumulate.mapAccumulatingS(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
         if (value % 2 == 0) {
           Raise.raise(MyError2(List(value.toString)))
         } else {
@@ -159,7 +159,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
 
   "mapAccumulating on Iterable with NonEmptyList[Error]" should "map all the elements of the iterable" in {
     val block: List[Int] raises NonEmptyList[String] =
-      CatsAccumulate.mapAccumulating(List(1, 2, 3, 4, 5)) { value1 =>
+      accumulate.mapAccumulating(List(1, 2, 3, 4, 5)) { value1 =>
         value1 + 1
       }
 
@@ -172,7 +172,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
 
   it should "accumulate all the errors in a NonEmptyList" in {
     val block: List[Int] raises NonEmptyList[String] =
-      CatsAccumulate.mapAccumulating(List(1, 2, 3, 4, 5)) { value =>
+      accumulate.mapAccumulating(List(1, 2, 3, 4, 5)) { value =>
         if (value % 2 == 0) {
           Raise.raise(value.toString)
         } else {
@@ -187,7 +187,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
 
   "mapAccumulating on NonEmptyList with NonEmptyList[Error]" should "map all the elements of the NonEmptyList" in {
     val block: NonEmptyList[Int] raises NonEmptyList[String] =
-      CatsAccumulate.mapAccumulating(NonEmptyList.of(1, 2, 3, 4, 5)) { value1 =>
+      accumulate.mapAccumulating(NonEmptyList.of(1, 2, 3, 4, 5)) { value1 =>
         value1 + 1
       }
 
@@ -200,7 +200,7 @@ class CatsAccumulateSpec extends AnyFlatSpec with Matchers {
 
   it should "accumulate all the errors in a NonEmptyList" in {
     val block: NonEmptyList[Int] raises NonEmptyList[String] =
-      CatsAccumulate.mapAccumulating(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
+      accumulate.mapAccumulating(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
         if (value % 2 == 0) {
           Raise.raise(value.toString)
         } else {

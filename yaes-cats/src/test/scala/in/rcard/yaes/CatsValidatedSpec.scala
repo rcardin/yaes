@@ -2,14 +2,15 @@ package in.rcard.yaes
 
 import cats.data.*
 import cats.data.Validated.{Invalid, Valid}
-import in.rcard.yaes.CatsValidated.value
+import in.rcard.yaes.cats.validated
+import in.rcard.yaes.syntax.validated.given
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 class ValidatedSpec extends AnyFlatSpec with Matchers {
 
   "The 'validated' builder" should "create a Valid instance" in {
-    val result = CatsValidated.validated {
+    val result = validated.validated {
       42
     }
 
@@ -17,7 +18,7 @@ class ValidatedSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "create an Invalid instance" in {
-    val result = CatsValidated.validated {
+    val result = validated.validated {
       Raise.raise("error")
     }
 
@@ -25,7 +26,7 @@ class ValidatedSpec extends AnyFlatSpec with Matchers {
   }
 
   "The 'validatedNec' builder" should "create a Valid instance" in {
-    val result = CatsValidated.validatedNec {
+    val result = validated.validatedNec {
       42
     }
 
@@ -33,7 +34,7 @@ class ValidatedSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "create an Invalid instance" in {
-    val result = CatsValidated.validatedNec {
+    val result = validated.validatedNec {
       Raise.raise("error")
     }
 
@@ -41,7 +42,7 @@ class ValidatedSpec extends AnyFlatSpec with Matchers {
   }
 
   "The 'validatedNel' builder" should "create a Valid instance" in {
-    val result = CatsValidated.validatedNel {
+    val result = validated.validatedNel {
       42
     }
 
@@ -49,7 +50,7 @@ class ValidatedSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "create an Invalid instance" in {
-    val result = CatsValidated.validatedNel {
+    val result = validated.validatedNel {
       Raise.raise("error")
     }
 
