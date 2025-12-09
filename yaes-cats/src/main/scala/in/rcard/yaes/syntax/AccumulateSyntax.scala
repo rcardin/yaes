@@ -2,7 +2,8 @@ package in.rcard.yaes.syntax
 
 import cats.Semigroup
 import cats.data.NonEmptyList
-import in.rcard.yaes.{CatsAccumulate, Raise}
+import in.rcard.yaes.Raise
+import in.rcard.yaes.cats.accumulate
 
 /** Object providing accumulation syntax extensions.
   *
@@ -47,8 +48,9 @@ trait AccumulateSyntax {
       *
       * Example:
       * {{{
-      * import in.rcard.yaes.{Raise, CatsAccumulate}
+      * import in.rcard.yaes.Raise
       * import in.rcard.yaes.syntax.accumulate.*
+      * import in.rcard.yaes.cats.accumulate
       * import cats.Semigroup
       *
       * given Semigroup[String] = Semigroup.instance(_ + _)
@@ -81,7 +83,7 @@ trait AccumulateSyntax {
       *   The list of the values or the accumulated error
       */
     inline def combineErrorsS(using semigroup: Semigroup[E], raise: Raise[E]): List[A] =
-      CatsAccumulate.mapAccumulatingS(iterable)(identity)
+      accumulate.mapAccumulatingS(iterable)(identity)
 
   /** Extension methods for accumulating errors from NonEmptyList of Raise computations using
     * Semigroup to combine errors.
@@ -92,8 +94,9 @@ trait AccumulateSyntax {
       *
       * Example:
       * {{{
-      * import in.rcard.yaes.{Raise, CatsAccumulate}
+      * import in.rcard.yaes.Raise
       * import in.rcard.yaes.syntax.accumulate.*
+      * import in.rcard.yaes.cats.accumulate
       * import cats.Semigroup
       * import cats.data.NonEmptyList
       *
@@ -127,7 +130,7 @@ trait AccumulateSyntax {
       *   The non-empty list of the values or the accumulated error
       */
     inline def combineErrorsS(using semigroup: Semigroup[E], raise: Raise[E]): NonEmptyList[A] =
-      CatsAccumulate.mapAccumulatingS(nonEmptyList)(identity)
+      accumulate.mapAccumulatingS(nonEmptyList)(identity)
 
   /** Extension methods for accumulating errors from collections of Raise computations using
     * NonEmptyList error channel.
@@ -138,8 +141,9 @@ trait AccumulateSyntax {
       *
       * Example:
       * {{{
-      * import in.rcard.yaes.{Raise, CatsAccumulate}
+      * import in.rcard.yaes.Raise
       * import in.rcard.yaes.syntax.accumulate.*
+      * import in.rcard.yaes.cats.accumulate
       * import cats.data.NonEmptyList
       *
       * val iterableWithInnerRaise: List[Int raises String] =
@@ -168,7 +172,7 @@ trait AccumulateSyntax {
       *   The list of the values or the accumulated errors
       */
     inline def combineErrors(using raise: Raise[NonEmptyList[E]]): List[A] =
-      CatsAccumulate.mapAccumulating(iterable)(identity)
+      accumulate.mapAccumulating(iterable)(identity)
 
   /** Extension methods for accumulating errors from NonEmptyList of Raise computations using
     * NonEmptyList error channel.
@@ -179,8 +183,9 @@ trait AccumulateSyntax {
       *
       * Example:
       * {{{
-      * import in.rcard.yaes.{Raise, CatsAccumulate}
+      * import in.rcard.yaes.Raise
       * import in.rcard.yaes.syntax.accumulate.*
+      * import in.rcard.yaes.cats.accumulate
       * import cats.data.NonEmptyList
       *
       * val iterableWithInnerRaise: NonEmptyList[Int raises String] =
@@ -209,5 +214,5 @@ trait AccumulateSyntax {
       *   The non-empty list of the values or the accumulated errors
       */
     inline def combineErrors(using raise: Raise[NonEmptyList[E]]): NonEmptyList[A] =
-      CatsAccumulate.mapAccumulating(nonEmptyList)(identity)
+      accumulate.mapAccumulating(nonEmptyList)(identity)
 }
