@@ -2,12 +2,12 @@ package in.rcard.yaes
 
 import in.rcard.yaes.{IO => YaesIO, Raise}
 import in.rcard.yaes.interop.catseffect
-import in.rcard.yaes.syntax.catseffect.given
-import cats.effect.{IO => CatsIO}
+import in.rcard.yaes.syntax.catseffect.*
+import _root_.cats.effect.{IO => CatsIO}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.ExecutionContext.Implicits.global // Needed for YaesIO.run
-import cats.effect.unsafe.implicits.global as catsRuntime // Needed for CatsIO.unsafeRunSync
+import _root_.cats.effect.unsafe.implicits.global as catsRuntime // Needed for CatsIO.unsafeRunSync
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
