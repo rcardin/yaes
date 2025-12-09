@@ -14,7 +14,7 @@ import scala.annotation.targetName
   *
   * Example:
   * {{{
-  * import in.rcard.yaes.syntax.catsIO._
+  * import in.rcard.yaes.syntax.catseffect.given
   * import in.rcard.yaes.{IO => YaesIO}
   * import cats.effect.{IO => CatsIO}
   *
@@ -27,13 +27,13 @@ import scala.annotation.targetName
   * }
   * }}}
   */
-object catsIO extends CatsIOSyntax
+object catseffect extends CatsEffectSyntax
 
 /** Trait containing Cats Effect IO syntax extensions.
   *
   * This trait can be mixed in to provide Cats Effect IO extension methods.
   */
-trait CatsIOSyntax {
+trait CatsEffectSyntax {
 
   extension [A](io: CatsIO[A])
     /** Converts this Cats Effect IO to a YAES IO program.
@@ -43,7 +43,7 @@ trait CatsIOSyntax {
       *
       * Example:
       * {{{
-      * import in.rcard.yaes.syntax.catsIO._
+      * import in.rcard.yaes.syntax.catseffect.given
       * import cats.effect.{IO => CatsIO}
       * import in.rcard.yaes.{IO => YaesIO, Raise}
       *
@@ -70,7 +70,7 @@ trait CatsIOSyntax {
       *
       * Example:
       * {{{
-      * import in.rcard.yaes.syntax.catsIO._
+      * import in.rcard.yaes.syntax.catseffect.given
       * import cats.effect.{IO => CatsIO}
       * import in.rcard.yaes.{IO => YaesIO, Raise}
       * import scala.concurrent.duration._
