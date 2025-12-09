@@ -3,9 +3,11 @@ package in.rcard.yaes
 import in.rcard.yaes.{IO => YaesIO}
 import in.rcard.yaes.Raise
 import cats.effect.{IO => CatsIO}
+import cats.effect.Sync
 import scala.concurrent.{ExecutionContext, Future, Await}
 import scala.concurrent.duration.Duration
 import scala.annotation.targetName
+import scala.util.Try
 
 /** Conversion utilities between YAES IO and Cats Effect IO.
   *
@@ -14,21 +16,38 @@ import scala.annotation.targetName
   */
 object Cats {
 
-  /** Converts a YAES IO program to Cats Effect IO.
+  /** A synchronous executor that runs tasks on the current thread.
+    * Used internally to provide a sync-compatible execution model.
+    */
+  private class SyncExecutor extends Executor {
+    override def submit[A](task: => A): Future[A] = Future.fromTry(Try(task))
+  }
+
+  /** Synchronous unsafe implementation that runs on the current thread. */
+  private object syncUnsafe extends IO.Unsafe {
+    override val executor: Executor = new SyncExecutor()
+  }
+
+  /** Converts a YAES IO program to a Cats Effect type.
     *
-    * This conversion runs the YAES handler to obtain a Future[A], then lifts it into Cats
-    * Effect's IO monad using `IO.fromFuture`. The yaesProgram can use `Raise[Throwable]`
-    * to handle exceptions in a typed way before conversion.
+    * This conversion runs the YAES program using `Sync[F].blocking`, which shifts execution
+    * to Cats Effect's blocking thread pool. This is appropriate since YAES IO programs
+    * typically perform side effects that may include blocking I/O operations.
     *
-    * Any errors raised via `Raise[Throwable]` will be converted to thrown exceptions
-    * and propagated through the Cats Effect IO, maintaining semantic equivalence with
+    * The yaesProgram can use `Raise[Throwable]` to handle exceptions in a typed way before 
+    * conversion. Any errors raised via `Raise[Throwable]` will be converted to thrown exceptions
+    * and propagated through the effect `F`, maintaining semantic equivalence with
     * exception-based error handling.
+    *
+    * Note: This method uses `Sync[F].blocking` rather than `Sync[F].delay` to avoid blocking
+    * Cats Effect's compute thread pool. For CPU-bound computations that don't perform blocking
+    * I/O, consider using [[delay]] instead for better performance.
     *
     * Example with error handling:
     * {{{
     * import in.rcard.yaes.{IO => YaesIO, Raise}
     * import in.rcard.yaes.Cats
-    * import scala.concurrent.ExecutionContext.Implicits.global
+    * import cats.effect.IO
     *
     * val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
     *   Raise.catching {
@@ -37,7 +56,7 @@ object Cats {
     *   } { ex => ex }
     * }
     *
-    * val catsIO: CatsIO[Int] = Cats.run(yaesProgram)
+    * val catsIO: IO[Int] = Cats.blocking(yaesProgram)
     * // Exceptions are propagated through Cats Effect IO
     * }}}
     *
@@ -47,27 +66,89 @@ object Cats {
     *   42
     * }
     *
-    * val catsIO: CatsIO[Int] = Cats.run(yaesProgram)
+    * val catsIO: IO[Int] = Cats.blocking(yaesProgram)
     * val result = catsIO.unsafeRunSync()  // 42
     * }}}
     *
     * @param yaesProgram
     *   The YAES IO program to convert (can use Raise[Throwable] for typed error handling)
-    * @param ec
-    *   The execution context for running the YAES handler
+    * @tparam F
+    *   The target effect type (must have a Sync instance)
     * @tparam A
     *   The result type of the program
     * @return
-    *   A Cats Effect IO containing the same computation with errors as failures
+    *   An effect `F[A]` containing the same computation with errors as failures
+    * @see [[delay]] for CPU-bound computations without blocking I/O
     */
-  def run[A](yaesProgram: (in.rcard.yaes.IO, Raise[Throwable]) ?=> A)(using ec: ExecutionContext): CatsIO[A] = {
-    CatsIO.fromFuture(CatsIO {
+  def blocking[F[_]: Sync, A](yaesProgram: (in.rcard.yaes.IO, Raise[Throwable]) ?=> A): F[A] = {
+    Sync[F].blocking {
       given Raise[Throwable] = new in.rcard.yaes.Yaes(new Raise.Unsafe[Throwable] {
         def raise(error: => Throwable): Nothing = throw error
       })
-      in.rcard.yaes.IO.run(yaesProgram)
-    })
+      given in.rcard.yaes.IO = new in.rcard.yaes.Yaes(syncUnsafe)
+      yaesProgram
+    }
   }
+
+  /** Converts a YAES IO program to a Cats Effect type, optimized for CPU-bound computations.
+    *
+    * This conversion runs the YAES program using `Sync[F].delay`, which executes on Cats Effect's
+    * compute thread pool. Use this variant only when you know the YAES program does NOT perform
+    * blocking I/O operations (e.g., file reads, network calls, `Thread.sleep`).
+    *
+    * For programs that may perform blocking I/O, use [[blocking]] instead, which properly shifts
+    * execution to the blocking thread pool.
+    *
+    * @param yaesProgram
+    *   The YAES IO program to convert (must be CPU-bound, non-blocking)
+    * @tparam F
+    *   The target effect type (must have a Sync instance)
+    * @tparam A
+    *   The result type of the program
+    * @return
+    *   An effect `F[A]` containing the same computation
+    * @see [[blocking]] for programs that may perform blocking I/O
+    */
+  def delay[F[_]: Sync, A](yaesProgram: (in.rcard.yaes.IO, Raise[Throwable]) ?=> A): F[A] = {
+    Sync[F].delay {
+      given Raise[Throwable] = new in.rcard.yaes.Yaes(new Raise.Unsafe[Throwable] {
+        def raise(error: => Throwable): Nothing = throw error
+      })
+      given in.rcard.yaes.IO = new in.rcard.yaes.Yaes(syncUnsafe)
+      yaesProgram
+    }
+  }
+
+  /** Converts a YAES IO program to Cats Effect IO.
+    *
+    * This is a convenience method that calls [[blocking]] with `CatsIO` as the target effect type.
+    * Use this when you specifically need a `CatsIO` result and don't need polymorphism.
+    *
+    * @param yaesProgram
+    *   The YAES IO program to convert
+    * @tparam A
+    *   The result type of the program
+    * @return
+    *   A Cats Effect IO containing the same computation
+    */
+  def blockingIO[A](yaesProgram: (in.rcard.yaes.IO, Raise[Throwable]) ?=> A): CatsIO[A] =
+    blocking[CatsIO, A](yaesProgram)
+
+  /** Converts a YAES IO program to Cats Effect IO, optimized for CPU-bound computations.
+    *
+    * This is a convenience method that calls [[delay]] with `CatsIO` as the target effect type.
+    * Use this when you specifically need a `CatsIO` result for CPU-bound, non-blocking computations.
+    *
+    * @param yaesProgram
+    *   The YAES IO program to convert (must be CPU-bound, non-blocking)
+    * @tparam A
+    *   The result type of the program
+    * @return
+    *   A Cats Effect IO containing the same computation
+    * @see [[blockingIO]] for programs that may perform blocking I/O
+    */
+  def delayIO[A](yaesProgram: (in.rcard.yaes.IO, Raise[Throwable]) ?=> A): CatsIO[A] =
+    delay[CatsIO, A](yaesProgram)
 
   /** Converts a Cats Effect IO to a YAES IO program.
     *
