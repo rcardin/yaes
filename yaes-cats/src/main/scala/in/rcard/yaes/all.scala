@@ -1,42 +1,34 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.instances.RaiseInstances
-import in.rcard.yaes.syntax.AccumulateSyntax
-
-/** Unified import object for all YAES Cats integrations.
+/** Unified imports for all YAES Cats integrations.
   *
-  * This object provides a single import for all Cats-related functionality:
-  * - Typeclass instances (MonadError for Raise)
-  * - Syntax extensions (combineErrors, combineErrorsS)
-  * - Cats Effect conversions (Cats.run, Cats.value)
-  * - Validated conversions (CatsValidated.validated, etc.)
-  * - Accumulation functions (CatsAccumulate.mapAccumulating, etc.)
+  * For production code, prefer granular imports:
+  * {{{
+  * import in.rcard.yaes.interop.catseffect.*
+  * import in.rcard.yaes.syntax.catseffect.given
+  * import in.rcard.yaes.instances.raise.given
+  * }}}
+  *
+  * This object is provided for convenience and quick exploration.
   *
   * Example:
   * {{{
-  * import in.rcard.yaes.all.given
-  * import in.rcard.yaes.all.*
-  * import cats.syntax.all.*
+  * import in.rcard.yaes.all.{given, *}
   *
-  * def computation1: Int raises String = Raise.raise("error")
-  * def computation2: Int raises String = 42
-  *
-  * // Use Cats combinators with Raise
-  * val result: Int raises String = computation1.handleError(_ => computation2)
-  *
-  * // Use accumulation syntax
-  * val accumulated: List[Int] raises NonEmptyList[String] = 
-  *   List(computation1, computation2).combineErrors
+  * // Now have access to all methods and syntax
+  * val catsIO = catseffect.blockingIO(yaesProgram)
+  * val v = validated.validated { Raise.raise("error") }
   * }}}
   */
-object all extends RaiseInstances with AccumulateSyntax {
-  
-  // Re-export Cats Effect conversions
-  export Cats.*
-  
-  // Re-export Validated conversions
-  export CatsValidated.*
-  
-  // Re-export accumulation functions (not syntax, which is inherited)
-  export CatsAccumulate.{mapAccumulating, mapAccumulatingS}
+object all {
+  // Re-export all object methods
+  export interop.catseffect
+  export cats.validated
+  export cats.accumulate
+
+  // Re-export all syntax (for .given imports)
+  export syntax.all.*
+
+  // Re-export instances (for .given imports)
+  export instances.raise.given
 }
