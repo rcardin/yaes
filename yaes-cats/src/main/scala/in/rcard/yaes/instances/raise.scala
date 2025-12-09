@@ -5,6 +5,9 @@ import in.rcard.yaes.Raise
 
 import scala.annotation.tailrec
 
+/** Provides Cats typeclass instances for YAES Raise effect. */
+object raise extends RaiseInstances
+
 /** Provides Cats typeclass instances for YAES Raise effect.
   *
   * This trait provides MonadError instances that allow Raise computations to work seamlessly
