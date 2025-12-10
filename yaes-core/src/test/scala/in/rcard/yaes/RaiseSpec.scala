@@ -517,6 +517,43 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actual shouldBe "Oops!"
   }
 
+  "rethrowError" should "handle a program that does not raise an error" in {
+    def program(using Raise[Throwable]): Int = {
+      val x = 21
+      val y = 21
+      x + y
+    }
+
+    val result = program(using Raise.rethrowError)
+
+    result shouldBe 42
+  }
+
+  it should "handle a program that raises an error by rethrowing it" in {
+    def program(using Raise[Throwable]): Int = {
+      Raise.raise(new RuntimeException("Something went wrong"))
+      42
+    }
+
+    assertThrows[RuntimeException] {
+      program(using Raise.rethrowError)
+    }
+  }
+
+  it should "handle a program that raises an IOException by rethrowing it" in {
+    def program(using Raise[Throwable]): String = {
+      val data = "start"
+      Raise.raise(new IOException("File not found"))
+      data + " end"
+    }
+
+    val exception = intercept[IOException] {
+      program(using Raise.rethrowError)
+    }
+
+    exception.getMessage shouldBe "File not found"
+  }
+
   private def int(value: Int): Raise[String] ?=> Int = {
     if value >= 2 then Raise.raise(value.toString)
     else value
