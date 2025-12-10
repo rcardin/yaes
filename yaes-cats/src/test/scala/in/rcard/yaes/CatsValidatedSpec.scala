@@ -7,7 +7,7 @@ import in.rcard.yaes.syntax.validated.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-class ValidatedSpec extends AnyFlatSpec with Matchers {
+class CatsValidatedSpec extends AnyFlatSpec with Matchers {
 
   "The 'validated' builder" should "create a Valid instance" in {
     val result = validated.validated {
