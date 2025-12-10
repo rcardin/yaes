@@ -1,12 +1,13 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.{IO => YaesIO, Raise, Cats}
-import in.rcard.yaes.Cats._
-import cats.effect.{IO => CatsIO}
+import in.rcard.yaes.{IO => YaesIO, Raise}
+import in.rcard.yaes.interop.catseffect
+import in.rcard.yaes.syntax.catseffect.*
+import _root_.cats.effect.{IO => CatsIO}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.ExecutionContext.Implicits.global // Needed for YaesIO.run
-import cats.effect.unsafe.implicits.global as catsRuntime // Needed for CatsIO.unsafeRunSync
+import _root_.cats.effect.unsafe.implicits.global as catsRuntime // Needed for CatsIO.unsafeRunSync
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -17,7 +18,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       42
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
     val result = catsIO.unsafeRunSync()
 
     result shouldBe 42
@@ -41,7 +42,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       throw new RuntimeException("YAES error")
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
 
     val exception = intercept[RuntimeException] {
       catsIO.unsafeRunSync()
@@ -70,7 +71,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       sideEffect += 1
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
     catsIO.unsafeRunSync()
 
     sideEffect shouldBe 1
@@ -111,7 +112,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     val originalYaes: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO { 21 }
 
     // YAES -> Cats -> YAES -> Cats
-    val catsIO = Cats.run(originalYaes).map(_ * 2)
+    val catsIO = catseffect.blockingIO(originalYaes).map(_ * 2)
 
     val result = YaesIO.run {
       Raise.either {
@@ -131,7 +132,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       s"Count: $counter"
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
       .flatMap { msg =>
         CatsIO {
           counter += 10
@@ -159,7 +160,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     }
 
     // Creating the Cats IO should NOT execute the YAES program
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
     sideEffect shouldBe 0 // Side effect should not have happened yet!
 
     // Only when we run the Cats IO should the side effect occur
@@ -176,7 +177,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       counter
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
 
     // Each execution should increment the counter
     val result1 = catsIO.unsafeRunSync()
@@ -322,7 +323,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       } { ex => ex }
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
 
     val exception = intercept[RuntimeException] {
       catsIO.unsafeRunSync()
@@ -337,7 +338,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       } { ex => ex }
     }
 
-    val catsIO = Cats.run(yaesProgram)
+    val catsIO = catseffect.blockingIO(yaesProgram)
     val result = catsIO.unsafeRunSync()
 
     result shouldBe 42
@@ -361,7 +362,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     }
 
     val result = YaesIO.run {
-      val catsIO = Cats.run(originalYaes).map(_ * 2)
+      val catsIO = catseffect.blockingIO(originalYaes).map(_ * 2)
       Raise.either {
         catsIO.value
       }

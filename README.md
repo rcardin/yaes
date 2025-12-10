@@ -19,6 +19,7 @@ Here is the talk I gave at the **Scalar 2025** about the main concepts behind th
 Available modules are:
  * `yaes-core`: The main effects of the λÆS library.
  * `yaes-data`: A set of data structures that can be used with the λÆS library.
+ * `yaes-cats`: Integration with Cats and Cats Effect, providing interoperability and typeclass instances.
 
 What's new in λÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
@@ -84,6 +85,12 @@ The library is available on Maven Central. To use it, add the following dependen
 
 ```sbt
 libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.9.0"
+```
+
+For Cats integration, add:
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.9.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
