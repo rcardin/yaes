@@ -44,20 +44,15 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
   }
 
-  // FIXME
-  // it should "compose with other effects" in {
-  //   val actualResult: (Random, Raise[String]) ?=> Int = for {
-  //     io <- Random.nextInt
-  //     result <- Raise {
-  //       if (io != 42) io
-  //       else Raise.raise("Boom!")
-  //     }
-  //   } yield result
+  it should "nest successfully with differently-typed instances" in {
+    val actual = Raise.either {
+      Raise.option {
+        Raise.raise("error")
+      }
+    }
 
-  //   for {
-  //     actualResult <- IO.run { Raise.run { actualResult } }
-  //   } yield actualResult shouldBe "Boom!"
-  // }
+    actual should be(Left("error"))
+  }
 
   "withDefault" should "be able to provide a default value if an error is risen" in {
     val actualResult = Raise.withDefault(42) {
@@ -128,7 +123,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "be able to return an Option with None if an error is risen" in {
     val actualResult: Option[Int] = Raise.option {
-      Raise.raise("Error")
+      Raise.raise(None)
       42
     }
 
@@ -145,7 +140,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "be able to return a nullable value with null if an error is risen" in {
     val actualResult: Int | Null = Raise.nullable {
-      Raise.raise("Error")
+      Raise.raise(null)
       42
     }
 
@@ -520,6 +515,43 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     val actual: String | Int = Raise.run(lambda)
 
     actual shouldBe "Oops!"
+  }
+
+  "rethrowError" should "handle a program that does not raise an error" in {
+    def program(using Raise[Throwable]): Int = {
+      val x = 21
+      val y = 21
+      x + y
+    }
+
+    val result = program(using Raise.rethrowError)
+
+    result shouldBe 42
+  }
+
+  it should "handle a program that raises an error by rethrowing it" in {
+    def program(using Raise[Throwable]): Int = {
+      Raise.raise(new RuntimeException("Something went wrong"))
+      42
+    }
+
+    assertThrows[RuntimeException] {
+      program(using Raise.rethrowError)
+    }
+  }
+
+  it should "handle a program that raises an IOException by rethrowing it" in {
+    def program(using Raise[Throwable]): String = {
+      val data = "start"
+      Raise.raise(new IOException("File not found"))
+      data + " end"
+    }
+
+    val exception = intercept[IOException] {
+      program(using Raise.rethrowError)
+    }
+
+    exception.getMessage shouldBe "File not found"
   }
 
   private def int(value: Int): Raise[String] ?=> Int = {

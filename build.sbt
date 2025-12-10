@@ -37,8 +37,16 @@ lazy val `yaes-core` = project
     libraryDependencies ++= commonDependencies
   )
 
+lazy val `yaes-cats` = project
+  .dependsOn(`yaes-core`)
+  .settings(
+    name         := "yaes-cats",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies ++ catsDependencies
+  )
+
 lazy val yaes = (project in file("."))
-  .aggregate(`yaes-core`, `yaes-data`)
+  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`)
   .settings(
     scalaVersion := scala3Version
   )
@@ -49,9 +57,18 @@ lazy val dependencies =
     val scalatest         = "org.scalatest"     %% "scalatest"       % scalatestVersion
     val scalacheckVersion = "3.2.19.0"
     val scalacheck        = "org.scalatestplus" %% "scalacheck-1-18" % scalacheckVersion
+    val catsVersion       = "2.13.0"
+    val catsCore          = "org.typelevel"     %% "cats-core"       % catsVersion
+    val catsEffectVersion = "3.6.3"
+    val catsEffect        = "org.typelevel"     %% "cats-effect"     % catsEffectVersion
   }
 
 lazy val commonDependencies = Seq(
   dependencies.scalatest  % Test,
   dependencies.scalacheck % Test
+)
+
+lazy val catsDependencies = Seq(
+  dependencies.catsCore,
+  dependencies.catsEffect
 )

@@ -522,7 +522,7 @@ Key characteristics:
 To use the `yaes-data` module, add the following dependency to your build.sbt file:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.9.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.10.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.

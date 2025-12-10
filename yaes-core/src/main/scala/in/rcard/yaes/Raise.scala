@@ -115,7 +115,7 @@ object Raise {
     val handler = new Yaes.Handler[Raise.Unsafe[E], A, B] {
 
       override def handle(program: (Raise[E]) ?=> A): B = {
-        boundary {
+        boundary[B] {
           given eff: Raise[E] = new Yaes(new Raise.Unsafe[E] {
             def raise(error: => E): Nothing =
               break(onError(error))
@@ -224,7 +224,7 @@ object Raise {
     * Example:
     * {{{
     * val result: Option[Int] = Raise.option {
-    *   divide(10, 0)
+    *   Raise.raise(None)
     * }
     * // result will be None
     * }}}
@@ -233,12 +233,10 @@ object Raise {
     *   the computation that may raise an error
     * @return
     *   the result of the computation as an [[Option]]
-    * @tparam E
-    *   the type of error that can be raised
     * @tparam A
     *   the type of the result of the block
     */
-  def option[E, A](block: Raise[E] ?=> A): Option[A] =
+  def option[A](block: Raise[None.type] ?=> A): Option[A] =
     fold(block)(onError_ => None)(onSuccess = Some(_))
 
   /** Returns the result of the computation as a nullable value.
@@ -246,7 +244,7 @@ object Raise {
     * Example:
     * {{{
     * val result: Int | Null = Raise.nullable {
-    *   divide(10, 0)
+    *   Raise.raise(null)
     * }
     * // result will be null
     * }}}
@@ -255,12 +253,10 @@ object Raise {
     *   the computation that may raise an error
     * @return
     *   the result of the computation as a nullable value
-    * @tparam E
-    *   the type of error that can be raised
     * @tparam A
     *   the type of the result of the block
     */
-  def nullable[E, A](block: Raise[E] ?=> A): A | Null =
+  def nullable[A](block: Raise[Null] ?=> A): A | Null =
     fold(block)(onError_ => null)(onSuccess = identity)
 
   /** Ensures that a condition is true and raises an error if it is not.
@@ -412,6 +408,30 @@ object Raise {
   )(using Raise[ToError]): A =
     recover(block) { otherError => Raise.raise(transform(otherError)) }
 
+  /** A [[Raise]] instance that rethrows any raised error as a [[Throwable]].
+    *
+    * This instance is useful when integrating with exception-based effect systems,
+    * such as Cats Effect, where typed errors from `Raise[Throwable]` need to be
+    * converted back to thrown exceptions.
+    *
+    * It effectively bridges the gap between typed error handling and traditional
+    * exception-based error handling by rethrowing any raised error as a `Throwable`.
+    *
+    * Example:
+    * {{{
+    * def program(using Raise[Throwable]): Int = {
+    *   Raise.raise(new RuntimeException("Error"))
+    *   42
+    * }
+    *
+    * // Rethrows the exception
+    * program(using Raise.rethrowError)
+    * }}}
+    */
+  val rethrowError: Raise[Throwable] = new Yaes(new Unsafe[Throwable] {
+    override def raise(error: => Throwable): Nothing = throw error
+  })
+
   /** Utility type alias for mapping errors. */
   type MapError[From, To] = Yaes[Raise.UnsafeMapError[From, To]]
 
@@ -557,10 +577,11 @@ object Raise {
   inline def mapAccumulating[E, A, B](iterable: Iterable[A])(
       transform: A => (Raise[E] ?=> B)
   )(using RaiseAcc[E]): List[B] = {
-    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) { case ((errs, res), a) =>
-      Raise.fold(
-        transform(a)
-      )(error => (error :: errs, res))(result => (errs, result :: res))
+    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) {
+      case ((errs, res), a) =>
+        Raise.fold(
+          transform(a)
+        )(error => (error :: errs, res))(result => (errs, result :: res))
     }
     if errors.isEmpty then results.reverse
     else Raise.raise(errors.reverse)
@@ -618,11 +639,7 @@ object Raise {
   )(using Raise[E]): List[B] = {
     val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) {
       case ((errs, res), a) =>
-        Raise.fold(transform(a))(
-          error => (error :: errs, res)
-        )(
-          result => (errs, result :: res)
-        )
+        Raise.fold(transform(a))(error => (error :: errs, res))(result => (errs, result :: res))
     }
     if errors.isEmpty then results.reverse
     else Raise.raise(errors.reverse.reduce(combine))
