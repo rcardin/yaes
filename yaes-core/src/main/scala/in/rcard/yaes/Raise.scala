@@ -408,6 +408,12 @@ object Raise {
   )(using Raise[ToError]): A =
     recover(block) { otherError => Raise.raise(transform(otherError)) }
 
+  /** A [[Raise]] instance that rethrows any raised error as a [[Throwable]].
+    */
+  val rethrowError: Raise[Throwable] = new Yaes(new Unsafe[Throwable] {
+    override def raise(error: => Throwable): Nothing = throw error
+  })
+
   /** Utility type alias for mapping errors. */
   type MapError[From, To] = Yaes[Raise.UnsafeMapError[From, To]]
 
@@ -553,10 +559,11 @@ object Raise {
   inline def mapAccumulating[E, A, B](iterable: Iterable[A])(
       transform: A => (Raise[E] ?=> B)
   )(using RaiseAcc[E]): List[B] = {
-    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) { case ((errs, res), a) =>
-      Raise.fold(
-        transform(a)
-      )(error => (error :: errs, res))(result => (errs, result :: res))
+    val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) {
+      case ((errs, res), a) =>
+        Raise.fold(
+          transform(a)
+        )(error => (error :: errs, res))(result => (errs, result :: res))
     }
     if errors.isEmpty then results.reverse
     else Raise.raise(errors.reverse)
@@ -614,11 +621,7 @@ object Raise {
   )(using Raise[E]): List[B] = {
     val (errors, results) = iterable.foldLeft((List.empty[E], List.empty[B])) {
       case ((errs, res), a) =>
-        Raise.fold(transform(a))(
-          error => (error :: errs, res)
-        )(
-          result => (errs, result :: res)
-        )
+        Raise.fold(transform(a))(error => (error :: errs, res))(result => (errs, result :: res))
     }
     if errors.isEmpty then results.reverse
     else Raise.raise(errors.reverse.reduce(combine))
