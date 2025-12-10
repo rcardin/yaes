@@ -487,23 +487,9 @@ val result = YaesIO.run {
 Await.result(result, 5.seconds)  // "Computation timed out!"
 ```
 
-## Migration Guide
+## Modules
 
-If you're upgrading from earlier versions of yaes-cats, the package structure has been reorganized to follow Cats conventions. Here's how to update your imports:
-
-### Old Imports → New Imports
-
-| Old Import | New Import | Purpose |
-|-----------|-----------|---------|
-| `import in.rcard.yaes.Cats` | `import in.rcard.yaes.interop.catseffect` | Cats Effect IO conversions (blocking/delayIO) |
-| `import in.rcard.yaes.Cats._` | `import in.rcard.yaes.syntax.catseffect.given` | Cats Effect IO syntax extensions (`.value`) |
-| `Cats.run(yaesProgram)` | `catseffect.blockingIO(yaesProgram)` | Convert YAES → Cats (for blocking I/O) |
-| `Cats.value(catsIO)` | `catseffect.value(catsIO)` | Convert Cats → YAES (object method) |
-| `catsIO.value` (without syntax import) | `catseffect.value(catsIO)` | Convert Cats → YAES (explicit call) |
-
-### New Modules
-
-The reorganization introduced new modules for Cats-specific functionality:
+The following are the modules for Cats-specific functionality:
 
 | Module | Location | Purpose |
 |--------|----------|---------|
@@ -515,26 +501,8 @@ The reorganization introduced new modules for Cats-specific functionality:
 | **syntax.validated** | `in.rcard.yaes.syntax.validated` | Extension methods for Validated types |
 | **syntax.all** | `in.rcard.yaes.syntax.all` | All syntax extensions combined |
 
-### Example Migration
+### Example
 
-Before (old API):
-```scala
-import in.rcard.yaes.{IO => YaesIO, Raise, Cats}
-import in.rcard.yaes.Cats._
-
-val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO { 42 }
-val catsIO = Cats.run(yaesProgram)
-val result = catsIO.unsafeRunSync()
-
-val catsIO2 = CatsIO.pure(10)
-val yaesResult = YaesIO.run {
-  Raise.either {
-    catsIO2.value  // Needed Cats._ import
-  }
-}
-```
-
-After (new API):
 ```scala
 import in.rcard.yaes.{IO => YaesIO, Raise}
 import in.rcard.yaes.interop.catseffect
