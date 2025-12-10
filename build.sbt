@@ -59,7 +59,7 @@ lazy val dependencies =
     val scalacheck        = "org.scalatestplus" %% "scalacheck-1-18" % scalacheckVersion
     val catsVersion       = "2.13.0"
     val catsCore          = "org.typelevel"     %% "cats-core"       % catsVersion
-    val catsEffectVersion = "3.6.3"
+    val catsEffectVersion = "3.7-4972921"
     val catsEffect        = "org.typelevel"     %% "cats-effect"     % catsEffectVersion
   }
 
