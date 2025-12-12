@@ -355,4 +355,59 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
 
     (completeCount + errorCount).should(be(1))
   }
+
+  // ========== Phase 5: Reactive Streams Spec Compliance ==========
+
+  it should "throw NullPointerException for null subscriber" in {
+    val flow = Flow(1, 2, 3)
+
+    Async.run {
+      val publisher = flow.asPublisher()
+      intercept[IllegalArgumentException] {
+        publisher.subscribe(null)
+      }
+    }
+  }
+
+  it should "call onError for null elements in Flow" in {
+    // Create a flow with a null element by using a list that contains null
+    val values: List[String] = List("valid", null, "unreachable")
+    val flow = Flow(values*)
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val results    = mutable.ArrayBuffer[String]()
+      val subscriber = new TestSubscriber[String](results)
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+
+      subscriber.errorReceived.shouldBe(a[NullPointerException])
+      results.should(contain).theSameElementsInOrderAs(List("valid"))
+    }
+  }
+
+  it should "not call onNext after onComplete" in {
+    val flow = Flow(1, 2, 3)
+
+    Async.run {
+      val publisher      = FlowPublisher.fromFlow(flow)
+      val results        = mutable.ArrayBuffer[Int]()
+      var wasCompleted = false
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onComplete(): Unit = {
+          wasCompleted = true
+          super.onComplete()
+        }
+
+        override def onNext(item: Int): Unit = {
+          if (wasCompleted) fail("onNext called after onComplete")
+          super.onNext(item)
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+
+      results.should(have).size(3)
+    }
+  }
 }
