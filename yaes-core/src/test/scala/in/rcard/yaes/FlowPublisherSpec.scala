@@ -8,6 +8,7 @@ import scala.concurrent.duration._
 import java.util.concurrent.Flow.{Publisher, Subscriber, Subscription}
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import FlowPublisher.asPublisher
 
 class FlowPublisherSpec extends AnyFlatSpec with Matchers {
 
@@ -273,5 +274,85 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
     }
 
     completedCalled.should(be(false))
+  }
+
+  // ========== Phase 4: Error Handling ==========
+
+  it should "propagate Flow exceptions to onError" in {
+    val flow = Flow.flow[Int] {
+      Flow.emit(1)
+      Flow.emit(2)
+      throw new RuntimeException("Flow error")
+    }
+
+    Async.run {
+      val publisher  = flow.asPublisher()
+      val subscriber = new TestSubscriber[Int](mutable.ArrayBuffer())
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+
+      subscriber.errorReceived.should(not).be(null)
+      subscriber.errorReceived.getMessage.should(be("Flow error"))
+      subscriber.completed.should(be(false))
+    }
+  }
+
+  it should "treat internal ChannelClosed as normal completion" in {
+    val flow = Flow(1, 2, 3)
+
+    Async.run {
+      val publisher  = flow.asPublisher()
+      val subscriber = new TestSubscriber[Int](mutable.ArrayBuffer())
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+
+      subscriber.errorReceived.should(be(null))
+      subscriber.completed.should(be(true))
+    }
+  }
+
+  it should "handle exceptions in subscriber.onNext()" in {
+    val flow    = Flow(1, 2, 3, 4, 5)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = flow.asPublisher()
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onNext(item: Int): Unit = {
+          super.onNext(item)
+          if (item == 3) throw new IllegalStateException("Subscriber error")
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+
+      results.should(contain).theSameElementsInOrderAs(List(1, 2, 3))
+      subscriber.errorReceived.getMessage.should(be("Subscriber error"))
+    }
+  }
+
+  it should "call only one terminal event (onComplete OR onError)" in {
+    val flow = Flow(1, 2, 3)
+    var completeCount = 0
+    var errorCount    = 0
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](mutable.ArrayBuffer()) {
+        override def onComplete(): Unit = {
+          completeCount += 1
+          super.onComplete()
+        }
+
+        override def onError(t: Throwable): Unit = {
+          errorCount += 1
+          super.onError(t)
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    (completeCount + errorCount).should(be(1))
   }
 }
