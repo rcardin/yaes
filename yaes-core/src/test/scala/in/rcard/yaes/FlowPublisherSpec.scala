@@ -186,4 +186,92 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
 
     results.should(have).size(50)
   }
+
+  // ========== Phase 3: Cancellation ==========
+
+  it should "stop emission when subscription is cancelled" in {
+    val flow    = Flow((1 to 100)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onNext(item: Int): Unit = {
+          super.onNext(item)
+          if (results.size == 3) subscription.cancel()
+        }
+      }
+      publisher.subscribe(subscriber)
+      Async.delay(500.millis) // Wait for cancellation to take effect
+    }
+
+    results.size.should(be <= 3)
+  }
+
+  it should "clean up resources when cancelled" in {
+    val flow    = Flow((1 to 1000)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onNext(item: Int): Unit = {
+          super.onNext(item)
+          if (results.size == 5) subscription.cancel()
+        }
+      }
+      publisher.subscribe(subscriber)
+      Async.delay(500.millis)
+    }
+
+    results.size.should(be <= 5)
+  }
+
+  it should "be idempotent when cancel() called multiple times" in {
+    val flow    = Flow((1 to 10)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onSubscribe(s: Subscription): Unit = {
+          super.onSubscribe(s)
+          // Call cancel multiple times
+          s.cancel()
+          s.cancel()
+          s.cancel()
+        }
+      }
+      publisher.subscribe(subscriber)
+      Async.delay(100.millis)
+    }
+
+    // No error should occur
+    results.size.should(be < 10)
+  }
+
+  it should "not send notifications after cancellation" in {
+    val flow    = Flow((1 to 100)*)
+    val results = mutable.ArrayBuffer[Int]()
+    var completedCalled = false
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onComplete(): Unit = {
+          completedCalled = true
+          super.onComplete()
+        }
+
+        override def onNext(item: Int): Unit = {
+          super.onNext(item)
+          if (results.size == 5) subscription.cancel()
+        }
+      }
+      publisher.subscribe(subscriber)
+      Async.delay(500.millis)
+    }
+
+    completedCalled.should(be(false))
+  }
 }
