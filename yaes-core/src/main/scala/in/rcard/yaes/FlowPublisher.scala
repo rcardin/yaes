@@ -94,14 +94,21 @@ class FlowPublisher[A](
 
       var running = true
       while (running && !cancelled.get()) {
-        if (demand.get() > 0) {
-          val receiveResult: Either[Channel.ChannelClosed.type, A] = Raise.either {
-            channel.receive()
-          }
+        // Always try to receive next element
+        val receiveResult: Either[Channel.ChannelClosed.type, A] = Raise.either {
+          channel.receive()
+        }
 
-          receiveResult match {
-            case Right(value) =>
-              if (value != null) {
+        receiveResult match {
+          case Right(value) =>
+            if (value != null) {
+              // Wait for demand before delivering
+              while (demand.get() == 0 && !cancelled.get()) {
+                Async.delay(1.millis)
+              }
+
+              // If not cancelled, deliver the element
+              if (!cancelled.get()) {
                 try {
                   subscriber.onNext(value)
                   demand.decrementAndGet()
@@ -114,18 +121,18 @@ class FlowPublisher[A](
                 }
               } else {
                 running = false
-                if (terminated.compareAndSet(false, true)) {
-                  subscriber.onError(new NullPointerException("Flow emitted null element"))
-                }
               }
-            case Left(Channel.ChannelClosed) =>
+            } else {
               running = false
-              if (terminated.compareAndSet(false, true) && !cancelled.get()) {
-                subscriber.onComplete()
+              if (terminated.compareAndSet(false, true)) {
+                subscriber.onError(new NullPointerException("Flow emitted null element"))
               }
-          }
-        } else {
-          Async.delay(1.millis) // Yield when no demand
+            }
+          case Left(Channel.ChannelClosed) =>
+            running = false
+            if (terminated.compareAndSet(false, true) && !cancelled.get()) {
+              subscriber.onComplete()
+            }
         }
       }
     }

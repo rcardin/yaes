@@ -92,4 +92,98 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
     results.should(be(empty))
     completedFlag.should(be(true))
   }
+
+  // ========== Phase 2: Demand Tracking and Backpressure ==========
+
+  it should "respect request(n) demand" in {
+    val flow    = Flow(1, 2, 3, 4, 5)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onSubscribe(s: Subscription): Unit = {
+          subscription = s
+          s.request(2) // Request 2 initially
+        }
+
+        override def onNext(item: Int): Unit = {
+          super.onNext(item)
+          if (results.size == 2) subscription.request(3) // Request 3 more
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    results should contain theSameElementsInOrderAs List(1, 2, 3, 4, 5)
+  }
+
+  it should "reject invalid request(n <= 0) with onError" in {
+    val flow    = Flow(1, 2, 3)
+    val results = mutable.ArrayBuffer[Int]()
+    var receivedError: Throwable = null
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onSubscribe(s: Subscription): Unit = {
+          subscription = s
+          s.request(0) // Invalid request
+        }
+
+        override def onError(t: Throwable): Unit = {
+          receivedError = t
+          super.onError(t)
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    receivedError.should(not).be(null)
+    receivedError.shouldBe(a[IllegalArgumentException])
+    receivedError.getMessage.should(include("Rule 3.9"))
+  }
+
+  it should "apply backpressure to slow subscriber" in {
+    val flow    = Flow((1 to 100)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher = FlowPublisher.fromFlow(flow, Channel.Type.Bounded(5, Channel.OverflowStrategy.SUSPEND))
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onNext(item: Int): Unit = {
+          Async.delay(10.millis) // Slow consumer
+          super.onNext(item)
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    results.should(have).size(100)
+  }
+
+  it should "handle concurrent request() calls safely" in {
+    val flow    = Flow((1 to 50)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onSubscribe(s: Subscription): Unit = {
+          subscription = s
+          // Concurrent requests from multiple fibers
+          Async.fork { s.request(10) }
+          Async.fork { s.request(20) }
+          Async.fork { s.request(20) }
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    results.should(have).size(50)
+  }
 }
