@@ -410,4 +410,66 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
       results.should(have).size(3)
     }
   }
+
+  // ========== Phase 6: Performance and Edge Cases ==========
+
+  it should "handle large flows efficiently" in {
+    val flow    = Flow((1 to 10000)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results)
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    results.should(have).size(10000)
+    results.head.should(be(1))
+    results.last.should(be(10000))
+  }
+
+  it should "handle subscriber that never requests elements" in {
+    val flow        = Flow(1, 2, 3)
+    val results     = mutable.ArrayBuffer[Int]()
+    var subscribed = false
+
+    Async.run {
+      val publisher  = FlowPublisher.fromFlow(flow)
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onSubscribe(s: Subscription): Unit = {
+          subscription = s
+          subscribed = true
+          // Never call request()!
+        }
+      }
+      publisher.subscribe(subscriber)
+      Async.delay(2.seconds) // Wait to verify no deadlock
+    }
+
+    subscribed.should(be(true))
+    results.should(be(empty))
+  }
+
+  it should "support multiple independent subscribers" in {
+    val flow     = Flow(1, 2, 3)
+    val results1 = mutable.ArrayBuffer[Int]()
+    val results2 = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher = FlowPublisher.fromFlow(flow)
+
+      val subscriber1 = new TestSubscriber[Int](results1)
+      publisher.subscribe(subscriber1)
+
+      val subscriber2 = new TestSubscriber[Int](results2)
+      publisher.subscribe(subscriber2)
+
+      subscriber1.awaitCompletion()
+      subscriber2.awaitCompletion()
+    }
+
+    results1.should(contain).theSameElementsInOrderAs(List(1, 2, 3))
+    results2.should(contain).theSameElementsInOrderAs(List(1, 2, 3))
+  }
 }
