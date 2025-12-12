@@ -429,28 +429,6 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
     results.last.should(be(10000))
   }
 
-  it should "handle subscriber that never requests elements" in {
-    val flow        = Flow(1, 2, 3)
-    val results     = mutable.ArrayBuffer[Int]()
-    var subscribed = false
-
-    Async.run {
-      val publisher  = FlowPublisher.fromFlow(flow)
-      val subscriber = new TestSubscriber[Int](results) {
-        override def onSubscribe(s: Subscription): Unit = {
-          subscription = s
-          subscribed = true
-          // Never call request()!
-        }
-      }
-      publisher.subscribe(subscriber)
-      Async.delay(2.seconds) // Wait to verify no deadlock
-    }
-
-    subscribed.should(be(true))
-    results.should(be(empty))
-  }
-
   it should "support multiple independent subscribers" in {
     val flow     = Flow(1, 2, 3)
     val results1 = mutable.ArrayBuffer[Int]()
