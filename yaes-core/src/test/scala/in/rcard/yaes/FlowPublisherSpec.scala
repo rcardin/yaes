@@ -472,4 +472,42 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
     results1.should(contain).theSameElementsInOrderAs(List(1, 2, 3))
     results2.should(contain).theSameElementsInOrderAs(List(1, 2, 3))
   }
+
+  // ========== Phase 7: API and Extensions ==========
+
+  it should "support extension method syntax with asPublisher()" in {
+    val flow    = Flow(1, 2, 3, 4, 5)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      val publisher  = flow.asPublisher() // Extension method
+      val subscriber = new TestSubscriber[Int](results)
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    results should contain theSameElementsInOrderAs List(1, 2, 3, 4, 5)
+  }
+
+  it should "support custom buffer capacity configuration" in {
+    val flow    = Flow((1 to 100)*)
+    val results = mutable.ArrayBuffer[Int]()
+
+    Async.run {
+      // Use small buffer to ensure backpressure is applied
+      val publisher = flow.asPublisher(Channel.Type.Bounded(5, Channel.OverflowStrategy.SUSPEND))
+      val subscriber = new TestSubscriber[Int](results) {
+        override def onNext(item: Int): Unit = {
+          Async.delay(5.millis) // Slow consumer
+          super.onNext(item)
+        }
+      }
+      publisher.subscribe(subscriber)
+      subscriber.awaitCompletion()
+    }
+
+    results should have size 100
+    results.head should be(1)
+    results.last should be(100)
+  }
 }
