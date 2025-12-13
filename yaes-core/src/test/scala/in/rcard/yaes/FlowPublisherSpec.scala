@@ -4,6 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.mutable
+import scala.compiletime.uninitialized
 import scala.concurrent.duration._
 import java.util.concurrent.Flow.{Publisher, Subscriber, Subscription}
 import java.util.concurrent.CountDownLatch
@@ -14,9 +15,9 @@ class FlowPublisherSpec extends AnyFlatSpec with Matchers {
 
   // Test helper class
   class TestSubscriber[A](results: mutable.ArrayBuffer[A]) extends Subscriber[A] {
-    var subscription: Subscription = _
+    var subscription: Subscription = uninitialized
     private val completionLatch = new CountDownLatch(1)
-    @volatile var errorReceived: Throwable = _
+    @volatile var errorReceived: Throwable = uninitialized
     @volatile var completed: Boolean = false
 
     override def onSubscribe(s: Subscription): Unit = {
