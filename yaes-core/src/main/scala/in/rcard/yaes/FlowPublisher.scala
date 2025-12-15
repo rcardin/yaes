@@ -1,8 +1,8 @@
 package in.rcard.yaes
 
 import java.util.concurrent.Flow.{Publisher, Subscriber, Subscription}
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
-import scala.concurrent.duration._
 
 /** Converts a YAES Flow to a Reactive Streams Publisher.
   *
@@ -48,11 +48,12 @@ class FlowPublisher[A](
   override def subscribe(subscriber: Subscriber[? >: A]): Unit = {
     require(subscriber != null, "Subscriber cannot be null")
 
-    val channel    = Channel[A](bufferCapacity)
-    val demand     = new AtomicLong(0)
-    val cancelled  = new AtomicBoolean(false)
-    val terminated = new AtomicBoolean(false)
-    val fibers     = new AtomicReference[(Fiber[Unit], Fiber[Unit])]((null, null))
+    val channel      = Channel[A](bufferCapacity)
+    val demand       = new AtomicLong(0)
+    val demandSignal = new Semaphore(0)
+    val cancelled    = new AtomicBoolean(false)
+    val terminated   = new AtomicBoolean(false)
+    val fibers       = new AtomicReference[(Fiber[Unit], Fiber[Unit])]((null, null))
 
     // Fork collector fiber
     val collectorFiber = Async.fork("flow-collector") {
@@ -85,6 +86,7 @@ class FlowPublisher[A](
         subscriber,
         channel,
         demand,
+        demandSignal,
         cancelled,
         terminated,
         fibers
@@ -104,7 +106,7 @@ class FlowPublisher[A](
             if (value != null) {
               // Wait for demand before delivering
               while (demand.get() == 0 && !cancelled.get()) {
-                Async.delay(1.millis)
+                demandSignal.acquire()
               }
 
               // If not cancelled, deliver the element
@@ -145,6 +147,7 @@ class FlowPublisher[A](
       subscriber: Subscriber[? >: A],
       channel: Channel[A],
       demand: AtomicLong,
+      demandSignal: Semaphore,
       cancelled: AtomicBoolean,
       terminated: AtomicBoolean,
       fibers: AtomicReference[(Fiber[Unit], Fiber[Unit])]
@@ -159,6 +162,7 @@ class FlowPublisher[A](
         cancel()
       } else {
         demand.addAndGet(n)
+        demandSignal.release()
       }
     }
 
