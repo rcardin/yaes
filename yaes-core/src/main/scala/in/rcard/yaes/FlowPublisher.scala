@@ -60,10 +60,9 @@ class FlowPublisher[A](
       try {
         flow.collect { value =>
           if (!cancelled.get()) {
-            Raise.either {
+            Raise.ignore {
               channel.send(value)
             }
-            // Ignore result - both success and ChannelClosed are acceptable
           }
         }
       } catch {

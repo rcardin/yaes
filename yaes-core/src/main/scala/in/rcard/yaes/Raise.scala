@@ -259,6 +259,31 @@ object Raise {
   def nullable[A](block: Raise[Null] ?=> A): A | Null =
     fold(block)(onError_ => null)(onSuccess = identity)
 
+  /** Executes a block that returns Unit, ignoring any raised errors.
+    *
+    * This is useful when you want to execute side-effecting code but don't care whether it succeeds
+    * or fails. Since the return type is Unit, there's no ambiguity about what to return on error.
+    *
+    * Example:
+    * {{{
+    * val channel = Channel[Int](Channel.Type.Bounded(10))
+    *
+    * // Try to send, ignore if channel is closed
+    * Raise.ignore {
+    *   channel.send(42)
+    * }
+    * }}}
+    *
+    * @param block
+    *   the computation that may raise an error and returns Unit
+    * @tparam E
+    *   the type of error that can be raised
+    */
+  def ignore[E](block: Raise[E] ?=> Unit): Unit = {
+    either(block)
+    ()
+  }
+
   /** Ensures that a condition is true and raises an error if it is not.
     *
     * Example:
