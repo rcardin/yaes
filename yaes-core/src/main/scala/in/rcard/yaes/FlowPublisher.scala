@@ -62,10 +62,8 @@ class FlowPublisher[A](
           if (!cancelled.get()) {
             Raise.either {
               channel.send(value)
-            } match {
-              case Right(_)                    => // Success
-              case Left(Channel.ChannelClosed) => // Expected on cancel
             }
+            // Ignore result - both success and ChannelClosed are acceptable
           }
         }
       } catch {
