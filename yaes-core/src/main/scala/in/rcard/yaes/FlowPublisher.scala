@@ -54,7 +54,6 @@ class FlowPublisher[A](
     val cancelled    = new AtomicBoolean(false)
     val terminated   = new AtomicBoolean(false)
 
-    // Fork collector fiber
     val collectorFiber = Async.fork("flow-collector") {
       try {
         Raise.ignore {
@@ -76,20 +75,31 @@ class FlowPublisher[A](
       }
     }
 
-    // Fork emitter fiber
     val emitterFiber: Fiber[Unit] = Async.fork("subscriber-emitter") {
-      val subscription = new FlowSubscription(
-        subscriber,
-        channel,
-        demand,
-        demandSignal,
-        cancelled,
-        terminated
-      )
+      val subscription = new Subscription {
+        override def request(n: Long): Unit = {
+          if (n <= 0) {
+            val ex = new IllegalArgumentException(s"Rule 3.9: request($n) must be > 0")
+            if (terminated.compareAndSet(false, true)) {
+              subscriber.onError(ex)
+            }
+            cancel()
+          } else {
+            demand.addAndGet(n)
+            demandSignal.release()
+          }
+        }
+
+        override def cancel(): Unit = {
+          if (cancelled.compareAndSet(false, true)) {
+            channel.cancel()
+            demandSignal.release()  // Wake up emitter if waiting for demand
+          }
+        }
+      }
 
       subscriber.onSubscribe(subscription)
 
-      // Helper to wait for demand or cancellation
       def waitForDemand(): Boolean = {
         while (demand.get() == 0 && !cancelled.get()) {
           demandSignal.acquire()
@@ -97,14 +107,12 @@ class FlowPublisher[A](
         !cancelled.get()
       }
 
-      // Helper to terminate with error
       def terminateWithError(error: Throwable): Unit = {
         if (terminated.compareAndSet(false, true)) {
           subscriber.onError(error)
         }
       }
 
-      // Helper to complete successfully
       def complete(): Unit = {
         if (terminated.compareAndSet(false, true) && !cancelled.get()) {
           subscriber.onComplete()
@@ -138,36 +146,6 @@ class FlowPublisher[A](
             running = false
             complete()
         }
-      }
-    }
-  }
-
-  private class FlowSubscription(
-      subscriber: Subscriber[? >: A],
-      channel: Channel[A],
-      demand: AtomicLong,
-      demandSignal: Semaphore,
-      cancelled: AtomicBoolean,
-      terminated: AtomicBoolean
-  ) extends Subscription {
-
-    override def request(n: Long): Unit = {
-      if (n <= 0) {
-        val ex = new IllegalArgumentException(s"Rule 3.9: request($n) must be > 0")
-        if (terminated.compareAndSet(false, true)) {
-          subscriber.onError(ex)
-        }
-        cancel()
-      } else {
-        demand.addAndGet(n)
-        demandSignal.release()
-      }
-    }
-
-    override def cancel(): Unit = {
-      if (cancelled.compareAndSet(false, true)) {
-        channel.cancel()
-        demandSignal.release()  // Wake up emitter if waiting for demand
       }
     }
   }
