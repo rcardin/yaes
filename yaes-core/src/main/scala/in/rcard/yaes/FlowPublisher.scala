@@ -57,14 +57,13 @@ class FlowPublisher[A](
     // Fork collector fiber
     val collectorFiber = Async.fork("flow-collector") {
       try {
-        val result = Raise.run {
+        Raise.ignore {
           flow.collect { value =>
             if (!cancelled.get()) {
               channel.send(value)
             }
           }
         }
-        // Result is either ChannelClosed or Unit - both mean we should exit gracefully
       } catch {
         case t: Throwable =>
           // Unexpected error from Flow - only report if not cancelled
