@@ -57,22 +57,15 @@ class FlowPublisher[A](
     // Fork collector fiber
     val collectorFiber = Async.fork("flow-collector") {
       try {
-        flow.collect { value =>
-          if (!cancelled.get()) {
-            Raise.either {
+        val result = Raise.run {
+          flow.collect { value =>
+            if (!cancelled.get()) {
               channel.send(value)
-            } match {
-              case Right(_) => // Successfully sent
-              case Left(Channel.ChannelClosed) =>
-                // Channel was cancelled, stop collecting by throwing
-                throw new RuntimeException("Channel closed")
             }
           }
         }
+        // Result is either ChannelClosed or Unit - both mean we should exit gracefully
       } catch {
-        case _: RuntimeException if cancelled.get() =>
-          // Channel was cancelled, exit gracefully
-          ()
         case t: Throwable if !cancelled.get() =>
           // Unexpected error from Flow
           if (terminated.compareAndSet(false, true)) {
