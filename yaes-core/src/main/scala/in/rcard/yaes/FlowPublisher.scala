@@ -66,9 +66,10 @@ class FlowPublisher[A](
         }
         // Result is either ChannelClosed or Unit - both mean we should exit gracefully
       } catch {
-        case t: Throwable if !cancelled.get() =>
-          // Unexpected error from Flow
-          if (terminated.compareAndSet(false, true)) {
+        case t: Throwable =>
+          // Unexpected error from Flow - only report if not cancelled
+          // (Reactive Streams spec: no signals after cancellation)
+          if (!cancelled.get() && terminated.compareAndSet(false, true)) {
             subscriber.onError(t)
           }
       } finally {
