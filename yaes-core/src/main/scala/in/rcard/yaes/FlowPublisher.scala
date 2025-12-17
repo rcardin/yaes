@@ -2,7 +2,7 @@ package in.rcard.yaes
 
 import java.util.concurrent.Flow.{Publisher, Subscriber, Subscription}
 import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 /** Converts a YAES Flow to a Reactive Streams Publisher.
   *
@@ -53,22 +53,28 @@ class FlowPublisher[A](
     val demandSignal = new Semaphore(0)
     val cancelled    = new AtomicBoolean(false)
     val terminated   = new AtomicBoolean(false)
-    val fibers       = new AtomicReference[(Fiber[Unit], Fiber[Unit])]((null, null))
 
     // Fork collector fiber
     val collectorFiber = Async.fork("flow-collector") {
       try {
         flow.collect { value =>
           if (!cancelled.get()) {
-            Raise.ignore {
+            Raise.either {
               channel.send(value)
+            } match {
+              case Right(_) => // Successfully sent
+              case Left(Channel.ChannelClosed) =>
+                // Channel was cancelled, stop collecting by throwing
+                throw new RuntimeException("Channel closed")
             }
           }
         }
       } catch {
+        case _: RuntimeException if cancelled.get() =>
+          // Channel was cancelled, exit gracefully
+          ()
         case t: Throwable if !cancelled.get() =>
-          // Store error in channel by closing it
-          // The emitter will handle the error
+          // Unexpected error from Flow
           if (terminated.compareAndSet(false, true)) {
             subscriber.onError(t)
           }
@@ -85,8 +91,7 @@ class FlowPublisher[A](
         demand,
         demandSignal,
         cancelled,
-        terminated,
-        fibers
+        terminated
       )
 
       subscriber.onSubscribe(subscription)
@@ -135,9 +140,6 @@ class FlowPublisher[A](
         }
       }
     }
-
-    // Store fibers for cancellation after both are created
-    fibers.set((collectorFiber, emitterFiber))
   }
 
   private class FlowSubscription(
@@ -146,8 +148,7 @@ class FlowPublisher[A](
       demand: AtomicLong,
       demandSignal: Semaphore,
       cancelled: AtomicBoolean,
-      terminated: AtomicBoolean,
-      fibers: AtomicReference[(Fiber[Unit], Fiber[Unit])]
+      terminated: AtomicBoolean
   ) extends Subscription {
 
     override def request(n: Long): Unit = {
@@ -165,14 +166,8 @@ class FlowPublisher[A](
 
     override def cancel(): Unit = {
       if (cancelled.compareAndSet(false, true)) {
-        val (collector, emitter) = fibers.get()
-        if (collector != null && emitter != null) {
-          Async.run {
-            channel.cancel()
-            collector.cancel()
-            emitter.cancel()
-          }
-        }
+        channel.cancel()
+        demandSignal.release()  // Wake up emitter if waiting for demand
       }
     }
   }
