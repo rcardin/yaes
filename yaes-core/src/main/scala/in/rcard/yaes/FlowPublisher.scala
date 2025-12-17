@@ -89,47 +89,54 @@ class FlowPublisher[A](
 
       subscriber.onSubscribe(subscription)
 
+      // Helper to wait for demand or cancellation
+      def waitForDemand(): Boolean = {
+        while (demand.get() == 0 && !cancelled.get()) {
+          demandSignal.acquire()
+        }
+        !cancelled.get()
+      }
+
+      // Helper to terminate with error
+      def terminateWithError(error: Throwable): Unit = {
+        if (terminated.compareAndSet(false, true)) {
+          subscriber.onError(error)
+        }
+      }
+
+      // Helper to complete successfully
+      def complete(): Unit = {
+        if (terminated.compareAndSet(false, true) && !cancelled.get()) {
+          subscriber.onComplete()
+        }
+      }
+
       var running = true
       while (running && !cancelled.get()) {
-        // Always try to receive next element
-        val receiveResult: Either[Channel.ChannelClosed.type, A] = Raise.either {
+        Raise.either {
           channel.receive()
-        }
+        } match {
+          case Right(value) if value == null =>
+            running = false
+            terminateWithError(new NullPointerException("Flow emitted null element"))
 
-        receiveResult match {
-          case Right(value) =>
-            if (value != null) {
-              // Wait for demand before delivering
-              while (demand.get() == 0 && !cancelled.get()) {
-                demandSignal.acquire()
-              }
-
-              // If not cancelled, deliver the element
-              if (!cancelled.get()) {
-                try {
-                  subscriber.onNext(value)
-                  demand.decrementAndGet()
-                } catch {
-                  case t: Throwable =>
-                    running = false
-                    if (terminated.compareAndSet(false, true)) {
-                      subscriber.onError(t)
-                    }
-                }
-              } else {
+          case Right(value) if waitForDemand() =>
+            try {
+              subscriber.onNext(value)
+              demand.decrementAndGet()
+            } catch {
+              case t: Throwable =>
                 running = false
-              }
-            } else {
-              running = false
-              if (terminated.compareAndSet(false, true)) {
-                subscriber.onError(new NullPointerException("Flow emitted null element"))
-              }
+                terminateWithError(t)
             }
+
+          case Right(_) =>
+            // Cancelled while waiting for demand
+            running = false
+
           case Left(Channel.ChannelClosed) =>
             running = false
-            if (terminated.compareAndSet(false, true) && !cancelled.get()) {
-              subscriber.onComplete()
-            }
+            complete()
         }
       }
     }
