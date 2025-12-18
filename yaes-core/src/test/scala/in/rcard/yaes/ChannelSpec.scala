@@ -686,4 +686,42 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     received should not be empty
     received.head should be(1)
   }
+
+  "Channel without Async context" should "allow send and receive operations with only Raise context" in {
+    val channel = Channel.unbounded[Int]()
+
+    val result = Raise.run {
+      channel.send(1)
+      channel.send(2)
+      channel.send(3)
+      val a = channel.receive()
+      val b = channel.receive()
+      val c = channel.receive()
+      a + b + c
+    }
+
+    result should be(6)
+  }
+
+  it should "allow cancel without any effect context" in {
+    val channel = Channel.unbounded[String]()
+
+    // cancel no longer requires Async
+    channel.cancel()
+
+    val result = Raise.either {
+      channel.receive()
+    }
+
+    result should be(Left(Channel.ChannelClosed))
+  }
+
+  it should "allow close without any effect context" in {
+    val channel = Channel.unbounded[String]()
+
+    // close never required any context
+    val closed = channel.close()
+
+    closed should be(true)
+  }
 }

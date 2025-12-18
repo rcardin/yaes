@@ -1089,6 +1089,8 @@ Channels are composed of two interfaces:
 - **`SendChannel`**: For sending elements (can also close the channel)
 - **`ReceiveChannel`**: For receiving elements (can also cancel the channel)
 
+> **Note:** As of version 0.11.0, channel operations (`send`, `receive`, `cancel`, `foreach`) no longer require an `Async` context - they work with just a `Raise` context. This makes channels more flexible and accurately reflects their implementation using JVM synchronization primitives. Builder functions like `produce`, `channelFlow`, and `Flow.buffer` still require `Async` as they use structured concurrency.
+
 **Sending and Receiving**:
 
 ```scala 3

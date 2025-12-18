@@ -87,11 +87,8 @@ abstract class Channel[T] extends Channel.ReceiveChannel[T], Channel.SendChannel
     *
     * This operation immediately discards all buffered elements and marks the channel as cancelled.
     * Ongoing send/receive operations are interrupted.
-    *
-    * @param async
-    *   the async context
     */
-  override def cancel()(using Async): Unit = {
+  override def cancel(): Unit = {
     lock.lock()
     try {
       closed = true
@@ -328,14 +325,12 @@ object Channel {
       *
       * @param value
       *   the element to send
-      * @param async
-      *   the async context
       * @param raise
       *   the raise context for handling [[ChannelClosed]] errors
       * @throws ChannelClosed
       *   if the channel is closed
       */
-    def send(value: T)(using Async, Raise[ChannelClosed]): Unit
+    def send(value: T)(using Raise[ChannelClosed]): Unit
 
     /** Closes the channel, preventing further sends.
       *
@@ -404,8 +399,6 @@ object Channel {
       * }
       * }}}
       *
-      * @param async
-      *   the async context
       * @param raise
       *   the raise context for handling [[ChannelClosed]] errors
       * @return
@@ -413,7 +406,7 @@ object Channel {
       * @throws ChannelClosed
       *   if the channel is closed and empty
       */
-    def receive()(using Async, Raise[ChannelClosed]): T
+    def receive()(using Raise[ChannelClosed]): T
 
     /** Cancels the channel, clearing all buffered elements.
       *
@@ -437,11 +430,8 @@ object Channel {
       *   }
       * }
       * }}}
-      *
-      * @param async
-      *   the async context
       */
-    def cancel()(using Async): Unit
+    def cancel(): Unit
   }
 
   /** Creates an unbounded channel.
@@ -591,7 +581,7 @@ object Channel {
 
     override protected def clearBuffer(): Unit = queue.clear()
 
-    override def receive()(using Async, Raise[ChannelClosed]): T = {
+    override def receive()(using Raise[ChannelClosed]): T = {
       lock.lock()
       try {
         while (queue.isEmpty) {
@@ -610,7 +600,7 @@ object Channel {
       }
     }
 
-    override def send(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+    override def send(value: T)(using Raise[ChannelClosed]): Unit = {
       lock.lock()
       try {
         if (cancelled) {
@@ -647,7 +637,7 @@ object Channel {
       hasItem = false
     }
 
-    override def receive()(using Async, Raise[ChannelClosed]): T = {
+    override def receive()(using Raise[ChannelClosed]): T = {
       lock.lock()
       try {
         while (!hasItem) {
@@ -669,7 +659,7 @@ object Channel {
       }
     }
 
-    override def send(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+    override def send(value: T)(using Raise[ChannelClosed]): Unit = {
       lock.lock()
       try {
         if (cancelled) {
@@ -735,7 +725,7 @@ object Channel {
 
     override protected def clearBuffer(): Unit = queue.clear()
 
-    override def receive()(using Async, Raise[ChannelClosed]): T = {
+    override def receive()(using Raise[ChannelClosed]): T = {
       lock.lock()
       try {
         while (queue.isEmpty) {
@@ -760,7 +750,7 @@ object Channel {
       }
     }
 
-    override def send(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+    override def send(value: T)(using Raise[ChannelClosed]): Unit = {
       lock.lock()
       try {
         if (cancelled) {
@@ -789,13 +779,11 @@ object Channel {
       *
       * @param value
       *   the element to send
-      * @param async
-      *   the async context
       * @param raise
       *   the raise context for handling [[ChannelClosed]] errors Raises [[ChannelClosed]] via the
       *   `Raise` context if the channel is closed.
       */
-    private def sendSuspend(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+    private def sendSuspend(value: T)(using Raise[ChannelClosed]): Unit = {
       while (queue.size() >= capacity) {
         if (cancelled) {
           Thread.currentThread().interrupt()
@@ -826,12 +814,10 @@ object Channel {
       *
       * @param value
       *   the element to send
-      * @param async
-      *   the async context
       * @param raise
       *   the raise context for handling [[ChannelClosed]] errors
       */
-    private def sendDropOldest(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+    private def sendDropOldest(value: T)(using Raise[ChannelClosed]): Unit = {
       if (queue.size() >= capacity) {
         queue.poll()
       }
@@ -847,12 +833,10 @@ object Channel {
       *
       * @param value
       *   the element to send (may be discarded)
-      * @param async
-      *   the async context
       * @param raise
       *   the raise context for handling [[ChannelClosed]] errors
       */
-    private def sendDropLatest(value: T)(using Async, Raise[ChannelClosed]): Unit = {
+    private def sendDropLatest(value: T)(using Raise[ChannelClosed]): Unit = {
       if (queue.size() < capacity) {
         queue.offer(value)
         notEmpty.signal()
@@ -889,12 +873,10 @@ object Channel {
       *
       * @param f
       *   the function to apply to each element
-      * @param async
-      *   the async context
       * @tparam U
       *   the return type of the function (typically Unit)
       */
-    def foreach[U](f: T => U)(using Async): Unit = {
+    def foreach[U](f: T => U): Unit = {
       Raise.run[ChannelClosed, Unit] {
         while (true) {
           val value = channel.receive()
@@ -974,14 +956,12 @@ object Channel {
       *   the element to send
       * @param p
       *   the producer context
-      * @param a
-      *   the async context
       * @param r
       *   the raise context
       * @tparam T
       *   the type of element
       */
-    def send[T](value: T)(using p: Producer[T], a: Async, r: Raise[ChannelClosed]): Unit =
+    def send[T](value: T)(using p: Producer[T], r: Raise[ChannelClosed]): Unit =
       p.send(value)
 
     /** Closes the channel using the implicit [[Producer]] context.
@@ -1001,14 +981,10 @@ object Channel {
       *
       * @param p
       *   the producer context
-      * @param a
-      *   the async context
-      * @param r
-      *   the raise context
       * @return
       *   `true` if successfully closed, `false` if already closed
       */
-    def close()(using p: Producer[?], a: Async, r: Raise[ChannelClosed]): Boolean =
+    def close()(using p: Producer[?]): Boolean =
       p.close()
   }
 
@@ -1101,7 +1077,7 @@ object Channel {
           Async.run {
             block(using
               new Producer[T] {
-                override def send(value: T)(using Async, Raise[ChannelClosed]): Unit =
+                override def send(value: T)(using Raise[ChannelClosed]): Unit =
                   channel.send(value)
                 override def close(): Boolean = channel.close()
               }

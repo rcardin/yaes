@@ -157,6 +157,8 @@ object EffectName {
 - Closing vs. Canceling: `close()` allows draining remaining elements, `cancel()` clears immediately
 - Producer DSL: `produce` and `produceWith` for convenient channel creation
 - Channel-Flow bridge: `channelFlow` creates Flows backed by channels for concurrent emission
+- **Core operations** (`send`, `receive`, `cancel`, `foreach`) **don't require Async context** - they only use ReentrantLock/Condition which work with all thread types
+- **Builder functions** (`produce`, `produceWith`, `channelFlow`) still require Async for `Async.fork()` and structured concurrency
 
 **Flows (yaes-data):**
 - Cold asynchronous data streams (similar to iterators but async)
