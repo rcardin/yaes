@@ -1,8 +1,8 @@
 package in.rcard.yaes
 
 import java.util.concurrent.Flow.{Publisher, Subscriber, Subscription}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
-import scala.concurrent.duration._
+import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 /** Converts a YAES Flow to a Reactive Streams Publisher.
   *
@@ -48,30 +48,26 @@ class FlowPublisher[A](
   override def subscribe(subscriber: Subscriber[? >: A]): Unit = {
     require(subscriber != null, "Subscriber cannot be null")
 
-    val channel    = Channel[A](bufferCapacity)
-    val demand     = new AtomicLong(0)
-    val cancelled  = new AtomicBoolean(false)
-    val terminated = new AtomicBoolean(false)
-    val fibers     = new AtomicReference[(Fiber[Unit], Fiber[Unit])]((null, null))
+    val channel      = Channel[A](bufferCapacity)
+    val demand       = new AtomicLong(0)
+    val demandSignal = new Semaphore(0)
+    val cancelled    = new AtomicBoolean(false)
+    val terminated   = new AtomicBoolean(false)
 
-    // Fork collector fiber
-    val collectorFiber = Async.fork("flow-collector") {
+    Async.fork("flow-collector") {
       try {
-        flow.collect { value =>
-          if (!cancelled.get()) {
-            Raise.either {
+        Raise.ignore {
+          flow.collect { value =>
+            if (!cancelled.get()) {
               channel.send(value)
-            } match {
-              case Right(_)                    => // Success
-              case Left(Channel.ChannelClosed) => // Expected on cancel
             }
           }
         }
       } catch {
-        case t: Throwable if !cancelled.get() =>
-          // Store error in channel by closing it
-          // The emitter will handle the error
-          if (terminated.compareAndSet(false, true)) {
+        case t: Throwable =>
+          // Unexpected error from Flow - only report if not cancelled
+          // (Reactive Streams spec: no signals after cancellation)
+          if (!cancelled.get() && terminated.compareAndSet(false, true)) {
             subscriber.onError(t)
           }
       } finally {
@@ -79,98 +75,76 @@ class FlowPublisher[A](
       }
     }
 
-    // Fork emitter fiber
-    val emitterFiber: Fiber[Unit] = Async.fork("subscriber-emitter") {
-      val subscription = new FlowSubscription(
-        subscriber,
-        channel,
-        demand,
-        cancelled,
-        terminated,
-        fibers
-      )
+    Async.fork("subscriber-emitter") {
+      val subscription = new Subscription {
+        override def request(n: Long): Unit = {
+          if (n <= 0) {
+            val ex = new IllegalArgumentException(s"Rule 3.9: request($n) must be > 0")
+            if (terminated.compareAndSet(false, true)) {
+              subscriber.onError(ex)
+            }
+            cancel()
+          } else {
+            demand.addAndGet(n)
+            demandSignal.release()
+          }
+        }
+
+        override def cancel(): Unit = {
+          if (cancelled.compareAndSet(false, true)) {
+            channel.cancel()
+            demandSignal.release()  // Wake up emitter if waiting for demand
+          }
+        }
+      }
 
       subscriber.onSubscribe(subscription)
 
+      def waitForDemand(): Boolean = {
+        while (demand.get() == 0 && !cancelled.get()) {
+          demandSignal.acquire()
+        }
+        !cancelled.get()
+      }
+
+      def terminateWithError(error: Throwable): Unit = {
+        if (terminated.compareAndSet(false, true)) {
+          subscriber.onError(error)
+        }
+      }
+
+      def complete(): Unit = {
+        if (terminated.compareAndSet(false, true) && !cancelled.get()) {
+          subscriber.onComplete()
+        }
+      }
+
       var running = true
       while (running && !cancelled.get()) {
-        // Always try to receive next element
-        val receiveResult: Either[Channel.ChannelClosed.type, A] = Raise.either {
+        Raise.either {
           channel.receive()
-        }
+        } match {
+          case Right(value) if value == null =>
+            running = false
+            terminateWithError(new NullPointerException("Flow emitted null element"))
 
-        receiveResult match {
-          case Right(value) =>
-            if (value != null) {
-              // Wait for demand before delivering
-              while (demand.get() == 0 && !cancelled.get()) {
-                Async.delay(1.millis)
-              }
-
-              // If not cancelled, deliver the element
-              if (!cancelled.get()) {
-                try {
-                  subscriber.onNext(value)
-                  demand.decrementAndGet()
-                } catch {
-                  case t: Throwable =>
-                    running = false
-                    if (terminated.compareAndSet(false, true)) {
-                      subscriber.onError(t)
-                    }
-                }
-              } else {
+          case Right(value) if waitForDemand() =>
+            try {
+              subscriber.onNext(value)
+              demand.decrementAndGet()
+            } catch {
+              case t: Throwable =>
                 running = false
-              }
-            } else {
-              running = false
-              if (terminated.compareAndSet(false, true)) {
-                subscriber.onError(new NullPointerException("Flow emitted null element"))
-              }
+                terminateWithError(t)
             }
+
+          case Right(_) =>
+            // Cancelled while waiting for demand
+            running = false
+
           case Left(Channel.ChannelClosed) =>
             running = false
-            if (terminated.compareAndSet(false, true) && !cancelled.get()) {
-              subscriber.onComplete()
-            }
-        }
-      }
-    }
-
-    // Store fibers for cancellation after both are created
-    fibers.set((collectorFiber, emitterFiber))
-  }
-
-  private class FlowSubscription(
-      subscriber: Subscriber[? >: A],
-      channel: Channel[A],
-      demand: AtomicLong,
-      cancelled: AtomicBoolean,
-      terminated: AtomicBoolean,
-      fibers: AtomicReference[(Fiber[Unit], Fiber[Unit])]
-  ) extends Subscription {
-
-    override def request(n: Long): Unit = {
-      if (n <= 0) {
-        val ex = new IllegalArgumentException(s"Rule 3.9: request($n) must be > 0")
-        if (terminated.compareAndSet(false, true)) {
-          subscriber.onError(ex)
-        }
-        cancel()
-      } else {
-        demand.addAndGet(n)
-      }
-    }
-
-    override def cancel(): Unit = {
-      if (cancelled.compareAndSet(false, true)) {
-        val (collector, emitter) = fibers.get()
-        if (collector != null && emitter != null) {
-          Async.run {
-            channel.cancel()
-            collector.cancel()
-            emitter.cancel()
-          }
+            complete()
         }
       }
     }

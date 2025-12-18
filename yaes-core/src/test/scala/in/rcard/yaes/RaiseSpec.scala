@@ -147,6 +147,29 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe null.asInstanceOf[Int | Null]
   }
 
+  it should "ignore errors when using ignore with Unit-returning blocks" in {
+    var sideEffect = 0
+
+    Raise.ignore {
+      sideEffect = 1
+      Raise.raise("Error")
+      sideEffect = 2
+    }
+
+    // Side effect before raise should happen, after raise should not
+    sideEffect shouldBe 1
+  }
+
+  it should "execute successfully when using ignore with no errors" in {
+    var sideEffect = 0
+
+    Raise.ignore {
+      sideEffect = 42
+    }
+
+    sideEffect shouldBe 42
+  }
+
   "ensure" should "raise an error if a condition is not met" in {
     val meaningOfLife = 42
     val actualResult  = Raise.run {
