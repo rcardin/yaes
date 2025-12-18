@@ -2409,6 +2409,7 @@ Each subscription to a FlowPublisher creates an independent execution:
 ```scala 3
 import in.rcard.yaes.{Flow, FlowPublisher}
 import in.rcard.yaes.Async.*
+import java.util.concurrent.Flow.{Subscriber, Subscription}
 import scala.collection.mutable
 
 val flow = Flow.flow[Int] {
@@ -2426,23 +2427,66 @@ Async.run {
   val results2 = mutable.ArrayBuffer[Int]()
 
   // First subscriber
-  publisher.subscribe(new TestSubscriber(results1))
+  publisher.subscribe(new Subscriber[Int] {
+    var subscription: Subscription = _
+
+    override def onSubscribe(s: Subscription): Unit = {
+      subscription = s
+      s.request(Long.MaxValue)
+    }
+
+    override def onNext(item: Int): Unit = {
+      results1 += item
+    }
+
+    override def onError(t: Throwable): Unit = {
+      println(s"Error in subscriber 1: ${t.getMessage}")
+    }
+
+    override def onComplete(): Unit = {
+      println("Subscriber 1 completed")
+    }
+  })
   // Prints:
   //   Flow execution started
   //   Emitting: 1
   //   Emitting: 2
   //   Emitting: 3
+  //   Subscriber 1 completed
 
   // Second subscriber (independent execution)
-  publisher.subscribe(new TestSubscriber(results2))
+  publisher.subscribe(new Subscriber[Int] {
+    var subscription: Subscription = _
+
+    override def onSubscribe(s: Subscription): Unit = {
+      subscription = s
+      s.request(Long.MaxValue)
+    }
+
+    override def onNext(item: Int): Unit = {
+      results2 += item
+    }
+
+    override def onError(t: Throwable): Unit = {
+      println(s"Error in subscriber 2: ${t.getMessage}")
+    }
+
+    override def onComplete(): Unit = {
+      println("Subscriber 2 completed")
+    }
+  })
   // Prints again:
   //   Flow execution started
   //   Emitting: 1
   //   Emitting: 2
   //   Emitting: 3
+  //   Subscriber 2 completed
 
-  // results1 == [1, 2, 3]
-  // results2 == [1, 2, 3]
+  // Wait for async completion
+  Async.delay(100.millis)
+
+  // results1 == ArrayBuffer(1, 2, 3)
+  // results2 == ArrayBuffer(1, 2, 3)
   // Each subscriber got independent execution
 }
 ```
@@ -3632,7 +3676,11 @@ override def onNext(item: Int): Unit = {
 Create simple test subscribers to isolate issues:
 
 ```scala 3
+import java.util.concurrent.Flow.{Subscriber, Subscription}
+
 class DebugSubscriber[A] extends Subscriber[A] {
+  var subscription: Subscription = _
+
   override def onSubscribe(s: Subscription): Unit = {
     println("onSubscribe called")
     subscription = s
