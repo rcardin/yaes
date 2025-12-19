@@ -31,4 +31,5 @@ object all {
 
   // Re-export instances (for .given imports)
   export instances.raise.given
+  export instances.accumulate.given
 }

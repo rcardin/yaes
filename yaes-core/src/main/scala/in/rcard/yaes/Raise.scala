@@ -687,6 +687,36 @@ object Raise {
     */
   type RaiseAcc[Error] = Raise[List[Error]]
 
+  /** Typeclass for collecting accumulated errors from a List into a target collection type.
+    *
+    * This typeclass defines how to transform a List of errors into a specific collection type M[_].
+    * It is used by the polymorphic [[accumulate]] function to support different error collection
+    * types (List, NonEmptyList, NonEmptyChain, etc.).
+    *
+    * @tparam M
+    *   The target collection type for errors
+    */
+  trait AccumulateCollector[M[_]] {
+    /** Collects errors from a List into the target collection type.
+      *
+      * @param errors
+      *   The list of errors to collect
+      * @tparam Error
+      *   The type of the errors
+      * @return
+      *   The errors collected in the target type M[Error]
+      */
+    def collect[Error](errors: List[Error]): M[Error]
+  }
+
+  object AccumulateCollector {
+    /** Default collector instance for List - returns the errors unchanged.
+      */
+    given listCollector: AccumulateCollector[List] with {
+      def collect[Error](errors: List[Error]): List[Error] = errors
+    }
+  }
+
   /** The scope needed to accumulate errors using the [[accumulate]] function
     * @tparam Error
     *   The type of the errors to accumulate
@@ -712,11 +742,17 @@ object Raise {
     }
 
   /** Accumulates the errors of the executions in the `block` lambda and raises all of them if any
-    * error is found. In detail, the `block` lambda must be a series of statements using the
-    * [[accumulating]] function to accumulate possible raised errors.
+    * error is found. The type of error collection is determined by the type parameter `M[_]` and
+    * requires an implicit [[AccumulateCollector]] instance.
     *
-    * <h2>Example</h2>
+    * In detail, the `block` lambda must be a series of statements using the [[accumulating]]
+    * function to accumulate possible raised errors.
+    *
+    * <h2>Example with List (default)</h2>
     * {{{
+    * import in.rcard.yaes.Raise
+    * import in.rcard.yaes.Raise.accumulating
+    *
     * def validateName(name: String): String raises String = {
     *   ensure(name.nonEmpty)("Name cannot be empty")
     *   name
@@ -726,11 +762,31 @@ object Raise {
     *   age
     * }
     *
-    * val person: Person raises List[String] = accumulate {
-    *   val name = accumulating { validateName("") }
-    *   val age  = accumulating { validateAge(-1) }
-    *   Person(name, age)
+    * val person: Either[List[String], Person] = Raise.either {
+    *   Raise.accumulate[List, String, Person] {
+    *     val name = accumulating { validateName("") }
+    *     val age  = accumulating { validateAge(-1) }
+    *     Person(name, age)
+    *   }
     * }
+    * // Result: Left(List("Name cannot be empty", "Age cannot be negative"))
+    * }}}
+    *
+    * <h2>Example with NonEmptyList (requires yaes-cats)</h2>
+    * {{{
+    * import in.rcard.yaes.Raise
+    * import in.rcard.yaes.Raise.accumulating
+    * import in.rcard.yaes.cats.accumulate.given
+    * import cats.data.NonEmptyList
+    *
+    * val person: Either[NonEmptyList[String], Person] = Raise.either {
+    *   Raise.accumulate[NonEmptyList, String, Person] {
+    *     val name = accumulating { validateName("") }
+    *     val age  = accumulating { validateAge(-1) }
+    *     Person(name, age)
+    *   }
+    * }
+    * // Result: Left(NonEmptyList("Name cannot be empty", List("Age cannot be negative")))
     * }}}
     *
     * Errors are accumulated in the order they are raised the first time one of the accumulated
@@ -738,6 +794,10 @@ object Raise {
     *
     * @param block
     *   The block of code that can raise multiple errors
+    * @param collector
+    *   The collector instance to transform List[Error] to M[Error]
+    * @tparam M
+    *   The collection type for errors (e.g., List, NonEmptyList, NonEmptyChain)
     * @tparam Error
     *   The type of the errors to accumulate
     * @tparam A
@@ -745,9 +805,9 @@ object Raise {
     * @return
     *   The value of the block if no errors are raised
     */
-  inline def accumulate[Error, A](
+  inline def accumulate[M[_], Error, A](
       block: AccumulateScope[Error] ?=> A
-  ): RaiseAcc[Error] ?=> A = {
+  )(using collector: AccumulateCollector[M]): Raise[M[Error]] ?=> A = {
 
     import scala.language.implicitConversions
 
@@ -757,7 +817,8 @@ object Raise {
       result
     } catch {
       case AccumulationError =>
-        Raise.raise(accScope.errors)
+        val collectedErrors: M[Error] = collector.collect(accScope.errors)
+        Raise.raise(collectedErrors)
     }
   }
 
