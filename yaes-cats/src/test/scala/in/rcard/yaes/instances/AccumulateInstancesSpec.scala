@@ -43,19 +43,6 @@ class AccumulateInstancesSpec extends AnyFlatSpec with Matchers {
     result.left.map(_.toList.toSet) should be(Left(Set("error1", "error2")))
   }
 
-  it should "work correctly even when all values raise errors" in {
-    // This test demonstrates polymorphic accumulate with NonEmptyList
-    val result: Either[NonEmptyList[String], List[Int]] = Raise.either {
-      Raise.accumulate[NonEmptyList, String, List[Int]] {
-        val a = accumulating { Raise.raise("error1") }
-        val b = accumulating { Raise.raise("error2") }
-        List(a, b)
-      }
-    }
-
-    result.left.map(_.toList.toSet) should be(Left(Set("error1", "error2")))
-  }
-
   "Polymorphic accumulate with NonEmptyChain" should "create a Right instance when no errors occur" in {
     val result: Either[NonEmptyChain[String], Int] = Raise.either {
       Raise.accumulate[NonEmptyChain, String, Int] {
@@ -87,17 +74,5 @@ class AccumulateInstancesSpec extends AnyFlatSpec with Matchers {
     }
 
     result.left.map(_.toList.toSet) should be(Left(Set("error1", "error2")))
-  }
-
-  it should "accumulate errors from multiple sources" in {
-    val result: Either[NonEmptyChain[String], List[Int]] = Raise.either {
-      Raise.accumulate[NonEmptyChain, String, List[Int]] {
-        val a = accumulating { Raise.raise("error2") }
-        val b = accumulating { Raise.raise("error4") }
-        List(a, b)
-      }
-    }
-
-    result.left.map(_.toList.toSet) should be(Left(Set("error2", "error4")))
   }
 }
