@@ -200,6 +200,87 @@ val result = Raise.either {
 // result will be Left(ValidationErrors(List("Data cannot be empty", "Data too short")))
 ```
 
+#### Polymorphic Error Accumulation
+
+The `accumulate` function is polymorphic and can collect errors into different collection types. This is useful when you want compile-time guarantees about non-empty error collections.
+
+**Using NonEmptyList** (requires `yaes-cats`):
+
+```scala
+import in.rcard.yaes.{Raise, RaiseNel}  // RaiseNel = Raise[NonEmptyList[E]]
+import in.rcard.yaes.Raise.accumulating
+import in.rcard.yaes.instances.accumulate.given  // Import collector instances
+import cats.data.NonEmptyList
+
+def validatePositive(n: Int)(using Raise[String]): Int =
+  if (n > 0) n else Raise.raise(s"$n is not positive")
+
+val result: Either[NonEmptyList[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result: Left(NonEmptyList("-1 is not positive", List("-2 is not positive")))
+
+// Using the RaiseNel type alias:
+def validatePair(x: Int, y: Int): RaiseNel[String] ?=> (Int, Int) =
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(x) }
+    val b = accumulating { validatePositive(y) }
+    (a, b)
+  }
+```
+
+**Using NonEmptyChain** (requires `yaes-cats`):
+
+```scala
+import in.rcard.yaes.RaiseNec  // RaiseNec = Raise[NonEmptyChain[E]]
+import cats.data.NonEmptyChain
+
+val result: Either[NonEmptyChain[String], List[Int]] = Raise.either {
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    val numbers = List(1, -2, 3, -4, 5).map { n =>
+      accumulating { validatePositive(n) }
+    }
+    numbers
+  }
+}
+// result: Left(NonEmptyChain("-2 is not positive", "-4 is not positive"))
+
+// Using the RaiseNec type alias:
+def validateList(numbers: List[Int]): RaiseNec[String] ?=> List[Int] =
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    numbers.map { n =>
+      accumulating { validatePositive(n) }
+    }
+  }
+```
+
+**Using List** (default, no extra imports needed):
+
+```scala
+val result: Either[List[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[List, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result: Left(List("-1 is not positive", "-2 is not positive"))
+```
+
+The type parameter `M[_]` specifies the error collection type. An `AccumulateCollector[M]` typeclass instance converts the internal error list to `M[Error]`:
+
+- **`List`**: Built-in collector (always available)
+- **`NonEmptyList`**: Requires `import in.rcard.yaes.instances.accumulate.given` from `yaes-cats`
+- **`NonEmptyChain`**: Requires `import in.rcard.yaes.instances.accumulate.given` from `yaes-cats`
+
+**Type Aliases:** The `yaes-cats` module provides convenient type aliases following Cats conventions:
+- `RaiseNel[E]` = `Raise[NonEmptyList[E]]`
+- `RaiseNec[E]` = `Raise[NonEmptyChain[E]]`
+
 ### Transforming Error Types
 
 Transform errors from one type to another using `withError`:
