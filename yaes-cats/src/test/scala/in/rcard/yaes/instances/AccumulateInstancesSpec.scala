@@ -2,7 +2,7 @@ package in.rcard.yaes.instances
 
 import cats.data.{NonEmptyChain, NonEmptyList}
 import cats.implicits.*
-import in.rcard.yaes.Raise
+import in.rcard.yaes.{Raise, RaiseNec, RaiseNel}
 import in.rcard.yaes.Raise.accumulating
 import in.rcard.yaes.instances.accumulate.given
 import org.scalatest.flatspec.AnyFlatSpec
