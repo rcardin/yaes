@@ -147,7 +147,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe null.asInstanceOf[Int | Null]
   }
 
-  it should "ignore errors when using ignore with Unit-returning blocks" in {
+  "Raise.ignore" should "ignore errors when using ignore with Unit-returning blocks" in {
     var sideEffect = 0
 
     Raise.ignore {
