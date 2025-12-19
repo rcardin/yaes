@@ -40,7 +40,7 @@ class AccumulateInstancesSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    result.left.map(_.toList.toSet) should be(Left(Set("error1", "error2")))
+    result.left.map(_.toList) should be(Left(List("error1", "error2")))
   }
 
   "Polymorphic accumulate with NonEmptyChain" should "create a Right instance when no errors occur" in {
@@ -73,6 +73,6 @@ class AccumulateInstancesSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    result.left.map(_.toList.toSet) should be(Left(Set("error1", "error2")))
+    result.left.map(_.toList) should be(Left(List("error1", "error2")))
   }
 }
