@@ -776,7 +776,7 @@ object Raise {
     * {{{
     * import in.rcard.yaes.Raise
     * import in.rcard.yaes.Raise.accumulating
-    * import in.rcard.yaes.cats.accumulate.given
+    * import in.rcard.yaes.instances.accumulate.given
     * import cats.data.NonEmptyList
     *
     * val person: Either[NonEmptyList[String], Person] = Raise.either {
