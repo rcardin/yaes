@@ -35,10 +35,8 @@ trait AccumulateInstances {
     * }}}
     */
   given nelCollector: AccumulateCollector[NonEmptyList] with {
-    def collect[Error](errors: List[Error]): NonEmptyList[Error] =
-      NonEmptyList.fromList(errors).getOrElse(
-        throw new IllegalStateException("Empty error list in accumulation")
-      )
+    def collect[Error](head: Error, tail: List[Error]): NonEmptyList[Error] =
+      NonEmptyList(head, tail)
   }
 
   /** Collector instance for NonEmptyChain - collects errors into a NonEmptyChain.
@@ -63,9 +61,7 @@ trait AccumulateInstances {
     * }}}
     */
   given necCollector: AccumulateCollector[NonEmptyChain] with {
-    def collect[Error](errors: List[Error]): NonEmptyChain[Error] =
-      NonEmptyChain.fromSeq(errors).getOrElse(
-        throw new IllegalStateException("Empty error list in accumulation")
-      )
+    def collect[Error](head: Error, tail: List[Error]): NonEmptyChain[Error] =
+      NonEmptyChain(head, tail*)
   }
 }

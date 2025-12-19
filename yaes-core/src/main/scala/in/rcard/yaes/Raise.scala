@@ -697,23 +697,25 @@ object Raise {
     *   The target collection type for errors
     */
   trait AccumulateCollector[M[_]] {
-    /** Collects errors from a List into the target collection type.
+    /** Collects errors into the target collection type.
       *
-      * @param errors
-      *   The list of errors to collect
+      * @param head
+      *   The first error (guaranteed to exist)
+      * @param tail
+      *   Remaining errors (can be empty)
       * @tparam Error
       *   The type of the errors
       * @return
       *   The errors collected in the target type M[Error]
       */
-    def collect[Error](errors: List[Error]): M[Error]
+    def collect[Error](head: Error, tail: List[Error]): M[Error]
   }
 
   object AccumulateCollector {
     /** Default collector instance for List - returns the errors unchanged.
       */
     given listCollector: AccumulateCollector[List] with {
-      def collect[Error](errors: List[Error]): List[Error] = errors
+      def collect[Error](head: Error, tail: List[Error]): List[Error] = head :: tail
     }
   }
 
@@ -817,8 +819,18 @@ object Raise {
       result
     } catch {
       case AccumulationError =>
-        val collectedErrors: M[Error] = collector.collect(accScope.errors)
-        Raise.raise(collectedErrors)
+        val errorList = accScope.errors
+        // Pattern match to extract head and tail (guaranteed non-empty here)
+        errorList match {
+          case head :: tail =>
+            val collectedErrors: M[Error] = collector.collect(head, tail)
+            Raise.raise(collectedErrors)
+          case Nil =>
+            // This should never happen, but provide clear error if it does
+            throw new IllegalStateException(
+              "AccumulationError thrown but no errors were accumulated"
+            )
+        }
     }
   }
 
