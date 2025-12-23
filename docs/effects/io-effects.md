@@ -1,7 +1,3 @@
----
-layout: default
-title: "Input & Output Effects"
----
 
 # Input & Output Effects
 

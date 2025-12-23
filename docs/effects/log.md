@@ -1,7 +1,3 @@
----
-layout: default
-title: "Log Effect"
----
 
 # Log Effect
 

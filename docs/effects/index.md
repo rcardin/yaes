@@ -1,7 +1,3 @@
----
-layout: default
-title: "Available Effects"
----
 
 # Available Effects
 

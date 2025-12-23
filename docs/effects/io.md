@@ -1,7 +1,3 @@
----
-layout: default
-title: "IO Effect"
----
 
 # IO Effect
 

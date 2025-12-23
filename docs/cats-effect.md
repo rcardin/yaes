@@ -1,7 +1,3 @@
----
-layout: default
-title: "Cats Integration"
----
 
 # Cats Integration
 

@@ -1,7 +1,3 @@
----
-layout: default
-title: "Async Effect"
----
 
 # Async Effect
 

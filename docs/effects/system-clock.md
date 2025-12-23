@@ -1,7 +1,3 @@
----
-layout: default
-title: "System & Clock Effects"
----
 
 # System & Clock Effects
 

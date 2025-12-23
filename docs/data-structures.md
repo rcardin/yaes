@@ -1,8 +1,3 @@
----
-layout: default
-title: "λÆS Data Structures"
----
-
 # λÆS Data Structures
 
 The `yaes-data` module provides a collection of functional data structures that complement the λÆS effects system. These data structures are designed to work seamlessly with λÆS effects and provide efficient, functional alternatives to traditional imperative data structures.

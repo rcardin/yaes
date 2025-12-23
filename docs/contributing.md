@@ -1,7 +1,3 @@
----
-layout: default
-title: "Contributing"
----
 
 # Contributing to λÆS
 

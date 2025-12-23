@@ -1,7 +1,3 @@
----
-layout: default
-title: "State Effect"
----
 
 # State Effect
 
