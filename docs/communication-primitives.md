@@ -198,7 +198,7 @@ The send-only side of a channel, providing operations for sending elements and c
 
 ```scala
 trait SendChannel[T] {
-  def send(value: T)(using Async, Raise[ChannelClosed]): Unit
+  def send(value: T)(using Raise[ChannelClosed]): Unit
   def close(): Boolean
 }
 ```
@@ -213,8 +213,8 @@ The receive-only side of a channel, providing operations for receiving elements 
 
 ```scala
 trait ReceiveChannel[T] {
-  def receive()(using Async, Raise[ChannelClosed]): T
-  def cancel()(using Async): Unit
+  def receive()(using Raise[ChannelClosed]): T
+  def cancel(): Unit
 }
 ```
 
@@ -926,9 +926,61 @@ Log.run {
 - DROP_OLDEST is ideal for monitoring scenarios where only current state matters
 - DROP_LATEST is ideal for preserving historical data when buffer fills
 
+## Using Channels Without Async Context
+
+As of version 0.11.0, channel operations (`send`, `receive`, `cancel`, `foreach`) no longer require an `Async` context parameter. This reflects the actual implementation - these methods use only JVM synchronization primitives (ReentrantLock, Condition) and don't call Async-specific operations.
+
+### What This Means
+
+**You can now use channels with just a Raise context:**
+
+```scala
+import in.rcard.yaes.Channel
+import in.rcard.yaes.Raise.*
+
+val channel = Channel.unbounded[Int]()
+
+// Works with only Raise context - no Async needed
+val result = Raise.run {
+  channel.send(42)
+  channel.send(43)
+  channel.receive() + channel.receive()
+}
+// result: 85
+```
+
+**Functions that still require Async:**
+
+Builder functions that explicitly fork fibers still require Async:
+
+- `Channel.produce` - creates producer fiber with `Async.fork()`
+- `Channel.produceWith` - creates producer fiber with structured concurrency
+- `Channel.channelFlow` - manages flow lifecycle with `Async.run()`
+- `Channel.channelFlowWith` - manages flow lifecycle with `Async.run()`
+- `Flow.buffer` - creates concurrent producer/consumer with channels
+
+```scala
+// These still need Async (unchanged)
+Async.run {
+  val channel = Channel.produce[Int] {
+    Channel.Producer.send(42)
+  }
+}
+```
+
+### Benefits
+
+1. **Simpler API** - Fewer context parameters for basic operations
+2. **More flexible** - Channels work in any threading model (platform threads, virtual threads, any executor)
+3. **Type-safe** - Signatures accurately reflect actual dependencies
+4. **Clear separation** - Operations vs builders distinction is explicit
+
 ## Thread Safety
 
-Channels are thread-safe and can be safely shared between multiple fibers. All operations are properly synchronized internally.
+Channels are thread-safe and can be safely shared between multiple fibers or threads. All operations are properly synchronized internally using `ReentrantLock` and `Condition` variables, which work correctly with:
+- Platform threads (traditional Java threads)
+- Virtual threads (Java 19+ Project Loom)
+- Any thread pool or executor
 
 ## Common Patterns Summary
 

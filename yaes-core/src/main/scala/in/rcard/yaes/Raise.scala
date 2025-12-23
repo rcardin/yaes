@@ -259,6 +259,31 @@ object Raise {
   def nullable[A](block: Raise[Null] ?=> A): A | Null =
     fold(block)(onError_ => null)(onSuccess = identity)
 
+  /** Executes a block that returns Unit, ignoring any raised errors.
+    *
+    * This is useful when you want to execute side-effecting code but don't care whether it succeeds
+    * or fails. Since the return type is Unit, there's no ambiguity about what to return on error.
+    *
+    * Example:
+    * {{{
+    * val channel = Channel[Int](Channel.Type.Bounded(10))
+    *
+    * // Try to send, ignore if channel is closed
+    * Raise.ignore {
+    *   channel.send(42)
+    * }
+    * }}}
+    *
+    * @param block
+    *   the computation that may raise an error and returns Unit
+    * @tparam E
+    *   the type of error that can be raised
+    */
+  def ignore[E](block: Raise[E] ?=> Unit): Unit = {
+    either(block)
+    ()
+  }
+
   /** Ensures that a condition is true and raises an error if it is not.
     *
     * Example:
@@ -662,6 +687,38 @@ object Raise {
     */
   type RaiseAcc[Error] = Raise[List[Error]]
 
+  /** Typeclass for collecting accumulated errors from a List into a target collection type.
+    *
+    * This typeclass defines how to transform a List of errors into a specific collection type M[_].
+    * It is used by the polymorphic [[accumulate]] function to support different error collection
+    * types (List, NonEmptyList, NonEmptyChain, etc.).
+    *
+    * @tparam M
+    *   The target collection type for errors
+    */
+  trait AccumulateCollector[M[_]] {
+    /** Collects errors into the target collection type.
+      *
+      * @param head
+      *   The first error (guaranteed to exist)
+      * @param tail
+      *   Remaining errors (can be empty)
+      * @tparam Error
+      *   The type of the errors
+      * @return
+      *   The errors collected in the target type M[Error]
+      */
+    def collect[Error](head: Error, tail: List[Error]): M[Error]
+  }
+
+  object AccumulateCollector {
+    /** Default collector instance for List - returns the errors unchanged.
+      */
+    given listCollector: AccumulateCollector[List] with {
+      def collect[Error](head: Error, tail: List[Error]): List[Error] = head :: tail
+    }
+  }
+
   /** The scope needed to accumulate errors using the [[accumulate]] function
     * @tparam Error
     *   The type of the errors to accumulate
@@ -687,11 +744,17 @@ object Raise {
     }
 
   /** Accumulates the errors of the executions in the `block` lambda and raises all of them if any
-    * error is found. In detail, the `block` lambda must be a series of statements using the
-    * [[accumulating]] function to accumulate possible raised errors.
+    * error is found. The type of error collection is determined by the type parameter `M[_]` and
+    * requires an implicit [[AccumulateCollector]] instance.
     *
-    * <h2>Example</h2>
+    * In detail, the `block` lambda must be a series of statements using the [[accumulating]]
+    * function to accumulate possible raised errors.
+    *
+    * <h2>Example with List (default)</h2>
     * {{{
+    * import in.rcard.yaes.Raise
+    * import in.rcard.yaes.Raise.accumulating
+    *
     * def validateName(name: String): String raises String = {
     *   ensure(name.nonEmpty)("Name cannot be empty")
     *   name
@@ -701,11 +764,31 @@ object Raise {
     *   age
     * }
     *
-    * val person: Person raises List[String] = accumulate {
-    *   val name = accumulating { validateName("") }
-    *   val age  = accumulating { validateAge(-1) }
-    *   Person(name, age)
+    * val person: Either[List[String], Person] = Raise.either {
+    *   Raise.accumulate[List, String, Person] {
+    *     val name = accumulating { validateName("") }
+    *     val age  = accumulating { validateAge(-1) }
+    *     Person(name, age)
+    *   }
     * }
+    * // Result: Left(List("Name cannot be empty", "Age cannot be negative"))
+    * }}}
+    *
+    * <h2>Example with NonEmptyList (requires yaes-cats)</h2>
+    * {{{
+    * import in.rcard.yaes.Raise
+    * import in.rcard.yaes.Raise.accumulating
+    * import in.rcard.yaes.instances.accumulate.given
+    * import cats.data.NonEmptyList
+    *
+    * val person: Either[NonEmptyList[String], Person] = Raise.either {
+    *   Raise.accumulate[NonEmptyList, String, Person] {
+    *     val name = accumulating { validateName("") }
+    *     val age  = accumulating { validateAge(-1) }
+    *     Person(name, age)
+    *   }
+    * }
+    * // Result: Left(NonEmptyList("Name cannot be empty", List("Age cannot be negative")))
     * }}}
     *
     * Errors are accumulated in the order they are raised the first time one of the accumulated
@@ -713,6 +796,10 @@ object Raise {
     *
     * @param block
     *   The block of code that can raise multiple errors
+    * @param collector
+    *   The collector instance to transform List[Error] to M[Error]
+    * @tparam M
+    *   The collection type for errors (e.g., List, NonEmptyList, NonEmptyChain)
     * @tparam Error
     *   The type of the errors to accumulate
     * @tparam A
@@ -720,9 +807,9 @@ object Raise {
     * @return
     *   The value of the block if no errors are raised
     */
-  inline def accumulate[Error, A](
+  inline def accumulate[M[_], Error, A](
       block: AccumulateScope[Error] ?=> A
-  ): RaiseAcc[Error] ?=> A = {
+  )(using collector: AccumulateCollector[M]): Raise[M[Error]] ?=> A = {
 
     import scala.language.implicitConversions
 
@@ -732,7 +819,18 @@ object Raise {
       result
     } catch {
       case AccumulationError =>
-        Raise.raise(accScope.errors)
+        val errorList = accScope.errors
+        // Pattern match to extract head and tail (guaranteed non-empty here)
+        errorList match {
+          case head :: tail =>
+            val collectedErrors: M[Error] = collector.collect(head, tail)
+            Raise.raise(collectedErrors)
+          case Nil =>
+            // This should never happen, but provide clear error if it does
+            throw new IllegalStateException(
+              "AccumulationError thrown but no errors were accumulated"
+            )
+        }
     }
   }
 

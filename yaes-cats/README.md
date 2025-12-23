@@ -15,7 +15,7 @@ Bidirectional conversion between YAES IO and Cats Effect 3 IO.
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.10.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.11.0"
 ```
 
 ## Quick Start
@@ -285,6 +285,90 @@ When converting Cats Effect IO to YAES IO, the following exceptions may be raise
 
 All exceptions are captured and raised via `Raise[Throwable]`, allowing you to handle them with any Raise combinator.
 
+### Polymorphic Error Accumulation
+
+The `instances.accumulate` module provides `AccumulateCollector` typeclass instances that enable polymorphic error accumulation with Cats data types.
+
+#### Using NonEmptyList for Accumulation
+
+```scala
+import in.rcard.yaes.{Raise, RaiseNel}  // RaiseNel is an alias for Raise[NonEmptyList[E]]
+import in.rcard.yaes.Raise.accumulating
+import in.rcard.yaes.instances.accumulate.given  // Import collector instances
+import cats.data.NonEmptyList
+
+def validatePositive(n: Int)(using Raise[String]): Int =
+  if (n > 0) n else Raise.raise(s"$n is not positive")
+
+// Accumulate errors into NonEmptyList
+val result: Either[NonEmptyList[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result: Left(NonEmptyList("-1 is not positive", List("-2 is not positive")))
+
+// Or using the RaiseNel type alias for cleaner function signatures:
+def validatePair(x: Int, y: Int): RaiseNel[String] ?=> (Int, Int) =
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(x) }
+    val b = accumulating { validatePositive(y) }
+    (a, b)
+  }
+```
+
+#### Using NonEmptyChain for Accumulation
+
+```scala
+import in.rcard.yaes.RaiseNec  // RaiseNec is an alias for Raise[NonEmptyChain[E]]
+import cats.data.NonEmptyChain
+
+// Accumulate errors into NonEmptyChain
+val result: Either[NonEmptyChain[String], List[Int]] = Raise.either {
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    val numbers = List(1, -2, 3, -4, 5).map { n =>
+      accumulating { validatePositive(n) }
+    }
+    numbers
+  }
+}
+// result: Left(NonEmptyChain("-2 is not positive", "-4 is not positive"))
+
+// Or using the RaiseNec type alias:
+def validateList(numbers: List[Int]): RaiseNec[String] ?=> List[Int] =
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    numbers.map { n =>
+      accumulating { validatePositive(n) }
+    }
+  }
+```
+
+#### How It Works
+
+The polymorphic `accumulate` function accepts a type parameter `M[_]` that specifies the error collection type:
+
+```scala
+def accumulate[M[_], Error, A](
+  block: AccumulateScope[Error] ?=> A
+)(using collector: AccumulateCollector[M]): Raise[M[Error]] ?=> A
+```
+
+The `AccumulateCollector[M]` typeclass converts the internal `List[Error]` into `M[Error]`:
+
+- **`List`**: Built-in collector in `yaes-core` (always available)
+- **`NonEmptyList`**: Provided by `instances.accumulate` in `yaes-cats`
+- **`NonEmptyChain`**: Provided by `instances.accumulate` in `yaes-cats`
+
+Import `in.rcard.yaes.instances.accumulate.given` to access the Cats collectors.
+
+**Type Aliases:** For convenience, `yaes-cats` provides type aliases that follow Cats conventions:
+- `RaiseNel[E]` = `Raise[NonEmptyList[E]]`
+- `RaiseNec[E]` = `Raise[NonEmptyChain[E]]`
+
+These aliases make function signatures more readable and align with Cats naming patterns (`EitherNel`, `EitherNec`, etc.).
+
 ### Composition
 
 Conversions can be composed and chained:
@@ -497,7 +581,8 @@ The following are the modules for Cats-specific functionality:
 | **syntax.catseffect** | `in.rcard.yaes.syntax.catseffect` | Extension methods for fluent syntax |
 | **cats.validated** | `in.rcard.yaes.cats.validated` | Cats Validated/ValidatedNec/ValidatedNel conversions |
 | **cats.accumulate** | `in.rcard.yaes.cats.accumulate` | Error accumulation with Semigroup and NonEmptyList |
-| **instances.raise** | `in.rcard.yaes.instances.raise` | Cats typeclass instances for Raise |
+| **instances.raise** | `in.rcard.yaes.instances.raise` | Cats typeclass instances for Raise (MonadError) |
+| **instances.accumulate** | `in.rcard.yaes.instances.accumulate` | AccumulateCollector instances for NonEmptyList/NonEmptyChain |
 | **syntax.validated** | `in.rcard.yaes.syntax.validated` | Extension methods for Validated types |
 | **syntax.all** | `in.rcard.yaes.syntax.all` | All syntax extensions combined |
 
@@ -539,7 +624,7 @@ val cio: CatsIO[Int] = ??? // Same as cats.effect.IO[Int]
 - **Scala Version:** 3.7.4+
 - **Java Version:** 24+ (for Virtual Threads)
 - **Cats Effect Version:** 3.6.3+
-- **YAES Core:** 0.10.0+
+- **YAES Core:** 0.11.0+
 
 ## License
 

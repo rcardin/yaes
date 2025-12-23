@@ -84,13 +84,13 @@ The above code shows how to handle only the `Random` effect. The `Raise` effect 
 The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.10.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.11.0"
 ```
 
 For Cats integration, add:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.10.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.11.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
@@ -592,6 +592,86 @@ val result = Raise.either {
 // result will be Left(ValidationErrors(List("Data cannot be empty", "Data too short")))
 ```
 
+#### Polymorphic Error Accumulation
+
+The `accumulate` function is polymorphic and can collect errors into different collection types beyond `List`. This is particularly useful when you want to ensure at compile-time that at least one error occurred (using `NonEmptyList` or `NonEmptyChain` from Cats).
+
+**Using NonEmptyList** (requires `yaes-cats` module):
+
+```scala 3
+import in.rcard.yaes.{Raise, RaiseNel}  // RaiseNel is an alias for Raise[NonEmptyList[E]]
+import in.rcard.yaes.Raise.accumulating
+import in.rcard.yaes.instances.accumulate.given  // Import collector instances
+import cats.data.NonEmptyList
+
+def validatePositive(n: Int)(using Raise[String]): Int =
+  if (n > 0) n else Raise.raise(s"$n is not positive")
+
+val result: Either[NonEmptyList[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result will be Left(NonEmptyList("-1 is not positive", List("-2 is not positive")))
+
+// Or using the RaiseNel type alias for cleaner signatures:
+val cleanerResult: RaiseNel[String] ?=> (Int, Int) =
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+```
+
+**Using NonEmptyChain** (requires `yaes-cats` module):
+
+```scala 3
+import in.rcard.yaes.RaiseNec  // RaiseNec is an alias for Raise[NonEmptyChain[E]]
+import cats.data.NonEmptyChain
+
+val result: Either[NonEmptyChain[String], List[Int]] = Raise.either {
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    val numbers = List(1, -2, 3, -4, 5).map { n =>
+      accumulating { validatePositive(n) }
+    }
+    numbers
+  }
+}
+// result will be Left(NonEmptyChain("-2 is not positive", "-4 is not positive"))
+
+// Or using the RaiseNec type alias:
+val cleanerResult: RaiseNec[String] ?=> List[Int] =
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    val numbers = List(1, -2, 3, -4, 5).map { n =>
+      accumulating { validatePositive(n) }
+    }
+    numbers
+  }
+```
+
+**Using List** (default behavior):
+
+```scala 3
+val result: Either[List[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[List, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result will be Left(List("-1 is not positive", "-2 is not positive"))
+```
+
+The type parameter `M[_]` specifies the collection type for errors. The system requires an `AccumulateCollector[M]` instance to convert the internal error list to type `M[Error]`. Built-in collectors are provided for `List`, and the `yaes-cats` module provides collectors for `NonEmptyList` and `NonEmptyChain`.
+
+**Type Aliases:** The `yaes-cats` module provides convenient type aliases:
+- `RaiseNel[E]` = `Raise[NonEmptyList[E]]`
+- `RaiseNec[E]` = `Raise[NonEmptyChain[E]]`
+
+These aliases make function signatures cleaner and follow Cats library conventions.
+
 #### Error Tracing
 
 The `traced` function adds debugging capabilities by capturing stack traces when errors occur:
@@ -1089,6 +1169,8 @@ Channels are composed of two interfaces:
 - **`SendChannel`**: For sending elements (can also close the channel)
 - **`ReceiveChannel`**: For receiving elements (can also cancel the channel)
 
+> **Note:** As of version 0.11.0, channel operations (`send`, `receive`, `cancel`, `foreach`) no longer require an `Async` context - they work with just a `Raise` context. This makes channels more flexible and accurately reflects their implementation using JVM synchronization primitives. Builder functions like `produce`, `channelFlow`, and `Flow.buffer` still require `Async` as they use structured concurrency.
+
 **Sending and Receiving**:
 
 ```scala 3
@@ -1368,6 +1450,89 @@ Key features:
 - **Concurrent execution**: Producer and consumer run in separate fibers
 - **Configurable buffering**: Supports unbounded, bounded, and rendezvous channels
 - **Overflow strategies**: SUSPEND (default), DROP_OLDEST, or DROP_LATEST for bounded channels
+
+#### Reactive Streams Integration
+
+λÆS provides seamless integration with Java Reactive Streams through the `FlowPublisher` class. This allows you to convert YAES Flows into standard `java.util.concurrent.Flow.Publisher` instances that can be consumed by any Reactive Streams-compliant library.
+
+**Key Benefits:**
+- **Interoperability**: Integrate with reactive frameworks like Akka Streams, Project Reactor, and RxJava
+- **Backpressure**: Leverage Reactive Streams demand management and backpressure protocol
+- **Spec Compliance**: Fully compliant with the Reactive Streams specification
+- **Type-Safe**: Maintains type safety throughout the conversion
+
+**Basic Usage:**
+
+```scala 3
+import in.rcard.yaes.{Flow, FlowPublisher}
+import in.rcard.yaes.FlowPublisher.asPublisher
+import in.rcard.yaes.Async.*
+import java.util.concurrent.Flow.{Subscriber, Subscription}
+
+val flow = Flow(1, 2, 3, 4, 5)
+
+Async.run {
+  val publisher = flow.asPublisher()
+
+  publisher.subscribe(new Subscriber[Int] {
+    var subscription: Subscription = _
+
+    override def onSubscribe(s: Subscription): Unit = {
+      subscription = s
+      s.request(10)  // Request elements with backpressure
+    }
+
+    override def onNext(item: Int): Unit = {
+      println(s"Received: $item")
+      subscription.request(1)  // Request next element
+    }
+
+    override def onError(t: Throwable): Unit =
+      println(s"Error: ${t.getMessage}")
+
+    override def onComplete(): Unit =
+      println("Completed")
+  })
+}
+```
+
+**With Custom Buffer Configuration:**
+
+```scala 3
+import in.rcard.yaes.{Flow, Channel}
+import in.rcard.yaes.FlowPublisher.asPublisher
+
+val flow = Flow(1 to 100: _*)
+
+val publisher = flow.asPublisher(
+  bufferCapacity = Channel.Type.Bounded(32, Channel.OverflowStrategy.SUSPEND)
+)
+```
+
+**Using Factory Methods:**
+
+```scala 3
+import in.rcard.yaes.{Flow, FlowPublisher}
+
+// Default buffer capacity (16, SUSPEND)
+val publisher1 = FlowPublisher.fromFlow(flow)
+
+// Custom buffer capacity
+val publisher2 = FlowPublisher.fromFlow(
+  flow,
+  Channel.Type.Bounded(64, Channel.OverflowStrategy.SUSPEND)
+)
+```
+
+Key features:
+- **Cold execution**: Each subscription triggers independent Flow execution
+- **Demand-driven**: Respects subscriber's `request(n)` for backpressure
+- **Buffered**: Channel buffers elements between Flow producer and Subscriber consumer
+- **Cancellable**: Subscribers can cancel to stop emission and clean up resources
+- **Error propagation**: Flow errors are propagated to subscriber's `onError`
+- **Concurrent**: Uses fibers internally for producer and consumer coordination
+
+For comprehensive documentation including demand management, backpressure patterns, error handling, and best practices, see the [Reactive Streams Integration documentation](https://rcardin.github.io/yaes/data-structures.html#reactive-streams-integration).
 
 #### Error Handling
 

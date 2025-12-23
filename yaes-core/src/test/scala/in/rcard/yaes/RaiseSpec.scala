@@ -147,6 +147,29 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     actualResult shouldBe null.asInstanceOf[Int | Null]
   }
 
+  "Raise.ignore" should "ignore errors when using ignore with Unit-returning blocks" in {
+    var sideEffect = 0
+
+    Raise.ignore {
+      sideEffect = 1
+      Raise.raise("Error")
+      sideEffect = 2
+    }
+
+    // Side effect before raise should happen, after raise should not
+    sideEffect shouldBe 1
+  }
+
+  it should "execute successfully when using ignore with no errors" in {
+    var sideEffect = 0
+
+    Raise.ignore {
+      sideEffect = 42
+    }
+
+    sideEffect shouldBe 42
+  }
+
   "ensure" should "raise an error if a condition is not met" in {
     val meaningOfLife = 42
     val actualResult  = Raise.run {
@@ -392,7 +415,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
   "accumulate" should "combine different values" in {
 
     val actualResult = Raise.run {
-      Raise.accumulate[String, List[Int]] {
+      Raise.accumulate[List, String, List[Int]] {
         val a = accumulating { 1 }
         val b = accumulating { 2 }
         val c = accumulating { 3 }
@@ -415,7 +438,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
 
     val actualResult = Raise.run {
-      Raise.accumulate[String, String] {
+      Raise.accumulate[List, String, String] {
         val p1 = accumulating { validatePerson("Alice", 30) }
         val p2 = accumulating { validatePerson("", 25) }
         val p3 = accumulating {
@@ -431,7 +454,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "map all the element of the list" in {
     val actualResult = Raise.run {
-      accumulate[String, List[Int]] {
+      accumulate[List, String, List[Int]] {
         List(1, 2, 3, 4, 5).map { i =>
           accumulating { i + 1 }
         }
@@ -443,7 +466,7 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
 
   it should "accumulate all the errors" in {
     val actualResult = Raise.run[List[String], List[Int]] {
-      accumulate {
+      accumulate[List, String, List[Int]] {
         val result = List(1, 2, 3, 4, 5).map { i =>
           accumulating {
             if (i % 2 == 0) {
@@ -552,6 +575,56 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     }
 
     exception.getMessage shouldBe "File not found"
+  }
+
+  "Polymorphic accumulate" should "work with List collector when no errors occur" in {
+    val result: Either[List[String], Int] = Raise.either {
+      Raise.accumulate[List, String, Int] {
+        1
+      }
+    }
+
+    result should be(Right(1))
+  }
+
+  it should "raise List with one error" in {
+    val result: Either[List[String], Int] = Raise.either {
+      Raise.accumulate[List, String, Int] {
+        val a = accumulating { Raise.raise("error1") }
+        a
+      }
+    }
+
+    result should be(Left(List("error1")))
+  }
+
+  it should "accumulate multiple errors in List" in {
+    val result: Either[List[String], List[Int]] = Raise.either {
+      Raise.accumulate[List, String, List[Int]] {
+        val a = accumulating { Raise.raise("error1") }
+        val b = accumulating { Raise.raise("error2") }
+        List(a, b)
+      }
+    }
+
+    result.left.map(_.toSet) should be(Left(Set("error1", "error2")))
+  }
+
+  it should "work with list transformations" in {
+    val items = List(1, 2, 3, 4, 5)
+    val result: Either[List[String], List[Int]] = Raise.either {
+      Raise.accumulate[List, String, List[Int]] {
+        val results = items.map { i =>
+          accumulating {
+            if (i % 2 == 0) Raise.raise(s"error$i")
+            else i
+          }
+        }
+        results
+      }
+    }
+
+    result.left.map(_.toSet) should be(Left(Set("error2", "error4")))
   }
 
   private def int(value: Int): Raise[String] ?=> Int = {

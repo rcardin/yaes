@@ -29,7 +29,7 @@ This integration enables you to:
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.10.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.11.0"
 ```
 
 ## Cats Effect Integration
@@ -573,6 +573,90 @@ val nelResults: NonEmptyList[Int] raises String = nelComputations.combineErrorsS
 val nelResultsNel: NonEmptyList[Int] raises NonEmptyList[String] = nelComputations.combineErrors
 ```
 
+### Polymorphic Error Accumulation
+
+The core `Raise.accumulate` function is polymorphic and can collect errors into different collection types. Import collector instances from `instances.accumulate` to use `NonEmptyList` or `NonEmptyChain`.
+
+**Using NonEmptyList:**
+
+```scala
+import in.rcard.yaes.{Raise, RaiseNel}  // RaiseNel = Raise[NonEmptyList[E]]
+import in.rcard.yaes.Raise.accumulating
+import in.rcard.yaes.instances.accumulate.given  // Import collector instances
+import cats.data.NonEmptyList
+
+def validatePositive(n: Int)(using Raise[String]): Int =
+  if (n > 0) n else Raise.raise(s"$n is not positive")
+
+// Accumulate errors into NonEmptyList
+val result: Either[NonEmptyList[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result: Left(NonEmptyList("-1 is not positive", List("-2 is not positive")))
+
+// Using the RaiseNel type alias:
+def validatePair(x: Int, y: Int): RaiseNel[String] ?=> (Int, Int) =
+  Raise.accumulate[NonEmptyList, String, (Int, Int)] {
+    val a = accumulating { validatePositive(x) }
+    val b = accumulating { validatePositive(y) }
+    (a, b)
+  }
+```
+
+**Using NonEmptyChain:**
+
+```scala
+import in.rcard.yaes.RaiseNec  // RaiseNec = Raise[NonEmptyChain[E]]
+import cats.data.NonEmptyChain
+
+// Accumulate errors into NonEmptyChain
+val result: Either[NonEmptyChain[String], List[Int]] = Raise.either {
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    val numbers = List(1, -2, 3, -4, 5).map { n =>
+      accumulating { validatePositive(n) }
+    }
+    numbers
+  }
+}
+// result: Left(NonEmptyChain("-2 is not positive", "-4 is not positive"))
+
+// Using the RaiseNec type alias:
+def validateList(numbers: List[Int]): RaiseNec[String] ?=> List[Int] =
+  Raise.accumulate[NonEmptyChain, String, List[Int]] {
+    numbers.map { n =>
+      accumulating { validatePositive(n) }
+    }
+  }
+```
+
+**Using List (default):**
+
+```scala
+// No extra imports needed for List
+val result: Either[List[String], (Int, Int)] = Raise.either {
+  Raise.accumulate[List, String, (Int, Int)] {
+    val a = accumulating { validatePositive(-1) }
+    val b = accumulating { validatePositive(-2) }
+    (a, b)
+  }
+}
+// result: Left(List("-1 is not positive", "-2 is not positive"))
+```
+
+The type parameter `M[_]` specifies the error collection type. An `AccumulateCollector[M]` typeclass instance converts the internal error list to `M[Error]`:
+
+- **`List`**: Built-in collector (always available)
+- **`NonEmptyList`**: Provided by `instances.accumulate` module
+- **`NonEmptyChain`**: Provided by `instances.accumulate` module
+
+**Type Aliases:** For convenience, type aliases are provided following Cats conventions:
+- `RaiseNel[E]` = `Raise[NonEmptyList[E]]`
+- `RaiseNec[E]` = `Raise[NonEmptyChain[E]]`
+
 ## Usage Examples
 
 ### Simple Value Conversion
@@ -664,6 +748,7 @@ The `yaes-cats` integration is organized into these modules:
 | `cats.validated` | Conversions between Raise and Validated/ValidatedNec/ValidatedNel |
 | `cats.accumulate` | Error accumulation with Semigroup and NonEmptyList |
 | `instances.raise` | MonadError typeclass instance for Raise |
+| `instances.accumulate` | AccumulateCollector instances for NonEmptyList/NonEmptyChain |
 | `syntax.validated` | Extension methods for Validated types |
 | `syntax.accumulate` | Extension methods for error accumulation |
 
@@ -683,9 +768,12 @@ import in.rcard.yaes.instances.raise.given
 import in.rcard.yaes.cats.validated
 import in.rcard.yaes.syntax.validated.given
 
-// Error accumulation
+// Error accumulation (utility functions)
 import in.rcard.yaes.cats.accumulate
 import in.rcard.yaes.syntax.accumulate.given
+
+// Polymorphic accumulate collectors (NonEmptyList/NonEmptyChain)
+import in.rcard.yaes.instances.accumulate.given
 
 // All syntax extensions
 import in.rcard.yaes.syntax.all.given

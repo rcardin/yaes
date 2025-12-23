@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Execution is **deferred** until handlers run the effects
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
 
-**Current Version:** 0.10.0
+**Current Version:** 0.11.0
 **Scala Version:** 3.7.4
 **Java Requirement:** Java 24+ (for Virtual Threads and Structured Concurrency)
 
@@ -77,6 +77,15 @@ The project consists of two main modules:
 2. **yaes-data** (`yaes-data/src/main/scala/in/rcard/yaes/`)
    - Contains data structures for use with effects
    - Main file: `Flow.scala` (cold asynchronous data streams)
+
+3. **yaes-cats** (`yaes-cats/src/main/scala/in/rcard/yaes/`)
+   - Cats/Cats Effect integration module
+   - **Package structure** (following Cats conventions):
+     - `cats/` - Utility functions and operations (e.g., `accumulate`, `validated`)
+     - `instances/` - Typeclass instances (e.g., `raise.given` for MonadError, `accumulate.given` for AccumulateCollector)
+     - `syntax/` - Extension methods and syntax enhancements
+     - `interop/` - Interop with other libraries (e.g., `catseffect` for Cats Effect conversions)
+   - **Test structure**: Tests follow the same package structure (e.g., `instances/AccumulateInstancesSpec.scala`)
 
 ### Core Effect System Design
 
@@ -157,6 +166,8 @@ object EffectName {
 - Closing vs. Canceling: `close()` allows draining remaining elements, `cancel()` clears immediately
 - Producer DSL: `produce` and `produceWith` for convenient channel creation
 - Channel-Flow bridge: `channelFlow` creates Flows backed by channels for concurrent emission
+- **Core operations** (`send`, `receive`, `cancel`, `foreach`) **don't require Async context** - they only use ReentrantLock/Condition which work with all thread types
+- **Builder functions** (`produce`, `produceWith`, `channelFlow`) still require Async for `Async.fork()` and structured concurrency
 
 **Flows (yaes-data):**
 - Cold asynchronous data streams (similar to iterators but async)
@@ -185,17 +196,54 @@ class EffectNameSpec extends AnyFlatSpec with Matchers {
 
 ## Important Constraints and Gotchas
 
+### Polymorphic Accumulate API
+The `Raise.accumulate` function is polymorphic over the error collection type `M[_]`:
+```scala
+def accumulate[M[_], Error, A](
+  block: AccumulateScope[Error] ?=> A
+)(using collector: AccumulateCollector[M]): Raise[M[Error]] ?=> A
+```
+
+- **Built-in collectors**: `List` (always available in yaes-core)
+- **Cats collectors**: `NonEmptyList`, `NonEmptyChain` (in yaes-cats `instances.accumulate`)
+- **Type aliases** (in yaes-cats `package.scala`):
+  - `RaiseNel[E]` = `Raise[NonEmptyList[E]]`
+  - `RaiseNec[E]` = `Raise[NonEmptyChain[E]]`
+- **Location**:
+  - Core typeclass and List collector: `yaes-core/src/main/scala/in/rcard/yaes/Raise.scala`
+  - Cats collectors: `yaes-cats/src/main/scala/in/rcard/yaes/instances/accumulate.scala`
+  - Type aliases: `yaes-cats/src/main/scala/in/rcard/yaes/package.scala`
+  - Tests: `yaes-cats/src/test/scala/in/rcard/yaes/instances/AccumulateInstancesSpec.scala`
+
+**Usage examples**:
+```scala
+// List (default)
+Raise.accumulate[List, String, A] { ... }
+
+// NonEmptyList (requires: import in.rcard.yaes.instances.accumulate.given)
+Raise.accumulate[NonEmptyList, String, A] { ... }
+
+// NonEmptyChain (requires: import in.rcard.yaes.instances.accumulate.given)
+Raise.accumulate[NonEmptyChain, String, A] { ... }
+
+// Using type aliases for cleaner signatures
+import in.rcard.yaes.{RaiseNel, RaiseNec}
+
+def validate(x: Int): RaiseNel[String] ?=> Int = { ... }
+def process(data: List[Int]): RaiseNec[String] ?=> Result = { ... }
+```
+
 ### Error Accumulation Warning
 When using `Raise.accumulate` with lists or collections, **ALWAYS** assign the result to a variable before returning:
 ```scala
 // ✅ CORRECT
-val result = Raise.accumulate {
+val result = Raise.accumulate[List, String, List[Int]] {
   val items = list.map(i => accumulating { validate(i) })
   items  // Return the variable
 }
 
 // ❌ INCORRECT - May not work
-val result = Raise.accumulate {
+val result = Raise.accumulate[List, String, List[Int]] {
   list.map(i => accumulating { validate(i) })  // Direct return
 }
 ```
