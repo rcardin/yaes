@@ -45,8 +45,16 @@ lazy val `yaes-cats` = project
     libraryDependencies ++= commonDependencies ++ catsDependencies
   )
 
+lazy val `yaes-http-server` = project
+  .dependsOn(`yaes-core`)
+  .settings(
+    name         := "yaes-http-server",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies
+  )
+
 lazy val yaes = (project in file("."))
-  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`)
+  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`, `yaes-http-server`)
   .settings(
     scalaVersion := scala3Version
   )
