@@ -103,4 +103,131 @@ class RouterSpec extends AnyFlatSpec with Matchers {
 
     response.body shouldBe "Auth: Bearer token123"
   }
+
+  // Path parameter tests
+
+  it should "route parameterized paths with single parameter" in {
+    val router = Router(
+      (
+        Method.GET,
+        "/users/:id",
+        (req: Request) => {
+          val id = req.pathParams("id")
+          Response.ok(s"User $id")
+        }
+      )
+    )
+
+    val request = Request(Method.GET, "/users/123", Map.empty, "")
+    val response = router.handle(request)
+
+    response.status shouldBe 200
+    response.body shouldBe "User 123"
+  }
+
+  it should "route parameterized paths with multiple parameters" in {
+    val router = Router(
+      (
+        Method.GET,
+        "/users/:userId/posts/:postId",
+        (req: Request) => {
+          val userId = req.pathParams("userId")
+          val postId = req.pathParams("postId")
+          Response.ok(s"User $userId, Post $postId")
+        }
+      )
+    )
+
+    val request = Request(Method.GET, "/users/42/posts/99", Map.empty, "")
+    val response = router.handle(request)
+
+    response.status shouldBe 200
+    response.body shouldBe "User 42, Post 99"
+  }
+
+  it should "prioritize exact matches over parameterized routes" in {
+    val router = Router(
+      (Method.GET, "/users/:id", (req: Request) => Response.ok("Parameterized")),
+      (Method.GET, "/users/admin", (req: Request) => Response.ok("Exact match"))
+    )
+
+    val exactRequest = Request(Method.GET, "/users/admin", Map.empty, "")
+    val exactResponse = router.handle(exactRequest)
+    exactResponse.body shouldBe "Exact match"
+
+    val paramRequest = Request(Method.GET, "/users/123", Map.empty, "")
+    val paramResponse = router.handle(paramRequest)
+    paramResponse.body shouldBe "Parameterized"
+  }
+
+  it should "return 404 when parameterized path doesn't match pattern" in {
+    val router = Router(
+      (Method.GET, "/users/:id", (req: Request) => Response.ok("User"))
+    )
+
+    val request = Request(Method.GET, "/posts/123", Map.empty, "")
+    val response = router.handle(request)
+
+    response.status shouldBe 404
+  }
+
+  it should "distinguish methods on parameterized paths" in {
+    val router = Router(
+      (Method.GET, "/users/:id", (req: Request) => Response.ok("GET user")),
+      (Method.DELETE, "/users/:id", (req: Request) => Response.noContent())
+    )
+
+    val getResponse = router.handle(Request(Method.GET, "/users/123", Map.empty, ""))
+    getResponse.status shouldBe 200
+    getResponse.body shouldBe "GET user"
+
+    val deleteResponse = router.handle(Request(Method.DELETE, "/users/123", Map.empty, ""))
+    deleteResponse.status shouldBe 204
+  }
+
+  it should "handle mix of exact and parameterized routes" in {
+    val router = Router(
+      (Method.GET, "/users", (req: Request) => Response.ok("All users")),
+      (
+        Method.GET,
+        "/users/:id",
+        (req: Request) => Response.ok(s"User ${req.pathParams("id")}")
+      ),
+      (Method.GET, "/users/:id/posts", (req: Request) => Response.ok("User posts"))
+    )
+
+    router.handle(Request(Method.GET, "/users", Map.empty, "")).body shouldBe "All users"
+    router.handle(Request(Method.GET, "/users/123", Map.empty, "")).body shouldBe "User 123"
+    router
+      .handle(Request(Method.GET, "/users/123/posts", Map.empty, ""))
+      .body shouldBe "User posts"
+  }
+
+  it should "extract typed path parameters" in {
+    val router = Router(
+      (
+        Method.GET,
+        "/users/:id",
+        (req: Request) => {
+          val result = Raise.either {
+            val userId = req.pathParam[Int]("id")
+            Response.ok(s"User ID: $userId")
+          }
+          result match {
+            case Right(response) => response
+            case Left(error)     => Response.badRequest(error.message)
+          }
+        }
+      )
+    )
+
+    val validRequest = Request(Method.GET, "/users/123", Map.empty, "")
+    val validResponse = router.handle(validRequest)
+    validResponse.status shouldBe 200
+    validResponse.body shouldBe "User ID: 123"
+
+    val invalidRequest = Request(Method.GET, "/users/abc", Map.empty, "")
+    val invalidResponse = router.handle(invalidRequest)
+    invalidResponse.status shouldBe 400
+  }
 }
