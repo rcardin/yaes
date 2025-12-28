@@ -10,7 +10,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 object ExampleServer extends App {
 
   val server = YaesServer.route(
-    // Simple GET endpoint
+    // Simple GET endpoint using String codec
     (Method.GET, "/hello", (req: Request) => Response.ok("Hello, World!")),
 
     // POST endpoint echoing the request body
@@ -24,7 +24,12 @@ object ExampleServer extends App {
       Response.ok(s"Hello, $name!")
     }),
 
-    // JSON-like endpoint
+    // Endpoint returning an integer
+    (Method.GET, "/count", (req: Request) => {
+      Response.ok(42)
+    }),
+
+    // JSON-like endpoint (still manual for now, will use Circe later)
     (Method.GET, "/api/status", (req: Request) => {
       Response(
         status = 200,
@@ -44,6 +49,7 @@ object ExampleServer extends App {
   println("  GET  http://localhost:8080/hello")
   println("  POST http://localhost:8080/echo")
   println("  GET  http://localhost:8080/greet (set X-Name header)")
+  println("  GET  http://localhost:8080/count")
   println("  GET  http://localhost:8080/api/status")
   println("  GET  http://localhost:8080/error (returns 500)")
   println("\nPress Ctrl+C to stop the server")

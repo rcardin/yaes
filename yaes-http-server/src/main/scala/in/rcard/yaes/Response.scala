@@ -28,40 +28,63 @@ case class Response(
 
 object Response {
 
-  /** Creates a 200 OK response with plain text body.
+  /** Creates a 200 OK response with encoded body and automatic Content-Type.
+    *
+    * The codec is resolved automatically from the context using Scala 3's `using` clauses. The
+    * Content-Type header is set based on the codec's specification.
     *
     * Example:
     * {{{
-    * Response.ok("Hello, World!")
+    * Response.ok("Hello, World!")  // Uses BodyCodec[String] for text/plain
+    * Response.ok(user)              // Uses BodyCodec[User] with application/json
+    * Response.ok(42)                // Uses BodyCodec[Int] for text/plain
     * }}}
     *
-    * @param body
-    *   The response body
+    * @param value
+    *   The value to encode as the response body
+    * @tparam A
+    *   The type of the value
     * @return
-    *   A Response with status 200 and Content-Type: text/plain
+    *   A Response with status 200 and appropriate Content-Type
     */
-  def ok(body: String): Response =
-    Response(200, Map("Content-Type" -> "text/plain"), body)
+  def ok[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 200,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 
-  /** Creates a 201 Created response with optional body.
+  /** Creates a 201 Created response with encoded body.
     *
-    * @param body
-    *   The response body (optional)
+    * @param value
+    *   The value to encode as the response body
+    * @tparam A
+    *   The type of the value
     * @return
-    *   A Response with status 201
+    *   A Response with status 201 and appropriate Content-Type
     */
-  def created(body: String = ""): Response =
-    Response(201, Map("Content-Type" -> "text/plain"), body)
+  def created[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 201,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 
-  /** Creates a 202 Accepted response with optional body.
+  /** Creates a 202 Accepted response with encoded body.
     *
-    * @param body
-    *   The response body (optional)
+    * @param value
+    *   The value to encode as the response body
+    * @tparam A
+    *   The type of the value
     * @return
-    *   A Response with status 202
+    *   A Response with status 202 and appropriate Content-Type
     */
-  def accepted(body: String = ""): Response =
-    Response(202, Map("Content-Type" -> "text/plain"), body)
+  def accepted[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 202,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 
   /** Creates a 204 No Content response.
     *
@@ -69,35 +92,53 @@ object Response {
     *   A Response with status 204 and empty body
     */
   def noContent(): Response =
-    Response(204, Map.empty, "")
+    Response(status = 204)
 
   /** Creates a 400 Bad Request response.
     *
-    * @param message
-    *   Error message describing the bad request
+    * @param value
+    *   The value to encode as the error message
+    * @tparam A
+    *   The type of the value
     * @return
-    *   A Response with status 400
+    *   A Response with status 400 and appropriate Content-Type
     */
-  def badRequest(message: String = "Bad Request"): Response =
-    Response(400, Map("Content-Type" -> "text/plain"), message)
+  def badRequest[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 400,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 
   /** Creates a 404 Not Found response.
     *
-    * @param message
-    *   Error message (optional, defaults to "Not Found")
+    * @param value
+    *   The value to encode as the error message
+    * @tparam A
+    *   The type of the value
     * @return
-    *   A Response with status 404
+    *   A Response with status 404 and appropriate Content-Type
     */
-  def notFound(message: String = "Not Found"): Response =
-    Response(404, Map("Content-Type" -> "text/plain"), message)
+  def notFound[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 404,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 
   /** Creates a 500 Internal Server Error response.
     *
-    * @param message
-    *   Error message describing the internal error
+    * @param value
+    *   The value to encode as the error message
+    * @tparam A
+    *   The type of the value
     * @return
-    *   A Response with status 500
+    *   A Response with status 500 and appropriate Content-Type
     */
-  def internalServerError(message: String = "Internal Server Error"): Response =
-    Response(500, Map("Content-Type" -> "text/plain"), message)
+  def internalServerError[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 500,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 }

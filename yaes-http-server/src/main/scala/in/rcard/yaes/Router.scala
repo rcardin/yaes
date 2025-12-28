@@ -35,7 +35,7 @@ class Router(routes: Map[(Method, String), Request => Response]) {
   def handle(request: Request): Response = {
     routes.get((request.method, request.path)) match {
       case Some(handler) => handler(request)
-      case None          => Response.notFound()
+      case None          => Response.notFound("Not Found")
     }
   }
 }

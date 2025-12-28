@@ -5,12 +5,20 @@ import org.scalatest.matchers.should.Matchers
 
 class ResponseSpec extends AnyFlatSpec with Matchers {
 
-  "Response.ok" should "create a 200 response with text/plain content type" in {
+  "Response.ok" should "create a 200 response with text/plain content type for String" in {
     val response = Response.ok("Hello!")
 
     response.status shouldBe 200
     response.body shouldBe "Hello!"
-    response.headers should contain("Content-Type" -> "text/plain")
+    response.headers should contain("Content-Type" -> "text/plain; charset=UTF-8")
+  }
+
+  it should "set Content-Type from codec for Int" in {
+    val response = Response.ok(42)
+
+    response.status shouldBe 200
+    response.body shouldBe "42"
+    response.headers should contain("Content-Type" -> "text/plain; charset=UTF-8")
   }
 
   "Response.created" should "create a 201 response" in {
@@ -18,13 +26,15 @@ class ResponseSpec extends AnyFlatSpec with Matchers {
 
     response.status shouldBe 201
     response.body shouldBe "Resource created"
+    response.headers should contain("Content-Type" -> "text/plain; charset=UTF-8")
   }
 
-  it should "handle empty body" in {
-    val response = Response.created()
+  it should "encode value and set headers" in {
+    val response = Response.created("test")
 
     response.status shouldBe 201
-    response.body shouldBe ""
+    response.body shouldBe "test"
+    response.headers should contain("Content-Type" -> "text/plain; charset=UTF-8")
   }
 
   "Response.accepted" should "create a 202 response" in {
@@ -49,12 +59,6 @@ class ResponseSpec extends AnyFlatSpec with Matchers {
     response.body shouldBe "Invalid input"
   }
 
-  it should "use default message when none provided" in {
-    val response = Response.badRequest()
-
-    response.status shouldBe 400
-    response.body shouldBe "Bad Request"
-  }
 
   "Response.notFound" should "create a 404 response" in {
     val response = Response.notFound("Resource not found")
@@ -63,12 +67,6 @@ class ResponseSpec extends AnyFlatSpec with Matchers {
     response.body shouldBe "Resource not found"
   }
 
-  it should "use default message when none provided" in {
-    val response = Response.notFound()
-
-    response.status shouldBe 404
-    response.body shouldBe "Not Found"
-  }
 
   "Response.internalServerError" should "create a 500 response" in {
     val response = Response.internalServerError("Database error")
@@ -77,12 +75,6 @@ class ResponseSpec extends AnyFlatSpec with Matchers {
     response.body shouldBe "Database error"
   }
 
-  it should "use default message when none provided" in {
-    val response = Response.internalServerError()
-
-    response.status shouldBe 500
-    response.body shouldBe "Internal Server Error"
-  }
 
   "Response case class" should "allow custom headers" in {
     val response = Response(

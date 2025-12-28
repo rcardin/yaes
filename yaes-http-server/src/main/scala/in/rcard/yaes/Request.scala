@@ -37,3 +37,34 @@ case class Request(
     headers: Map[String, String],
     body: String
 )
+
+object Request {
+  /** Extension methods for body decoding */
+  extension (req: Request) {
+    /** Decode request body using the implicit codec.
+      *
+      * The codec is resolved automatically from the context using Scala 3's `using` clauses. Decoding
+      * failures are raised as typed errors via the `Raise[DecodingError]` effect.
+      *
+      * Example:
+      * {{{
+      * // With a custom User codec in scope
+      * val user: User raises DecodingError = request.as[User]
+      *
+      * // In a handler that declares Raise[DecodingError]
+      * def handleCreateUser(req: Request): Response raises DecodingError = {
+      *   val user = req.as[User]
+      *   // ... process user ...
+      *   Response.created(user)
+      * }
+      * }}}
+      *
+      * @tparam A
+      *   The type to decode to
+      * @return
+      *   The decoded value
+      */
+    def as[A](using codec: BodyCodec[A]): A raises DecodingError =
+      codec.decode(req.body)
+  }
+}
