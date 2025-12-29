@@ -36,44 +36,34 @@ object CodecExampleServer extends YaesApp {
 
   val server = YaesServer.route(
     // GET endpoint returning a User
-    (
-      Method.GET,
-      "/users/1",
-      (req: Request) => {
-        Response.ok(User("Alice", 30))
-      }
-    ),
+    GET(p"/users/1") { req =>
+      Response.ok(User("Alice", 30))
+    },
+
     // POST endpoint accepting a User in the body
-    (
-      Method.POST,
-      "/users",
-      (req: Request) => {
-        // Using Raise.either to handle decoding errors
-        val result = Raise.either {
-          val user = req.as[User]
-          println(s"Received user: $user")
-          Response.created(user)
-        }
-        result match {
-          case Right(response) => response
-          case Left(error) => Response.badRequest(s"Invalid user: ${error.message}")
-        }
+    POST(p"/users") { req =>
+      // Using Raise.either to handle decoding errors
+      val result = Raise.either {
+        val user = req.as[User]
+        println(s"Received user: $user")
+        Response.created(user)
       }
-    ),
+      result match {
+        case Right(response) => response
+        case Left(error) => Response.badRequest(s"Invalid user: ${error.message}")
+      }
+    },
+
     // GET endpoint returning a list as JSON (manual encoding)
-    (
-      Method.GET,
-      "/users",
-      (req: Request) => {
-        val users = List(User("Alice", 30), User("Bob", 25))
-        val json = users.map(u => s"""{"name":"${u.name}","age":${u.age}}""").mkString("[", ",", "]")
-        Response(
-          status = 200,
-          headers = Map("Content-Type" -> "application/json"),
-          body = json
-        )
-      }
-    )
+    GET(p"/users") { req =>
+      val users = List(User("Alice", 30), User("Bob", 25))
+      val json = users.map(u => s"""{"name":"${u.name}","age":${u.age}}""").mkString("[", ",", "]")
+      Response(
+        status = 200,
+        headers = Map("Content-Type" -> "application/json"),
+        body = json
+      )
+    }
   )
 
   def run: (Output, Input, Random, Clock, System, Log) ?=> Unit = {

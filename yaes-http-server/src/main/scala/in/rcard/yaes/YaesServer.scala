@@ -9,10 +9,10 @@ import scala.jdk.CollectionConverters.*
   * Represents a pure description of an HTTP server with its routes. The server is not started until
   * [[YaesServer.run]] is called.
   *
-  * @param router
-  *   The router mapping requests to handlers
+  * @param routes
+  *   The routes mapping requests to handlers
   */
-case class ServerDef(router: Router)
+case class ServerDef(routes: Routes)
 
 /** HTTP server built on YAES effects and JDK HttpServer.
   *
@@ -43,31 +43,36 @@ object YaesServer {
 
   /** Define server routes.
     *
-    * Creates a pure server definition from route specifications. Each route maps an HTTP method and
-    * path to a handler function.
+    * Creates a pure server definition from type-safe route specifications.
     *
-    * Handlers receive a [[Request]] and return a [[Response]]. They automatically have access to
-    * YAES effect contexts (IO, Async, etc.) when the server is run.
+    * Handlers receive a [[Request]] and typed parameters, returning a [[Response]]. They
+    * automatically have access to YAES effect contexts (IO, Async, etc.) when the server is run.
     *
     * Example:
     * {{{
+    * val userId = param[Int]("userId")
+    * val postId = param[Long]("postId")
+    *
     * val server = YaesServer.route(
-    *   (Method.GET, "/hello", (req: Request) => {
-    *     Response.ok("Hello!")
-    *   }),
-    *   (Method.POST, "/echo", (req: Request) => {
-    *     Response.ok(req.body)
-    *   })
+    *   GET(p"/health") { req =>
+    *     Response.ok("OK")
+    *   },
+    *   GET(p"/users" / userId) { (req, id: Int) =>
+    *     Response.ok(s"User $id")
+    *   },
+    *   POST(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
+    *     Response.ok(s"Created post $pid for user $uid")
+    *   }
     * )
     * }}}
     *
     * @param routes
-    *   Variable argument list of (Method, path, handler) triples
+    *   Variable argument list of typed Route instances
     * @return
     *   A ServerDef representing the server configuration
     */
-  def route(routes: (Method, String, Request => Response)*): ServerDef = {
-    ServerDef(Router(routes*))
+  def route(routes: Route[?]*): ServerDef = {
+    ServerDef(Routes(routes*))
   }
 
   /** Run the HTTP server.
@@ -116,7 +121,7 @@ object YaesServer {
       (exchange: HttpExchange) => {
         // Fork a fiber for this request
         val fiber = Async.fork(s"http-request-${exchange.getRequestURI}") {
-          handleRequest(exchange, serverDef.router)
+          handleRequest(exchange, serverDef.routes)
         }
 
         // Wait for the fiber to complete before responding
@@ -133,14 +138,14 @@ object YaesServer {
 
   private def handleRequest(
       exchange: HttpExchange,
-      router: Router
+      routes: Routes
   )(using async: Async, io: IO): Unit = {
     try {
       // Parse request
       val request = parseRequest(exchange)
 
       // Route to handler
-      val response = router.handle(request)
+      val response = routes.handle(request)
 
       // Write response
       writeResponse(exchange, response)

@@ -11,37 +11,39 @@ object ExampleServer extends App {
 
   val server = YaesServer.route(
     // Simple GET endpoint using String codec
-    (Method.GET, "/hello", (req: Request) => Response.ok("Hello, World!")),
+    GET(p"/hello") { req =>
+      Response.ok("Hello, World!")
+    },
 
     // POST endpoint echoing the request body
-    (Method.POST, "/echo", (req: Request) => {
+    POST(p"/echo") { req =>
       Response.ok(s"You sent: ${req.body}")
-    }),
+    },
 
     // Endpoint using request headers
-    (Method.GET, "/greet", (req: Request) => {
+    GET(p"/greet") { req =>
       val name = req.headers.getOrElse("X-Name", "Guest")
       Response.ok(s"Hello, $name!")
-    }),
+    },
 
     // Endpoint returning an integer
-    (Method.GET, "/count", (req: Request) => {
+    GET(p"/count") { req =>
       Response.ok(42)
-    }),
+    },
 
     // JSON-like endpoint (still manual for now, will use Circe later)
-    (Method.GET, "/api/status", (req: Request) => {
+    GET(p"/api/status") { req =>
       Response(
         status = 200,
         headers = Map("Content-Type" -> "application/json"),
         body = """{"status": "ok", "server": "YaesServer"}"""
       )
-    }),
+    },
 
     // Error endpoint for testing error handling
-    (Method.GET, "/error", (req: Request) => {
+    GET(p"/error") { req =>
       throw new RuntimeException("Intentional server error")
-    })
+    }
   )
 
   println("Starting YAES HTTP Server on port 8080...")

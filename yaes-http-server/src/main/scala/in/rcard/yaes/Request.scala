@@ -35,8 +35,7 @@ case class Request(
     method: Method,
     path: String,
     headers: Map[String, String],
-    body: String,
-    pathParams: Map[String, String] = Map.empty
+    body: String
 )
 
 object Request {
@@ -67,41 +66,5 @@ object Request {
       */
     def as[A](using codec: BodyCodec[A]): A raises DecodingError =
       codec.decode(req.body)
-
-    /** Extract a typed path parameter from the request.
-      *
-      * Path parameters are extracted from parameterized routes (e.g., "/users/:id") and parsed
-      * into the requested type using the PathParamParser typeclass. Parsing failures are raised as
-      * typed errors via the `Raise[PathParamError]` effect.
-      *
-      * Example:
-      * {{{
-      * // Route: GET /users/:id
-      * (Method.GET, "/users/:id", (req: Request) => {
-      *   Raise.fold {
-      *     val userId = req.pathParam[Int]("id")
-      *     Response.ok(s"User $userId")
-      *   } {
-      *     case PathParamError.InvalidType(name, value, targetType) =>
-      *       Response.badRequest(s"Invalid $name: expected $targetType, got '$value'")
-      *     case PathParamError.MissingParam(name) =>
-      *       Response.internalServerError(s"Server error: missing param $name")
-      *   } { response => response }
-      * })
-      * }}}
-      *
-      * @tparam A
-      *   The type to parse the parameter into
-      * @param name
-      *   The parameter name (without ':' prefix)
-      * @return
-      *   The parsed parameter value
-      */
-    def pathParam[A](name: String)(using parser: PathParamParser[A]): A raises PathParamError = {
-      req.pathParams.get(name) match {
-        case None        => Raise.raise(PathParamError.MissingParam(name))
-        case Some(value) => parser.parse(name, value)
-      }
-    }
   }
 }
