@@ -89,6 +89,7 @@ object YaesServer {
     *   - Handlers receive the full YAES effect context
     *   - Errors in handlers result in 500 Internal Server Error responses
     *   - Unmatched routes result in 404 Not Found responses
+    *   - HttpExchange resources are automatically closed via [[Resource]] effect (internal)
     *
     * Example:
     * {{{
@@ -120,12 +121,14 @@ object YaesServer {
       "/",
       (exchange: HttpExchange) => {
         // Fork a fiber for this request
-        val fiber = Async.fork(s"http-request-${exchange.getRequestURI}") {
-          handleRequest(exchange, serverDef.routes)
+        Async.fork(s"http-request-${exchange.getRequestURI}") {
+          Resource.run {
+            Resource.ensuring {
+              exchange.close()
+            }
+            handleRequest(exchange, serverDef.routes)
+          }
         }
-
-        // Wait for the fiber to complete before responding
-        fiber.join()
       }
     )
 
@@ -153,14 +156,12 @@ object YaesServer {
       case ex: Exception =>
         val errorResponse = Response.internalServerError(ex.getMessage)
         writeResponse(exchange, errorResponse)
-    } finally {
-      exchange.close()
     }
   }
 
   private def parseRequest(exchange: HttpExchange): Request = {
-    val method = Method.valueOf(exchange.getRequestMethod)
-    val path   = exchange.getRequestURI.getPath
+    val method  = Method.valueOf(exchange.getRequestMethod)
+    val path    = exchange.getRequestURI.getPath
     val headers = exchange.getRequestHeaders.asScala.map { case (k, v) =>
       k -> v.asScala.headOption.getOrElse("")
     }.toMap
