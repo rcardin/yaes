@@ -110,7 +110,9 @@ class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?
     }
     PathPattern(finalSegment.asInstanceOf[PathSegment[Params]])
   }
+}
 
+object PathBuilder {
   /** Implicit conversion to PathPattern for convenience. */
   given [P <: PathParams]: Conversion[PathBuilder[P], PathPattern[P]] = _.build
 }
