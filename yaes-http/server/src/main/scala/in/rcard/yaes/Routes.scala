@@ -97,9 +97,14 @@ object Routes {
   }
 
   /** Extract the exact path string from a literal-only route. */
-  private def extractExactPath(segment: PathSegment[?]): String = segment match {
-    case End              => ""
-    case Literal(value, next) => s"/$value${extractExactPath(next)}"
-    case Param(_, _, _)   => throw new IllegalArgumentException("Cannot extract exact path from parameterized route")
+  private def extractExactPath(segment: PathSegment[?]): String = {
+    def loop(segment: PathSegment[?], acc: String): String = segment match {
+      case End => acc
+      case Literal(value, next) => loop(next, s"$acc/$value")
+      case Param(_, _, _) => throw new IllegalArgumentException("Cannot extract exact path from parameterized route")
+    }
+
+    val path = loop(segment, "")
+    if (path.isEmpty) "/" else path  // Root path special case
   }
 }

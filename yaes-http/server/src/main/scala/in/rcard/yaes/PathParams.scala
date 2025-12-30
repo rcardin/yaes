@@ -44,3 +44,19 @@ case object PathParamsNil extends PathParams
   * Use this instead of PathParamsNil.type for cleaner type signatures.
   */
 type NoParams = PathParamsNil.type
+
+/** Type-level append operation.
+  *
+  * Appends a new parameter to the end of the parameter list, maintaining left-to-right order.
+  *
+  * @tparam P
+  *   The existing parameter list
+  * @tparam Name
+  *   The new parameter name
+  * @tparam Type
+  *   The new parameter type
+  */
+type Append[P <: PathParams, Name <: String & Singleton, Type] <: PathParams = P match {
+  case NoParams => ::[Name, Type, NoParams]
+  case ::[n, t, tail] => ::[n, t, Append[tail, Name, Type]]
+}

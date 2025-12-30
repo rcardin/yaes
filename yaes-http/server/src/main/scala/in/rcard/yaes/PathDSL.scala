@@ -92,8 +92,8 @@ class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?
     */
   def /[Name <: String & Singleton, Type](
       param: TypedParam[Name, Type]
-  ): PathBuilder[::[Name, Type, Params]] =
-    new PathBuilder[::[Name, Type, Params]](
+  ): PathBuilder[Append[Params, Name, Type]] =
+    new PathBuilder[Append[Params, Name, Type]](
       segments :+ Param(param.name, param.parser, End)
     )
 
@@ -107,6 +107,7 @@ class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?
       case (Literal(value, _), next) => Literal(value, next)
       case (Param(name, parser, _), next) =>
         Param(name.asInstanceOf[String & Singleton], parser.asInstanceOf[PathParamParser[Any]], next)
+      case (End, next) => next  // Handle root path case
     }
     PathPattern(finalSegment.asInstanceOf[PathSegment[Params]])
   }
@@ -134,8 +135,8 @@ extension (sc: StringContext) {
     val segments = path.split("/").filter(_.nonEmpty).toList
 
     if (segments.isEmpty) {
-      // Root path "/"
-      new PathBuilder[NoParams](List(End))
+      // Root path "/" - empty segments list, End will be added by foldRight
+      new PathBuilder[NoParams](List())
     } else {
       // Create literal segments
       val pathSegments = segments.map(seg => Literal(seg, End))
