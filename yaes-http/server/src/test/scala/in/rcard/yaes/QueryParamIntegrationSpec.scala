@@ -294,4 +294,238 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
     val response = routes.handle(request)
     response.status shouldBe 200
   }
+
+  // ========================================
+  // TDD: Query Parameter Context Access Tests
+  // ========================================
+
+  "Query parameter context" should "provide query params to handler via context function" in {
+    val routes = Routes(
+      GET(p"/search" ? queryParam[String]("q")) { query ?=> req =>
+        val searchTerm = query.get("q")
+        Response.ok(s"Searching for: $searchTerm")
+      }
+    )
+
+    val request = Request(
+      method = Method.GET,
+      path = "/search",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("q" -> List("scala"))
+    )
+
+    val response = routes.handle(request)
+    response.status shouldBe 200
+    response.body shouldBe "Searching for: scala"
+  }
+
+  it should "provide multiple query params via context" in {
+    val routes = Routes(
+      GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { query ?=> req =>
+        val searchTerm = query.get("q")
+        val limit = query.get("limit")
+        Response.ok(s"Searching for '$searchTerm' with limit $limit")
+      }
+    )
+
+    val request = Request(
+      method = Method.GET,
+      path = "/search",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("q" -> List("scala"), "limit" -> List("10"))
+    )
+
+    val response = routes.handle(request)
+    response.status shouldBe 200
+    response.body shouldBe "Searching for 'scala' with limit 10"
+  }
+
+  it should "work with optional query parameters" in {
+    val routes = Routes(
+      GET(p"/search" ? queryParam[Option[Int]]("page")) { query ?=> req =>
+        val page = query.get("page")
+        page match {
+          case Some(p) => Response.ok(s"Page $p")
+          case None    => Response.ok("First page")
+        }
+      }
+    )
+
+    val requestWithPage = Request(
+      method = Method.GET,
+      path = "/search",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("page" -> List("5"))
+    )
+    routes.handle(requestWithPage).body shouldBe "Page 5"
+
+    val requestWithoutPage = Request(
+      method = Method.GET,
+      path = "/search",
+      headers = Map.empty,
+      body = "",
+      queryString = Map.empty
+    )
+    routes.handle(requestWithoutPage).body shouldBe "First page"
+  }
+
+  it should "work with list-valued query parameters" in {
+    val routes = Routes(
+      GET(p"/filter" ? queryParam[List[String]]("tags")) { query ?=> req =>
+        val tags = query.get("tags")
+        Response.ok(s"Tags: ${tags.mkString(", ")}")
+      }
+    )
+
+    val request = Request(
+      method = Method.GET,
+      path = "/filter",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("tags" -> List("scala", "functional", "tutorial"))
+    )
+
+    val response = routes.handle(request)
+    response.status shouldBe 200
+    response.body shouldBe "Tags: scala, functional, tutorial"
+  }
+
+  "Combined path and query parameters" should "provide both via separate mechanisms" in {
+    val userId = param[Int]("userId")
+    val routes = Routes(
+      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { query ?=> (req, id: Int) =>
+        val expand = query.get("expand")
+        if (expand) Response.ok(s"User $id (expanded)")
+        else Response.ok(s"User $id")
+      }
+    )
+
+    val expandedRequest = Request(
+      method = Method.GET,
+      path = "/users/123",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("expand" -> List("true"))
+    )
+    routes.handle(expandedRequest).body shouldBe "User 123 (expanded)"
+
+    val normalRequest = Request(
+      method = Method.GET,
+      path = "/users/123",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("expand" -> List("false"))
+    )
+    routes.handle(normalRequest).body shouldBe "User 123"
+  }
+
+  it should "work with two path params and two query params" in {
+    val userId = param[Int]("userId")
+    val postId = param[Long]("postId")
+    val routes = Routes(
+      GET(
+        (p"/users" / userId / "posts" / postId) ? queryParam[String]("format") & queryParam[Boolean](
+          "comments"
+        )
+      ) { query ?=> (req, uid: Int, pid: Long) =>
+        val format = query.get("format")
+        val comments = query.get("comments")
+        Response.ok(s"User $uid, Post $pid, format=$format, comments=$comments")
+      }
+    )
+
+    val request = Request(
+      method = Method.GET,
+      path = "/users/42/posts/999",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("format" -> List("json"), "comments" -> List("true"))
+    )
+
+    val response = routes.handle(request)
+    response.body shouldBe "User 42, Post 999, format=json, comments=true"
+  }
+
+  "Query context with all HTTP methods" should "work with POST" in {
+    val routes = Routes(
+      POST(p"/search" ? queryParam[Boolean]("async")) { query ?=> req =>
+        val async = query.get("async")
+        Response.created(s"Created (async=$async)")
+      }
+    )
+
+    val request = Request(
+      method = Method.POST,
+      path = "/search",
+      headers = Map.empty,
+      body = "{}",
+      queryString = Map("async" -> List("true"))
+    )
+
+    routes.handle(request).body shouldBe "Created (async=true)"
+  }
+
+  it should "work with PUT" in {
+    val id = param[Int]("id")
+    val routes = Routes(
+      PUT((p"/items" / id) ? queryParam[Boolean]("merge")) { query ?=> (req, itemId: Int) =>
+        val merge = query.get("merge")
+        Response.ok(s"PUT $itemId, merge=$merge")
+      }
+    )
+
+    val request = Request(
+      method = Method.PUT,
+      path = "/items/1",
+      headers = Map.empty,
+      body = "{}",
+      queryString = Map("merge" -> List("true"))
+    )
+
+    routes.handle(request).body shouldBe "PUT 1, merge=true"
+  }
+
+  it should "work with DELETE" in {
+    val id = param[Int]("id")
+    val routes = Routes(
+      DELETE((p"/items" / id) ? queryParam[Boolean]("soft")) { query ?=> (req, itemId: Int) =>
+        val soft = query.get("soft")
+        if (soft) Response.ok(s"Soft delete $itemId")
+        else Response.noContent()
+      }
+    )
+
+    val request = Request(
+      method = Method.DELETE,
+      path = "/items/1",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("soft" -> List("true"))
+    )
+
+    routes.handle(request).body shouldBe "Soft delete 1"
+  }
+
+  it should "work with PATCH" in {
+    val id = param[Int]("id")
+    val routes = Routes(
+      PATCH((p"/items" / id) ? queryParam[String]("field")) { query ?=> (req, itemId: Int) =>
+        val field = query.get("field")
+        Response.ok(s"PATCH $itemId, field=$field")
+      }
+    )
+
+    val request = Request(
+      method = Method.PATCH,
+      path = "/items/2",
+      headers = Map.empty,
+      body = "{}",
+      queryString = Map("field" -> List("name"))
+    )
+
+    routes.handle(request).body shouldBe "PATCH 2, field=name"
+  }
 }

@@ -82,8 +82,8 @@ object Routes {
       val path = extractExactPath(route.pattern.root)
       (route.method, path) -> ((req: Request) => {
         // For exact routes, we know PathParams is NoParams and QueryParams is NoQueryParams
-        val handler = route.handler.asInstanceOf[RouteHandler[NoParams]]
-        handler.handle(req, NoParamValues)
+        val handler = route.handler.asInstanceOf[RouteHandler[NoParams, NoQueryParams]]
+        handler.handle(req, NoParamValues, Query[NoQueryParams](Map.empty))
       })
     }.toMap
 

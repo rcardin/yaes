@@ -20,7 +20,7 @@ package in.rcard.yaes
 case class Route[PathP <: PathParams, QueryP <: QueryParams](
     method: Method,
     pattern: PathPattern[PathP, QueryP],
-    handler: RouteHandler[PathP]
+    handler: RouteHandler[PathP, QueryP]
 ) {
 
   /** Attempt to match and handle a request.
@@ -41,9 +41,7 @@ case class Route[PathP <: PathParams, QueryP <: QueryParams](
         pattern.extract(request) match {
           case Some((pathParams, query)) =>
             // Path and query params matched, invoke handler
-            // TODO: For now, we only pass path params to handler
-            // Query params will be handled via context functions in MethodDSL
-            Some(handler.handle(request, pathParams))
+            Some(handler.handle(request, pathParams, query))
           case None =>
             // Path structure didn't match
             None

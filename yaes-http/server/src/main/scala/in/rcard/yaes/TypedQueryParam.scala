@@ -42,15 +42,15 @@ class TypedQueryParam[Name <: String & Singleton, Type](
   * @return
   *   A typed query parameter that can be used in route building
   */
-inline def queryParam[Type](inline name: String)(using
+transparent inline def queryParam[Type](inline name: String)(using
     parser: QueryParamParser[Type]
-): TypedQueryParam[?, Type] =
+) =
   ${queryParamImpl[Type]('name, 'parser)}
 
 private def queryParamImpl[Type](nameExpr: Expr[String], parserExpr: Expr[QueryParamParser[Type]])(using
     t: scala.quoted.Type[Type],
     q: Quotes
-): Expr[TypedQueryParam[?, Type]] = {
+): Expr[Any] = {
   import q.reflect.*
 
   nameExpr.value match {
