@@ -68,6 +68,45 @@ object Query {
     */
   def apply[Params <: QueryParams](values: Map[String, Any]): Query[Params] =
     new Query[Params](values)
+
+  /** Get a query parameter value using the implicit Query context.
+    *
+    * This is a convenience function that retrieves a query parameter value without requiring
+    * explicit access to the Query instance. The Query instance is provided as a context parameter.
+    *
+    * Example:
+    * {{{
+    * GET(p"/search" ? ("q" -> string) & ("limit" -> int)) { query ?=> req =>
+    *   // Using query.get directly:
+    *   val searchTerm1 = query.get("q")
+    *
+    *   // Using Query.queryParam (more concise):
+    *   val searchTerm2 = Query.queryParam("q")
+    *
+    *   // Both are equivalent, searchTerm1 == searchTerm2
+    * }
+    * }}}
+    *
+    * @param name
+    *   The parameter name
+    * @param query
+    *   The Query instance provided via context parameter
+    * @param ev
+    *   Compile-time evidence that Params contains Name :: Type
+    * @tparam Name
+    *   The parameter name as a singleton type
+    * @tparam Type
+    *   The parameter value type
+    * @tparam Params
+    *   The query parameter list type
+    * @return
+    *   The typed parameter value
+    */
+  def queryParam[Name <: String & Singleton, Type, Params <: QueryParams](name: Name)(using
+      query: Query[Params]
+  )(using
+      ev: Contains[Params, Name, Type]
+  ): Type = query.get(name)(using ev)
 }
 
 /** Type-level evidence that a parameter list contains a specific named, typed parameter.
