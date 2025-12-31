@@ -13,6 +13,9 @@ import org.scalatest.matchers.should.Matchers
   */
 class SimpleServerSpec extends AnyFlatSpec with Matchers {
 
+  private def req(method: Method, path: String, headers: Map[String, String] = Map.empty, body: String = "") =
+    Request(method, path, headers, body, Map.empty)
+
   "ServerDef" should "be created from routes" in {
     val server = YaesServer.route(
       GET(p"/hello") { req =>
@@ -33,7 +36,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/test", Map.empty, "")
+    val request  = req(Method.GET, "/test")
     val response = server.routes.handle(request)
 
     response.status shouldBe 200
@@ -47,7 +50,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/notfound", Map.empty, "")
+    val request  = req(Method.GET, "/notfound")
     val response = server.routes.handle(request)
 
     response.status shouldBe 404
@@ -61,7 +64,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.POST, "/echo", Map.empty, "test data")
+    val request  = req(Method.POST, "/echo", body = "test data")
     val response = server.routes.handle(request)
 
     response.status shouldBe 200
@@ -76,7 +79,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/headers", Map("Authorization" -> "Bearer token"), "")
+    val request  = req(Method.GET, "/headers", headers = Map("Authorization" -> "Bearer token"))
     val response = server.routes.handle(request)
 
     response.body shouldBe "Auth: Bearer token"
@@ -95,9 +98,9 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    server.routes.handle(Request(Method.GET, "/users", Map.empty, "")).status shouldBe 200
-    server.routes.handle(Request(Method.POST, "/users", Map.empty, "")).status shouldBe 201
-    server.routes.handle(Request(Method.DELETE, "/users", Map.empty, "")).status shouldBe 204
+    server.routes.handle(req(Method.GET, "/users")).status shouldBe 200
+    server.routes.handle(req(Method.POST, "/users")).status shouldBe 201
+    server.routes.handle(req(Method.DELETE, "/users")).status shouldBe 204
   }
 
   "Server routes (parameterized paths)" should "handle single parameter routes" in {
@@ -108,7 +111,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/users/123", Map.empty, "")
+    val request  = req(Method.GET, "/users/123")
     val response = server.routes.handle(request)
 
     response.status shouldBe 200
@@ -124,7 +127,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/users/42/posts/99", Map.empty, "")
+    val request  = req(Method.GET, "/users/42/posts/99")
     val response = server.routes.handle(request)
 
     response.status shouldBe 200
@@ -139,7 +142,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/users/not-a-number", Map.empty, "")
+    val request  = req(Method.GET, "/users/not-a-number")
     val response = server.routes.handle(request)
 
     response.status shouldBe 400
@@ -175,17 +178,17 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
     )
 
     // Exact routes
-    server.routes.handle(Request(Method.GET, "/health", Map.empty, "")).body shouldBe "OK"
-    server.routes.handle(Request(Method.GET, "/users", Map.empty, "")).body shouldBe "All users"
-    server.routes.handle(Request(Method.GET, "/users/admin", Map.empty, "")).body shouldBe "Admin user"
+    server.routes.handle(req(Method.GET, "/health")).body shouldBe "OK"
+    server.routes.handle(req(Method.GET, "/users")).body shouldBe "All users"
+    server.routes.handle(req(Method.GET, "/users/admin")).body shouldBe "Admin user"
 
     // Parameterized routes
-    server.routes.handle(Request(Method.GET, "/users/42", Map.empty, "")).body shouldBe "User 42"
-    server.routes.handle(Request(Method.GET, "/users/42/posts", Map.empty, "")).body shouldBe "Posts for user 42"
-    server.routes.handle(Request(Method.GET, "/users/42/posts/99", Map.empty, "")).body shouldBe "User 42, Post 99"
+    server.routes.handle(req(Method.GET, "/users/42")).body shouldBe "User 42"
+    server.routes.handle(req(Method.GET, "/users/42/posts")).body shouldBe "Posts for user 42"
+    server.routes.handle(req(Method.GET, "/users/42/posts/99")).body shouldBe "User 42, Post 99"
 
     // POST with body
-    val postReq = Request(Method.POST, "/users", Map.empty, "Alice")
+    val postReq = req(Method.POST, "/users", body = "Alice")
     server.routes.handle(postReq).body shouldBe "Created: Alice"
   }
 
@@ -202,11 +205,11 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
     )
 
     // Test header access
-    val getReq = Request(Method.GET, "/users/42", Map("Content-Type" -> "application/json"), "")
+    val getReq = req(Method.GET, "/users/42", headers = Map("Content-Type" -> "application/json"))
     server.routes.handle(getReq).body shouldBe "User 42 with content-type: application/json"
 
     // Test body access
-    val postReq = Request(Method.POST, "/users/42", Map.empty, "update data")
+    val postReq = req(Method.POST, "/users/42", body = "update data")
     server.routes.handle(postReq).body shouldBe "User 42 received: update data"
   }
 
@@ -230,11 +233,11 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    server.routes.handle(Request(Method.GET, "/users/1", Map.empty, "")).body shouldBe "GET User 1"
-    server.routes.handle(Request(Method.POST, "/users/1", Map.empty, "")).body shouldBe "POST User 1"
-    server.routes.handle(Request(Method.PUT, "/users/1", Map.empty, "")).body shouldBe "PUT User 1"
-    server.routes.handle(Request(Method.DELETE, "/users/1", Map.empty, "")).status shouldBe 204
-    server.routes.handle(Request(Method.PATCH, "/users/1", Map.empty, "")).body shouldBe "PATCH User 1"
+    server.routes.handle(req(Method.GET, "/users/1")).body shouldBe "GET User 1"
+    server.routes.handle(req(Method.POST, "/users/1")).body shouldBe "POST User 1"
+    server.routes.handle(req(Method.PUT, "/users/1")).body shouldBe "PUT User 1"
+    server.routes.handle(req(Method.DELETE, "/users/1")).status shouldBe 204
+    server.routes.handle(req(Method.PATCH, "/users/1")).body shouldBe "PATCH User 1"
   }
 
   "Server routes (edge cases)" should "handle root path" in {
@@ -244,7 +247,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val response = server.routes.handle(Request(Method.GET, "/", Map.empty, ""))
+    val response = server.routes.handle(req(Method.GET, "/"))
     response.status shouldBe 200
     response.body shouldBe "Root"
   }
@@ -260,7 +263,7 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request  = Request(Method.GET, "/orgs/acme/users/42/posts/123", Map.empty, "")
+    val request  = req(Method.GET, "/orgs/acme/users/42/posts/123")
     val response = server.routes.handle(request)
 
     response.status shouldBe 200

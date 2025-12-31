@@ -61,8 +61,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val getRequest = req(Method.GET, "/users")
-    val postRequest = req(Method.POST, "/users")
+    val getRequest = Request(Method.GET, "/users", Map.empty, "")
+    val postRequest = Request(Method.POST, "/users", Map.empty, "")
 
     routes.handle(getRequest).body shouldBe "GET users"
     routes.handle(postRequest).body shouldBe "POST users"
@@ -75,9 +75,9 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       GET(p"/version") { req => Response.ok("v1.0") }
     )
 
-    routes.handle(req(Method.GET, "/health")).body shouldBe "healthy"
-    routes.handle(req(Method.GET, "/status")).body shouldBe "status"
-    routes.handle(req(Method.GET, "/version")).body shouldBe "v1.0"
+    routes.handle(Request(Method.GET, "/health", Map.empty, "")).body shouldBe "healthy"
+    routes.handle(Request(Method.GET, "/status", Map.empty, "")).body shouldBe "status"
+    routes.handle(Request(Method.GET, "/version", Map.empty, "")).body shouldBe "v1.0"
   }
 
   "Routes (parameterized routes)" should "extract and pass Int parameter" in {
@@ -88,7 +88,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/123")
+    val request = Request(Method.GET, "/users/123", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200
@@ -103,7 +103,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/items/987654321")
+    val request = Request(Method.GET, "/items/987654321", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200
@@ -118,7 +118,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/alice")
+    val request = Request(Method.GET, "/users/alice", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200
@@ -134,7 +134,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/42/posts/99")
+    val request = Request(Method.GET, "/users/42/posts/99", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200
@@ -151,7 +151,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/orgs/1/users/42/posts/123")
+    val request = Request(Method.GET, "/orgs/1/users/42/posts/123", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200
@@ -166,7 +166,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/abc")
+    val request = Request(Method.GET, "/users/abc", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 400
@@ -182,7 +182,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/items/not-a-number")
+    val request = Request(Method.GET, "/items/not-a-number", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 400
@@ -198,7 +198,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/posts/123")
+    val request = Request(Method.GET, "/posts/123", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 404
@@ -217,10 +217,10 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
     )
 
     // Should match exact route
-    routes.handle(req(Method.GET, "/users/admin")).body shouldBe "Admin user"
+    routes.handle(Request(Method.GET, "/users/admin", Map.empty, "")).body shouldBe "Admin user"
 
     // Should match parameterized route
-    routes.handle(req(Method.GET, "/users/123")).body shouldBe "User 123"
+    routes.handle(Request(Method.GET, "/users/123", Map.empty, "")).body shouldBe "User 123"
   }
 
   it should "handle complex routing scenarios" in {
@@ -247,12 +247,12 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    routes.handle(req(Method.GET, "/health")).body shouldBe "OK"
-    routes.handle(req(Method.GET, "/users")).body shouldBe "All users"
-    routes.handle(req(Method.GET, "/users/42")).body shouldBe "User 42"
-    routes.handle(req(Method.GET, "/users/42/posts")).body shouldBe "Posts for user 42"
-    routes.handle(req(Method.GET, "/users/42/posts/99")).body shouldBe "User 42, Post 99"
-    routes.handle(req(Method.POST, "/users")).body shouldBe "User created"
+    routes.handle(Request(Method.GET, "/health", Map.empty, "")).body shouldBe "OK"
+    routes.handle(Request(Method.GET, "/users", Map.empty, "")).body shouldBe "All users"
+    routes.handle(Request(Method.GET, "/users/42", Map.empty, "")).body shouldBe "User 42"
+    routes.handle(Request(Method.GET, "/users/42/posts", Map.empty, "")).body shouldBe "Posts for user 42"
+    routes.handle(Request(Method.GET, "/users/42/posts/99", Map.empty, "")).body shouldBe "User 42, Post 99"
+    routes.handle(Request(Method.POST, "/users", Map.empty, "")).body shouldBe "User created"
   }
 
   "Routes (method-based routing)" should "support all HTTP methods" in {
@@ -275,11 +275,11 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    routes.handle(req(Method.GET, "/users/1")).body shouldBe "GET User 1"
-    routes.handle(req(Method.POST, "/users/1")).body shouldBe "POST User 1"
-    routes.handle(req(Method.PUT, "/users/1")).body shouldBe "PUT User 1"
-    routes.handle(req(Method.DELETE, "/users/1")).status shouldBe 204
-    routes.handle(req(Method.PATCH, "/users/1")).body shouldBe "PATCH User 1"
+    routes.handle(Request(Method.GET, "/users/1", Map.empty, "")).body shouldBe "GET User 1"
+    routes.handle(Request(Method.POST, "/users/1", Map.empty, "")).body shouldBe "POST User 1"
+    routes.handle(Request(Method.PUT, "/users/1", Map.empty, "")).body shouldBe "PUT User 1"
+    routes.handle(Request(Method.DELETE, "/users/1", Map.empty, "")).status shouldBe 204
+    routes.handle(Request(Method.PATCH, "/users/1", Map.empty, "")).body shouldBe "PATCH User 1"
   }
 
   "Routes (first match wins)" should "use first matching parameterized route" in {
@@ -293,7 +293,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/123")
+    val request = Request(Method.GET, "/users/123", Map.empty, "")
     val response = routes.handle(request)
 
     response.body shouldBe "First route"
@@ -310,10 +310,10 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val bodyRequest = req(Method.GET, "/echo", body = "test body")
+    val bodyRequest = Request(Method.GET, "/echo", Map.empty, "test body")
     routes.handle(bodyRequest).body shouldBe "test body"
 
-    val headerRequest = req(Method.GET, "/headers", headers = Map("X-Custom" -> "custom value"))
+    val headerRequest = Request(Method.GET, "/headers", Map("X-Custom" -> "custom value"), "")
     routes.handle(headerRequest).body shouldBe "custom value"
   }
 
@@ -326,7 +326,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/42", headers = Map("Content-Type" -> "application/json"))
+    val request = Request(Method.GET, "/users/42", Map("Content-Type" -> "application/json"), "")
     val response = routes.handle(request)
 
     response.body shouldBe "User 42 with content-type: application/json"
@@ -339,7 +339,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/")
+    val request = Request(Method.GET, "/", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200
@@ -349,7 +349,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "return 404 for empty routes" in {
     val routes = Routes()
 
-    val request = req(Method.GET, "/anything")
+    val request = Request(Method.GET, "/anything", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 404
@@ -363,7 +363,7 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       }
     )
 
-    val request = req(Method.GET, "/users/alice-bob")
+    val request = Request(Method.GET, "/users/alice-bob", Map.empty, "")
     val response = routes.handle(request)
 
     response.status shouldBe 200

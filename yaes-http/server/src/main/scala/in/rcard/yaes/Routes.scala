@@ -13,7 +13,7 @@ package in.rcard.yaes
   */
 case class Routes(
     exactRoutes: Map[(Method, String), Request => Response],
-    paramRoutes: List[Route[?]]
+    paramRoutes: List[Route[?, ?]]
 ) {
 
   /** Handle an incoming request.
@@ -70,17 +70,18 @@ object Routes {
     * @return
     *   A Routes instance ready to handle requests
     */
-  def apply(routes: Route[?]*): Routes = {
+  def apply(routes: Route[?, ?]*): Routes = {
     // Partition routes into exact and parameterized
+    // Exact routes have no path params AND no query params
     val (exact, parameterized) = routes.partition { route =>
-      isExactRoute(route.pattern.root)
+      isExactRoute(route.pattern.root) && isNoQueryParams(route.pattern.querySpec)
     }
 
     // Build exact routes map
     val exactMap = exact.map { route =>
       val path = extractExactPath(route.pattern.root)
       (route.method, path) -> ((req: Request) => {
-        // For exact routes, we know Params is NoParams
+        // For exact routes, we know PathParams is NoParams and QueryParams is NoQueryParams
         val handler = route.handler.asInstanceOf[RouteHandler[NoParams]]
         handler.handle(req, NoParamValues)
       })
@@ -89,11 +90,17 @@ object Routes {
     Routes(exactMap, parameterized.toList)
   }
 
-  /** Check if a path segment represents an exact route (no parameters). */
+  /** Check if a path segment represents an exact route (no path parameters). */
   private def isExactRoute(segment: PathSegment[?]): Boolean = segment match {
     case End              => true
     case Literal(_, next) => isExactRoute(next)
     case Param(_, _, _)   => false
+  }
+
+  /** Check if a query spec has no query parameters. */
+  private def isNoQueryParams(spec: QueryParamSpec[?]): Boolean = spec match {
+    case EndOfQuery       => true
+    case SingleParam(_, _, _) => false
   }
 
   /** Extract the exact path string from a literal-only route. */

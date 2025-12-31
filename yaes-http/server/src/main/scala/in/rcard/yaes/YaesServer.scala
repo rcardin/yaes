@@ -71,7 +71,7 @@ object YaesServer {
     * @return
     *   A ServerDef representing the server configuration
     */
-  def route(routes: Route[?]*): ServerDef = {
+  def route(routes: Route[?, ?]*): ServerDef = {
     ServerDef(Routes(routes*))
   }
 
@@ -161,13 +161,40 @@ object YaesServer {
 
   private def parseRequest(exchange: HttpExchange): Request = {
     val method  = Method.valueOf(exchange.getRequestMethod)
-    val path    = exchange.getRequestURI.getPath
+    val uri     = exchange.getRequestURI
+    val path    = uri.getPath
     val headers = exchange.getRequestHeaders.asScala.map { case (k, v) =>
       k -> v.asScala.headOption.getOrElse("")
     }.toMap
     val body = new String(exchange.getRequestBody.readAllBytes())
+    val queryString = parseQueryString(Option(uri.getQuery).getOrElse(""))
 
-    Request(method, path, headers, body)
+    Request(method, path, headers, body, queryString)
+  }
+
+  private def parseQueryString(query: String): Map[String, List[String]] = {
+    if (query.isEmpty) {
+      Map.empty
+    } else {
+      query.split("&").foldLeft(Map.empty[String, List[String]]) { (acc, pair) =>
+        pair.split("=", 2) match {
+          case Array(key, value) =>
+            val decodedKey = java.net.URLDecoder.decode(key, "UTF-8")
+            val decodedValue = java.net.URLDecoder.decode(value, "UTF-8")
+            acc.updatedWith(decodedKey) {
+              case Some(existing) => Some(existing :+ decodedValue)
+              case None           => Some(List(decodedValue))
+            }
+          case Array(key) =>
+            val decodedKey = java.net.URLDecoder.decode(key, "UTF-8")
+            acc.updatedWith(decodedKey) {
+              case Some(existing) => Some(existing :+ "")
+              case None           => Some(List(""))
+            }
+          case _ => acc
+        }
+      }
+    }
   }
 
   private def writeResponse(exchange: HttpExchange, response: Response): Unit = {

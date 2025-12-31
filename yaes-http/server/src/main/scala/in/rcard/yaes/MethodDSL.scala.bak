@@ -49,11 +49,10 @@ object GET {
       N2 <: String & Singleton,
       T2,
       N3 <: String & Singleton,
-      T3,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP])(
+      T3
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]])(
       handler: (Request, T1, T2, T3) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]] =
     Route(Method.GET, pattern, ThreeParamHandler(handler))
 
   /** Define a GET route with four parameters. */
@@ -65,29 +64,26 @@ object GET {
       N3 <: String & Singleton,
       T3,
       N4 <: String & Singleton,
-      T4,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP])(
+      T4
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]])(
       handler: (Request, T1, T2, T3, T4) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]] =
     Route(Method.GET, pattern, FourParamHandler(handler))
 }
 
 /** DSL for defining POST routes. */
 object POST {
-  def apply[QueryP <: QueryParams](
-      pattern: PathPattern[NoParams, QueryP]
-  )(handler: Request => Response): Route[NoParams, QueryP] =
+  def apply(pattern: PathPattern[NoParams])(handler: Request => Response): Route[NoParams] =
     Route(Method.POST, pattern, NoParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, NoParams], QueryP]
-  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams], QueryP] =
+  def apply[N1 <: String & Singleton, T1](
+      pattern: PathPattern[::[N1, T1, NoParams]]
+  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams]] =
     Route(Method.POST, pattern, OneParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]], QueryP]
-  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]], QueryP] =
+  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2](
+      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]]]
+  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]]] =
     Route(Method.POST, pattern, TwoParamHandler(handler))
 
   def apply[
@@ -96,11 +92,10 @@ object POST {
       N2 <: String & Singleton,
       T2,
       N3 <: String & Singleton,
-      T3,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP])(
+      T3
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]])(
       handler: (Request, T1, T2, T3) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]] =
     Route(Method.POST, pattern, ThreeParamHandler(handler))
 
   def apply[
@@ -111,29 +106,26 @@ object POST {
       N3 <: String & Singleton,
       T3,
       N4 <: String & Singleton,
-      T4,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP])(
+      T4
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]])(
       handler: (Request, T1, T2, T3, T4) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]] =
     Route(Method.POST, pattern, FourParamHandler(handler))
 }
 
 /** DSL for defining PUT routes. */
 object PUT {
-  def apply[QueryP <: QueryParams](
-      pattern: PathPattern[NoParams, QueryP]
-  )(handler: Request => Response): Route[NoParams, QueryP] =
+  def apply(pattern: PathPattern[NoParams])(handler: Request => Response): Route[NoParams] =
     Route(Method.PUT, pattern, NoParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, NoParams], QueryP]
-  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams], QueryP] =
+  def apply[N1 <: String & Singleton, T1](
+      pattern: PathPattern[::[N1, T1, NoParams]]
+  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams]] =
     Route(Method.PUT, pattern, OneParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]], QueryP]
-  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]], QueryP] =
+  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2](
+      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]]]
+  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]]] =
     Route(Method.PUT, pattern, TwoParamHandler(handler))
 
   def apply[
@@ -142,11 +134,10 @@ object PUT {
       N2 <: String & Singleton,
       T2,
       N3 <: String & Singleton,
-      T3,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP])(
+      T3
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]])(
       handler: (Request, T1, T2, T3) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]] =
     Route(Method.PUT, pattern, ThreeParamHandler(handler))
 
   def apply[
@@ -157,29 +148,26 @@ object PUT {
       N3 <: String & Singleton,
       T3,
       N4 <: String & Singleton,
-      T4,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP])(
+      T4
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]])(
       handler: (Request, T1, T2, T3, T4) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]] =
     Route(Method.PUT, pattern, FourParamHandler(handler))
 }
 
 /** DSL for defining DELETE routes. */
 object DELETE {
-  def apply[QueryP <: QueryParams](
-      pattern: PathPattern[NoParams, QueryP]
-  )(handler: Request => Response): Route[NoParams, QueryP] =
+  def apply(pattern: PathPattern[NoParams])(handler: Request => Response): Route[NoParams] =
     Route(Method.DELETE, pattern, NoParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, NoParams], QueryP]
-  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams], QueryP] =
+  def apply[N1 <: String & Singleton, T1](
+      pattern: PathPattern[::[N1, T1, NoParams]]
+  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams]] =
     Route(Method.DELETE, pattern, OneParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]], QueryP]
-  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]], QueryP] =
+  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2](
+      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]]]
+  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]]] =
     Route(Method.DELETE, pattern, TwoParamHandler(handler))
 
   def apply[
@@ -188,11 +176,10 @@ object DELETE {
       N2 <: String & Singleton,
       T2,
       N3 <: String & Singleton,
-      T3,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP])(
+      T3
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]])(
       handler: (Request, T1, T2, T3) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]] =
     Route(Method.DELETE, pattern, ThreeParamHandler(handler))
 
   def apply[
@@ -203,29 +190,26 @@ object DELETE {
       N3 <: String & Singleton,
       T3,
       N4 <: String & Singleton,
-      T4,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP])(
+      T4
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]])(
       handler: (Request, T1, T2, T3, T4) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]] =
     Route(Method.DELETE, pattern, FourParamHandler(handler))
 }
 
 /** DSL for defining PATCH routes. */
 object PATCH {
-  def apply[QueryP <: QueryParams](
-      pattern: PathPattern[NoParams, QueryP]
-  )(handler: Request => Response): Route[NoParams, QueryP] =
+  def apply(pattern: PathPattern[NoParams])(handler: Request => Response): Route[NoParams] =
     Route(Method.PATCH, pattern, NoParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, NoParams], QueryP]
-  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams], QueryP] =
+  def apply[N1 <: String & Singleton, T1](
+      pattern: PathPattern[::[N1, T1, NoParams]]
+  )(handler: (Request, T1) => Response): Route[::[N1, T1, NoParams]] =
     Route(Method.PATCH, pattern, OneParamHandler(handler))
 
-  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2, QueryP <: QueryParams](
-      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]], QueryP]
-  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]], QueryP] =
+  def apply[N1 <: String & Singleton, T1, N2 <: String & Singleton, T2](
+      pattern: PathPattern[::[N1, T1, ::[N2, T2, NoParams]]]
+  )(handler: (Request, T1, T2) => Response): Route[::[N1, T1, ::[N2, T2, NoParams]]] =
     Route(Method.PATCH, pattern, TwoParamHandler(handler))
 
   def apply[
@@ -234,11 +218,10 @@ object PATCH {
       N2 <: String & Singleton,
       T2,
       N3 <: String & Singleton,
-      T3,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP])(
+      T3
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]])(
       handler: (Request, T1, T2, T3) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, NoParams]]]] =
     Route(Method.PATCH, pattern, ThreeParamHandler(handler))
 
   def apply[
@@ -249,10 +232,9 @@ object PATCH {
       N3 <: String & Singleton,
       T3,
       N4 <: String & Singleton,
-      T4,
-      QueryP <: QueryParams
-  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP])(
+      T4
+  ](pattern: PathPattern[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]])(
       handler: (Request, T1, T2, T3, T4) => Response
-  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]], QueryP] =
+  ): Route[::[N1, T1, ::[N2, T2, ::[N3, T3, ::[N4, T4, NoParams]]]]] =
     Route(Method.PATCH, pattern, FourParamHandler(handler))
 }

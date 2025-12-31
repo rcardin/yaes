@@ -67,10 +67,17 @@ private def paramImpl[Type](nameExpr: Expr[String], parserExpr: Expr[PathParamPa
   *
   * @param segments
   *   The accumulated path segments in reverse order
-  * @tparam Params
-  *   The type-level encoding of parameters collected so far
+  * @param querySpec
+  *   The query parameter specification (if any)
+  * @tparam PathP
+  *   The type-level encoding of path parameters collected so far
+  * @tparam QueryP
+  *   The type-level encoding of query parameters collected so far
   */
-class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?]]) {
+class PathBuilder[PathP <: PathParams, QueryP <: QueryParams](
+    private val segments: List[PathSegment[?]],
+    private val querySpec: QueryParamSpec[QueryP]
+) {
 
   /** Append a literal path segment.
     *
@@ -79,8 +86,8 @@ class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?
     * p"/users" / "posts" / "active"
     * }}}
     */
-  def /(literal: String): PathBuilder[Params] =
-    new PathBuilder[Params](segments :+ Literal(literal, End))
+  def /(literal: String): PathBuilder[PathP, QueryP] =
+    new PathBuilder[PathP, QueryP](segments :+ Literal(literal, End), querySpec)
 
   /** Append a typed parameter segment.
     *
@@ -92,16 +99,57 @@ class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?
     */
   def /[Name <: String & Singleton, Type](
       param: TypedParam[Name, Type]
-  ): PathBuilder[Append[Params, Name, Type]] =
-    new PathBuilder[Append[Params, Name, Type]](
-      segments :+ Param(param.name, param.parser, End)
+  ): PathBuilder[Append[PathP, Name, Type], QueryP] =
+    new PathBuilder[Append[PathP, Name, Type], QueryP](
+      segments :+ Param(param.name, param.parser, End),
+      querySpec
     )
+
+  /** Add the first query parameter.
+    *
+    * Example:
+    * {{{
+    * p"/search" ? queryParam[String]("q")
+    * }}}
+    */
+  def ?[Name <: String & Singleton, Type](
+      param: TypedQueryParam[Name, Type]
+  ): PathBuilder[PathP, QueryParam[Name, Type, NoQueryParams]] =
+    new PathBuilder[PathP, QueryParam[Name, Type, NoQueryParams]](
+      segments,
+      SingleParam(param.name, param.parser, EndOfQuery)
+    )
+
+  /** Add an additional query parameter.
+    *
+    * Example:
+    * {{{
+    * p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")
+    * }}}
+    */
+  def &[Name <: String & Singleton, Type](
+      param: TypedQueryParam[Name, Type]
+  ): PathBuilder[PathP, QueryAppend[QueryP, Name, Type]] =
+    new PathBuilder[PathP, QueryAppend[QueryP, Name, Type]](
+      segments,
+      appendQueryParam(querySpec, param).asInstanceOf[QueryParamSpec[QueryAppend[QueryP, Name, Type]]]
+    )
+
+  /** Helper to append a query parameter to the spec chain. */
+  private def appendQueryParam[Name <: String & Singleton, Type](
+      spec: QueryParamSpec[?],
+      param: TypedQueryParam[Name, Type]
+  ): QueryParamSpec[?] = spec match {
+    case EndOfQuery => SingleParam(param.name, param.parser, EndOfQuery)
+    case SingleParam(n, p, next) =>
+      SingleParam(n, p, appendQueryParam(next, param).asInstanceOf[QueryParamSpec[QueryParams]])
+  }
 
   /** Build the final PathPattern.
     *
     * Converts the accumulated segments into a properly linked PathSegment structure.
     */
-  private[yaes] def build: PathPattern[Params] = {
+  private[yaes] def build: PathPattern[PathP, QueryP] = {
     // Build the segment chain from right to left
     val finalSegment = segments.foldRight[PathSegment[PathParams]](End) {
       case (Literal(value, _), next) => Literal(value, next)
@@ -109,25 +157,25 @@ class PathBuilder[Params <: PathParams](private val segments: List[PathSegment[?
         Param(name.asInstanceOf[String & Singleton], parser.asInstanceOf[PathParamParser[Any]], next)
       case (End, next) => next  // Handle root path case
     }
-    PathPattern(finalSegment.asInstanceOf[PathSegment[Params]])
+    PathPattern(finalSegment.asInstanceOf[PathSegment[PathP]], querySpec)
   }
 }
 
 object PathBuilder {
   /** Implicit conversion to PathPattern for convenience. */
-  given [P <: PathParams]: Conversion[PathBuilder[P], PathPattern[P]] = _.build
+  given [PathP <: PathParams, QueryP <: QueryParams]: Conversion[PathBuilder[PathP, QueryP], PathPattern[PathP, QueryP]] = _.build
 }
 
 /** String interpolator for literal path prefixes.
   *
   * Example:
   * {{{
-  * p"/users"       // PathBuilder[NoParams]
-  * p"/api/v1"      // PathBuilder[NoParams]
+  * p"/users"       // PathBuilder[NoParams, NoQueryParams]
+  * p"/api/v1"      // PathBuilder[NoParams, NoQueryParams]
   * }}}
   */
 extension (sc: StringContext) {
-  def p(args: Any*): PathBuilder[NoParams] = {
+  def p(args: Any*): PathBuilder[NoParams, NoQueryParams] = {
     require(args.isEmpty, "Path interpolator does not support arguments, use / operator instead")
     val path = sc.parts.mkString
 
@@ -136,11 +184,11 @@ extension (sc: StringContext) {
 
     if (segments.isEmpty) {
       // Root path "/" - empty segments list, End will be added by foldRight
-      new PathBuilder[NoParams](List())
+      new PathBuilder[NoParams, NoQueryParams](List(), EndOfQuery)
     } else {
       // Create literal segments
       val pathSegments = segments.map(seg => Literal(seg, End))
-      new PathBuilder[NoParams](pathSegments)
+      new PathBuilder[NoParams, NoQueryParams](pathSegments, EndOfQuery)
     }
   }
 }

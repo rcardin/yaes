@@ -18,7 +18,8 @@ enum Method:
   *   method = Method.GET,
   *   path = "/users/123",
   *   headers = Map("Content-Type" -> "application/json"),
-  *   body = ""
+  *   body = "",
+  *   queryString = Map("page" -> List("1"), "limit" -> List("20"))
   * )
   * }}}
   *
@@ -30,12 +31,16 @@ enum Method:
   *   Request headers as a Map of header name to value
   * @param body
   *   Request body as a String (may be empty for GET requests)
+  * @param queryString
+  *   Parsed query string as a Map of parameter names to lists of values. Multi-valued parameters
+  *   (e.g., ?tag=a&tag=b) are represented as lists with multiple elements.
   */
 case class Request(
     method: Method,
     path: String,
     headers: Map[String, String],
-    body: String
+    body: String,
+    queryString: Map[String, List[String]]
 )
 
 object Request {

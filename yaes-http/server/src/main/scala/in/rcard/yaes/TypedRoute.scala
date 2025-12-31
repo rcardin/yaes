@@ -2,9 +2,9 @@ package in.rcard.yaes
 
 /** Type-safe HTTP route.
   *
-  * Combines an HTTP method, a typed path pattern, and a handler function. The type parameter
-  * [[Params]] ensures compile-time verification that the handler receives exactly the parameters
-  * declared in the pattern.
+  * Combines an HTTP method, a typed path pattern, and a handler function. The type parameters
+  * ensure compile-time verification that the handler receives exactly the parameters declared
+  * in the pattern.
   *
   * @param method
   *   The HTTP method (GET, POST, etc.)
@@ -12,20 +12,22 @@ package in.rcard.yaes
   *   The path pattern with type-level parameter encoding
   * @param handler
   *   The request handler with matching parameter signature
-  * @tparam Params
-  *   The type-level encoding of parameters
+  * @tparam PathP
+  *   The type-level encoding of path parameters
+  * @tparam QueryP
+  *   The type-level encoding of query parameters
   */
-case class Route[Params <: PathParams](
+case class Route[PathP <: PathParams, QueryP <: QueryParams](
     method: Method,
-    pattern: PathPattern[Params],
-    handler: RouteHandler[Params]
+    pattern: PathPattern[PathP, QueryP],
+    handler: RouteHandler[PathP]
 ) {
 
   /** Attempt to match and handle a request.
     *
     * If the method and path match this route, extracts parameters and invokes the handler.
-    * [[PathParamError]]s during parameter extraction are automatically converted to 400 Bad Request
-    * responses.
+    * [[PathParamError]]s and [[QueryParamError]]s during parameter extraction are automatically
+    * converted to 400 Bad Request responses.
     *
     * @param request
     *   The HTTP request to match
@@ -36,16 +38,18 @@ case class Route[Params <: PathParams](
     if (request.method == method) {
       // Attempt to extract parameters with automatic error handling
       Raise.fold {
-        pattern.extract(request.path) match {
-          case Some(params) =>
-            // Path matched, invoke handler
-            Some(handler.handle(request, params))
+        pattern.extract(request) match {
+          case Some((pathParams, query)) =>
+            // Path and query params matched, invoke handler
+            // TODO: For now, we only pass path params to handler
+            // Query params will be handled via context functions in MethodDSL
+            Some(handler.handle(request, pathParams))
           case None =>
             // Path structure didn't match
             None
         }
       } {
-        // Convert PathParamError to 400 Bad Request
+        // Convert parameter errors to 400 Bad Request
         case PathParamError.InvalidType(name, value, targetType) =>
           Some(
             Response.badRequest(
@@ -54,6 +58,16 @@ case class Route[Params <: PathParams](
           )
         case PathParamError.MissingParam(name) =>
           Some(Response.badRequest(s"Missing required path parameter: $name"))
+        case QueryParamError.InvalidType(name, value, targetType) =>
+          Some(
+            Response.badRequest(
+              s"Invalid query parameter '$name': expected $targetType, got '$value'"
+            )
+          )
+        case QueryParamError.MissingParam(name) =>
+          Some(Response.badRequest(s"Missing required query parameter: $name"))
+        case QueryParamError.InvalidFormat(message) =>
+          Some(Response.badRequest(s"Invalid query string format: $message"))
       } { response => response }
     } else {
       None
