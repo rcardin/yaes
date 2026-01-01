@@ -17,7 +17,7 @@ Virtual thread-based HTTP server foundation for YAES (Yet Another Effect System)
 ## Quick Start
 
 ```scala
-import in.rcard.yaes.*
+import in.rcard.yaes.http.server.*
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object MyServer extends App {
@@ -93,10 +93,10 @@ YaesServer.run(server, port = 8080)
 
 ## Examples
 
-See [ExampleServer.scala](src/test/scala/in/rcard/yaes/ExampleServer.scala) for a runnable example:
+See [ExampleServer.scala](src/test/scala/in/rcard/yaes/http/server/ExampleServer.scala) for a runnable example:
 
 ```bash
-sbt "yaes-http-server/Test/runMain in.rcard.yaes.ExampleServer"
+sbt "yaes-http-server/Test/runMain in.rcard.yaes.http.server.ExampleServer"
 ```
 
 Then visit:
@@ -110,7 +110,7 @@ Then visit:
 sbt yaes-http-server/test
 
 # Run specific test suite
-sbt "yaes-http-server/testOnly in.rcard.yaes.RouterSpec"
+sbt "yaes-http-server/testOnly in.rcard.yaes.http.server.RouterSpec"
 ```
 
 ## Future Enhancements
