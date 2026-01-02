@@ -7,6 +7,13 @@ import java.net.InetSocketAddress
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
+/** Server lifecycle state for shutdown coordination.
+  *
+  * Thread-safe state transitions managed via @volatile var.
+  */
+private enum ServerState:
+  case RUNNING, SHUTTING_DOWN
+
 /** Server configuration and route definitions.
   *
   * Represents a pure description of an HTTP server with its routes. The server is not started until
@@ -143,11 +150,12 @@ object YaesServer {
     *
     * **Graceful Shutdown:**
     *   - Call [[Server.shutdown]] on the returned handle to stop the server
-    *   - All in-flight requests are guaranteed to complete before shutdown finishes
+    *   - New requests are immediately rejected with 503 Service Unavailable
+    *   - All in-flight requests (already accepted) complete before shutdown finishes
     *   - This is enforced by YAES structured concurrency:
     *     - Each request runs in its own fiber (via [[Async.fork]])
     *     - [[Async.run]]'s `StructuredTaskScope.join()` waits for all fibers
-    *     - No additional synchronization needed
+    *     - State transitions (RUNNING → SHUTTING_DOWN) use @volatile for thread-safe visibility
     *   - Shutdown progress is logged to console (request counts, completion status)
     *   - Shutdown hook (if registered) runs after all requests complete
     *   - Server lifecycle is managed via [[Resource]] effect for automatic cleanup
@@ -191,6 +199,9 @@ object YaesServer {
     // Track active requests for observability during shutdown
     val tracker = new RequestTracker()
 
+    // Server state - volatile for thread-safe access from HTTP executor threads
+    @volatile var serverState: ServerState = ServerState.RUNNING
+
     Resource.run {
       // Install server as a resource with automatic cleanup
       val jdkServer = Resource.install(
@@ -200,19 +211,27 @@ object YaesServer {
           srv.createContext(
             "/",
             (exchange: HttpExchange) => {
-              // Increment counter when request starts
-              tracker.increment()
+              // Check if server is accepting requests
+              if (serverState != ServerState.RUNNING) {
+                // Server is shutting down - reject with 503
+                val shutdownResponse = Response.serviceUnavailable("Server is shutting down")
+                writeResponse(exchange, shutdownResponse)
+                exchange.close()
+              } else {
+                // Increment counter when request starts
+                tracker.increment()
 
-              // Fork a fiber for this request
-              // Structured concurrency ensures shutdown waits for this fiber
-              Async.fork(s"http-request-${exchange.getRequestURI}") {
-                Resource.run {
-                  Resource.ensuring {
-                    // Decrement counter when request completes (guaranteed)
-                    tracker.decrement()
-                    exchange.close()
+                // Fork a fiber for this request
+                // Structured concurrency ensures shutdown waits for this fiber
+                Async.fork(s"http-request-${exchange.getRequestURI}") {
+                  Resource.run {
+                    Resource.ensuring {
+                      // Decrement counter when request completes (guaranteed)
+                      tracker.decrement()
+                      exchange.close()
+                    }
+                    handleRequest(exchange, serverDef.routes)
                   }
-                  handleRequest(exchange, serverDef.routes)
                 }
               }
             }
@@ -235,6 +254,9 @@ object YaesServer {
       Async.fork("http-server-shutdown-waiter") {
         Raise.run {
           shutdownChannel.receive()
+
+          // Transition to shutting down state - stops accepting new requests
+          serverState = ServerState.SHUTTING_DOWN
 
           // Log shutdown status using Output effect
           val activeCount = tracker.count()

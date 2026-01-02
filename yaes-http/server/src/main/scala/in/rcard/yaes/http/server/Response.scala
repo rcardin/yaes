@@ -141,4 +141,23 @@ object Response {
       headers = Map("Content-Type" -> codec.contentType),
       body = codec.encode(value)
     )
+
+  /** Creates a 503 Service Unavailable response.
+    *
+    * Indicates the server is temporarily unable to handle the request,
+    * typically used during graceful shutdown.
+    *
+    * @param value
+    *   The value to encode as the error message
+    * @tparam A
+    *   The type of the value
+    * @return
+    *   A Response with status 503 and appropriate Content-Type
+    */
+  def serviceUnavailable[A](value: A)(using codec: BodyCodec[A]): Response =
+    Response(
+      status = 503,
+      headers = Map("Content-Type" -> codec.contentType),
+      body = codec.encode(value)
+    )
 }

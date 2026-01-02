@@ -29,7 +29,7 @@ class Server private[server] (
   /** Request the server to shut down.
     *
     * Sends a shutdown signal to the server. The server will:
-    * 1. Stop accepting new connections
+    * 1. Reject new requests with 503 Service Unavailable
     * 2. Wait for all in-flight requests to complete (graceful shutdown)
     * 3. Run the shutdown hook (if registered)
     * 4. Clean up resources
