@@ -1,6 +1,7 @@
 package in.rcard.yaes.http.server
 
 import in.rcard.yaes.*
+import in.rcard.yaes.Channel
 import com.sun.net.httpserver.{HttpServer => JdkHttpServer, HttpExchange}
 import java.net.InetSocketAddress
 import scala.jdk.CollectionConverters.*
@@ -12,8 +13,54 @@ import scala.jdk.CollectionConverters.*
   *
   * @param routes
   *   The routes mapping requests to handlers
+  * @param shutdownHook
+  *   Optional callback to run when the server shuts down
   */
-case class ServerDef(routes: Routes)
+case class ServerDef(routes: Routes, shutdownHook: Option[() => Unit] = None) {
+
+  /** Register a callback to run when the server shuts down.
+    *
+    * The hook runs during Resource cleanup, before the server stops.
+    *
+    * Example:
+    * {{{
+    * val server = YaesServer.route(...)
+    *   .onShutdown(() => {
+    *     println("Cleaning up...")
+    *     // Close database connections, etc.
+    *   })
+    *   .run(8080)
+    * }}}
+    *
+    * @param hook
+    *   The cleanup function to run on shutdown
+    * @return
+    *   A new ServerDef with the shutdown hook registered
+    */
+  def onShutdown(hook: () => Unit): ServerDef = {
+    copy(shutdownHook = Some(hook))
+  }
+
+  /** Run the HTTP server.
+    *
+    * Starts the server on the specified port and returns a Server handle. The server runs until
+    * shutdown() is called on the returned Server.
+    *
+    * This is a convenience method equivalent to YaesServer.run(this, port).
+    *
+    * @param port
+    *   Port to bind to
+    * @param async
+    *   Async context for forking request fibers and shutdown coordination
+    * @param io
+    *   IO context for server lifecycle
+    * @return
+    *   A Server instance that can be used to stop the server
+    */
+  def run(port: Int)(using Async, IO): Server = {
+    YaesServer.run(this, port)
+  }
+}
 
 /** HTTP server built on YAES effects and JDK HttpServer.
   *
@@ -79,11 +126,11 @@ object YaesServer {
   /** Run the HTTP server.
     *
     * Starts an HTTP server on the specified port, handling each incoming request in its own fiber.
-    * The server runs indefinitely until the program is terminated.
+    * Returns a Server handle that can be used to programmatically stop the server.
     *
     * **Effect Requirements:**
     *   - Requires [[IO]] context for virtual thread execution
-    *   - Requires [[Async]] context for fiber-per-request handling
+    *   - Requires [[Async]] context for fiber-per-request handling and shutdown coordination
     *
     * **Request Handling:**
     *   - Each request is automatically handled in a forked fiber via [[Async.fork]]
@@ -91,6 +138,11 @@ object YaesServer {
     *   - Errors in handlers result in 500 Internal Server Error responses
     *   - Unmatched routes result in 404 Not Found responses
     *   - HttpExchange resources are automatically closed via [[Resource]] effect (internal)
+    *
+    * **Shutdown:**
+    *   - Call [[Server.shutdown]] on the returned handle to stop the server
+    *   - Shutdown hook (if registered) runs before the server stops
+    *   - Server lifecycle is managed via [[Resource]] effect for automatic cleanup
     *
     * Example:
     * {{{
@@ -101,7 +153,12 @@ object YaesServer {
     * Async.run {
     *   IO.run {
     *     println("Starting server on port 8080...")
-    *     YaesServer.run(server, port = 8080)
+    *     val serverHandle = YaesServer.run(server, port = 8080)
+    *
+    *     // ... do work ...
+    *
+    *     serverHandle.shutdown()
+    *     println("Server stopped")
     *   }
     * }
     * }}}
@@ -111,33 +168,66 @@ object YaesServer {
     * @param port
     *   Port to bind to
     * @param async
-    *   Async context for forking request fibers
+    *   Async context for forking request fibers and shutdown coordination
     * @param io
     *   IO context for server lifecycle
+    * @return
+    *   A Server instance that can be used to stop the server
     */
-  def run(serverDef: ServerDef, port: Int)(using async: Async, io: IO): Unit = {
-    val server = JdkHttpServer.create(new InetSocketAddress(port), 0)
+  def run(serverDef: ServerDef, port: Int)(using async: Async, io: IO): Server = {
+    // Internal rendezvous channel for shutdown signaling
+    val shutdownChannel = Channel.rendezvous[Unit]()
 
-    server.createContext(
-      "/",
-      (exchange: HttpExchange) => {
-        // Fork a fiber for this request
-        Async.fork(s"http-request-${exchange.getRequestURI}") {
-          Resource.run {
-            Resource.ensuring {
-              exchange.close()
+    Resource.run {
+      // Install server as a resource with automatic cleanup
+      val jdkServer = Resource.install(
+        acquire = {
+          val srv = JdkHttpServer.create(new InetSocketAddress(port), 0)
+
+          srv.createContext(
+            "/",
+            (exchange: HttpExchange) => {
+              // Fork a fiber for this request
+              Async.fork(s"http-request-${exchange.getRequestURI}") {
+                Resource.run {
+                  Resource.ensuring {
+                    exchange.close()
+                  }
+                  handleRequest(exchange, serverDef.routes)
+                }
+              }
             }
-            handleRequest(exchange, serverDef.routes)
-          }
+          )
+
+          srv.setExecutor(null) // Use default executor
+          srv.start()
+          srv // Return the started server
+        }
+      )(
+        release = server => {
+          // Run user shutdown hook if registered
+          serverDef.shutdownHook.foreach(hook => hook())
+          // Stop the JDK server immediately (0 = no grace period)
+          server.stop(0)
+        }
+      )
+
+      // Fork a fiber to wait for shutdown signal
+      Async.fork("http-server-shutdown-waiter") {
+        Raise.run {
+          shutdownChannel.receive()
+          // Close channel after receiving shutdown signal
+          // This ensures subsequent shutdown() calls fail gracefully
+          shutdownChannel.close()
         }
       }
-    )
+      // No join needed - Async structured concurrency ensures Resource.run
+      // waits for all forked fibers to complete before exiting
+    }
+    // Resource cleanup happens here after shutdown-waiter fiber completes
 
-    server.setExecutor(null) // Use default executor
-    server.start()
-
-    // Block until interrupted (for now - later add graceful shutdown)
-    Thread.currentThread().join()
+    // Return server handle
+    Server(shutdownChannel)
   }
 
   private def handleRequest(
