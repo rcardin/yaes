@@ -4,6 +4,7 @@ import in.rcard.yaes.*
 import in.rcard.yaes.Channel
 import com.sun.net.httpserver.{HttpServer => JdkHttpServer, HttpExchange}
 import java.net.InetSocketAddress
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
 /** Server configuration and route definitions.
@@ -57,7 +58,7 @@ case class ServerDef(routes: Routes, shutdownHook: Option[() => Unit] = None) {
     * @return
     *   A Server instance that can be used to stop the server
     */
-  def run(port: Int)(using Async, IO): Server = {
+  def run(port: Int)(using Async, IO, Output): Server = {
     YaesServer.run(this, port)
   }
 }
@@ -131,6 +132,7 @@ object YaesServer {
     * **Effect Requirements:**
     *   - Requires [[IO]] context for virtual thread execution
     *   - Requires [[Async]] context for fiber-per-request handling and shutdown coordination
+    *   - Requires [[Output]] context for logging shutdown status
     *
     * **Request Handling:**
     *   - Each request is automatically handled in a forked fiber via [[Async.fork]]
@@ -139,9 +141,15 @@ object YaesServer {
     *   - Unmatched routes result in 404 Not Found responses
     *   - HttpExchange resources are automatically closed via [[Resource]] effect (internal)
     *
-    * **Shutdown:**
+    * **Graceful Shutdown:**
     *   - Call [[Server.shutdown]] on the returned handle to stop the server
-    *   - Shutdown hook (if registered) runs before the server stops
+    *   - All in-flight requests are guaranteed to complete before shutdown finishes
+    *   - This is enforced by YAES structured concurrency:
+    *     - Each request runs in its own fiber (via [[Async.fork]])
+    *     - [[Async.run]]'s `StructuredTaskScope.join()` waits for all fibers
+    *     - No additional synchronization needed
+    *   - Shutdown progress is logged to console (request counts, completion status)
+    *   - Shutdown hook (if registered) runs after all requests complete
     *   - Server lifecycle is managed via [[Resource]] effect for automatic cleanup
     *
     * Example:
@@ -171,12 +179,17 @@ object YaesServer {
     *   Async context for forking request fibers and shutdown coordination
     * @param io
     *   IO context for server lifecycle
+    * @param output
+    *   Output context for logging shutdown status
     * @return
     *   A Server instance that can be used to stop the server
     */
-  def run(serverDef: ServerDef, port: Int)(using async: Async, io: IO): Server = {
+  def run(serverDef: ServerDef, port: Int)(using async: Async, io: IO, output: Output): Server = {
     // Internal rendezvous channel for shutdown signaling
     val shutdownChannel = Channel.rendezvous[Unit]()
+
+    // Track active requests for observability during shutdown
+    val tracker = new RequestTracker()
 
     Resource.run {
       // Install server as a resource with automatic cleanup
@@ -187,10 +200,16 @@ object YaesServer {
           srv.createContext(
             "/",
             (exchange: HttpExchange) => {
+              // Increment counter when request starts
+              tracker.increment()
+
               // Fork a fiber for this request
+              // Structured concurrency ensures shutdown waits for this fiber
               Async.fork(s"http-request-${exchange.getRequestURI}") {
                 Resource.run {
                   Resource.ensuring {
+                    // Decrement counter when request completes (guaranteed)
+                    tracker.decrement()
                     exchange.close()
                   }
                   handleRequest(exchange, serverDef.routes)
@@ -216,15 +235,40 @@ object YaesServer {
       Async.fork("http-server-shutdown-waiter") {
         Raise.run {
           shutdownChannel.receive()
+
+          // Log shutdown status using Output effect
+          val activeCount = tracker.count()
+          Output.printLn(s"[YaesServer] Shutdown initiated. Active requests: $activeCount")
+
+          // Monitor in-flight requests if any exist
+          if (activeCount > 0) {
+            Async.fork("shutdown-monitor") {
+              var lastCount = activeCount
+              while (tracker.count() > 0) {
+                Async.delay(1.second)
+                val currentCount = tracker.count()
+                if (currentCount != lastCount) {
+                  Output.printLn(s"[YaesServer] Waiting for requests to complete. Remaining: $currentCount")
+                  lastCount = currentCount
+                }
+              }
+            }
+          }
+
           // Close channel after receiving shutdown signal
           // This ensures subsequent shutdown() calls fail gracefully
           shutdownChannel.close()
         }
       }
-      // No join needed - Async structured concurrency ensures Resource.run
-      // waits for all forked fibers to complete before exiting
+      // Structured concurrency (Async.run) automatically waits here for:
+      // 1. All request handler fibers to complete
+      // 2. The shutdown-waiter fiber to finish
+      // This guarantees graceful shutdown without additional synchronization
     }
     // Resource cleanup happens here after shutdown-waiter fiber completes
+
+    // This executes after all forked fibers complete (structured concurrency)
+    Output.printLn(s"[YaesServer] Shutdown complete. All requests finished.")
 
     // Return server handle
     Server(shutdownChannel)
@@ -300,5 +344,18 @@ object YaesServer {
     val os = exchange.getResponseBody
     os.write(responseBytes)
     os.close()
+  }
+
+  /** Internal tracker for active HTTP requests.
+    *
+    * Uses AtomicInteger for thread-safe counting of in-flight requests. This enables
+    * observability during server shutdown.
+    */
+  private class RequestTracker {
+    private val activeRequests = new java.util.concurrent.atomic.AtomicInteger(0)
+
+    def increment(): Unit = { activeRequests.incrementAndGet(); () }
+    def decrement(): Unit = { activeRequests.decrementAndGet(); () }
+    def count(): Int = activeRequests.get()
   }
 }

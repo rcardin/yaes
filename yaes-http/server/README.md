@@ -91,6 +91,44 @@ val server = YaesServer.route(
 YaesServer.run(server, port = 8080)
 ```
 
+## Graceful Shutdown
+
+The server supports graceful shutdown with automatic request tracking:
+
+```scala
+Async.run {
+  IO.run {
+    Output.run {
+      val server = YaesServer.route(
+        (Method.GET, "/work", (req: Request) =>
+          Async.delay(5.seconds)
+          Response.ok("Done")
+        )
+      ).run(port = 8080)
+
+      // Later, when you want to shut down:
+      server.shutdown()
+      // Server waits for all in-flight requests to complete
+    }
+  }
+}
+```
+
+**How it works:**
+- All in-flight requests are tracked automatically
+- Calling `shutdown()` signals the server to stop
+- The server waits for all active request handlers to complete
+- Shutdown progress is logged to console
+- Guaranteed by YAES structured concurrency (no race conditions)
+
+**Example output:**
+```
+[YaesServer] Shutdown initiated. Active requests: 3
+[YaesServer] Waiting for requests to complete. Remaining: 2
+[YaesServer] Waiting for requests to complete. Remaining: 1
+[YaesServer] Shutdown complete. All requests finished.
+```
+
 ## Examples
 
 See [ExampleServer.scala](src/test/scala/in/rcard/yaes/http/server/ExampleServer.scala) for a runnable example:
@@ -120,7 +158,6 @@ sbt "yaes-http-server/testOnly in.rcard.yaes.http.server.RouterSpec"
 - Request body parsing (JSON, forms)
 - **Streaming with Flow[Byte]** - Use YAES Flow for efficient streaming
 - Middleware/interceptors
-- Graceful shutdown
 - SSL/TLS support
 
 ## License

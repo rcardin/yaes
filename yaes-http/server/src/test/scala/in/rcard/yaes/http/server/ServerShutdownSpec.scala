@@ -14,20 +14,22 @@ class ServerShutdownSpec extends AnyFlatSpec with Matchers {
 
     val result = IO.runBlocking(10.seconds) {
       Async.run {
-        val serverDef = YaesServer
-          .route(
-            GET(p"/hello") { req => Response.ok("Hello!") }
-          )
-          .onShutdown(() => {
-            shutdownHookCalled = true
-          })
+        Output.run {
+          val serverDef = YaesServer
+            .route(
+              GET(p"/hello") { req => Response.ok("Hello!") }
+            )
+            .onShutdown(() => {
+              shutdownHookCalled = true
+            })
 
-        val server = serverDef.run(port = 8888)
+          val server = serverDef.run(port = 8888)
 
-        // Shutdown immediately
-        server.shutdown()
+          // Shutdown immediately
+          server.shutdown()
 
-        "completed"
+          "completed"
+        }
       }
     }
 
@@ -38,18 +40,20 @@ class ServerShutdownSpec extends AnyFlatSpec with Matchers {
   it should "allow server to handle requests before shutdown" in {
     val result = IO.runBlocking(10.seconds) {
       Async.run {
-        val serverDef = YaesServer.route(
-          GET(p"/test") { req => Response.ok("Test") }
-        )
+        Output.run {
+          val serverDef = YaesServer.route(
+            GET(p"/test") { req => Response.ok("Test") }
+          )
 
-        val server = serverDef.run(port = 8889)
+          val server = serverDef.run(port = 8889)
 
-        // Give server time to start
-        Async.delay(100.millis)
+          // Give server time to start
+          Async.delay(100.millis)
 
-        // Could add actual HTTP request here in future
+          // Could add actual HTTP request here in future
 
-        server.shutdown()
+          server.shutdown()
+        }
       }
     }
 
@@ -60,14 +64,16 @@ class ServerShutdownSpec extends AnyFlatSpec with Matchers {
   it should "work without shutdown hook" in {
     val result = IO.runBlocking(10.seconds) {
       Async.run {
-        val serverDef = YaesServer.route(
-          GET(p"/hello") { req => Response.ok("Hello!") }
-        )
+        Output.run {
+          val serverDef = YaesServer.route(
+            GET(p"/hello") { req => Response.ok("Hello!") }
+          )
 
-        val server = serverDef.run(port = 8890)
-        server.shutdown()
+          val server = serverDef.run(port = 8890)
+          server.shutdown()
 
-        "completed"
+          "completed"
+        }
       }
     }
 
@@ -77,22 +83,24 @@ class ServerShutdownSpec extends AnyFlatSpec with Matchers {
   it should "handle multiple shutdown calls gracefully" in {
     val result = IO.runBlocking(10.seconds) {
       Async.run {
-        val serverDef = YaesServer.route(
-          GET(p"/hello") { req => Response.ok("Hello!") }
-        )
+        Output.run {
+          val serverDef = YaesServer.route(
+            GET(p"/hello") { req => Response.ok("Hello!") }
+          )
 
-        val server = serverDef.run(port = 8891)
+          val server = serverDef.run(port = 8891)
 
-        // First shutdown - should succeed
-        server.shutdown()
+          // First shutdown - should succeed
+          server.shutdown()
 
-        // Second shutdown - should print message and not throw
-        server.shutdown()
+          // Second shutdown - should print message and not throw
+          server.shutdown()
 
-        // Third shutdown - should also be safe
-        server.shutdown()
+          // Third shutdown - should also be safe
+          server.shutdown()
 
-        "completed"
+          "completed"
+        }
       }
     }
 

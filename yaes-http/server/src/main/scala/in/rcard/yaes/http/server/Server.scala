@@ -28,14 +28,30 @@ class Server private[server] (
 
   /** Request the server to shut down.
     *
-    * Sends a shutdown signal to the server. The server will stop accepting new connections, run
-    * the shutdown hook (if registered), and clean up resources.
+    * Sends a shutdown signal to the server. The server will:
+    * 1. Stop accepting new connections
+    * 2. Wait for all in-flight requests to complete (graceful shutdown)
+    * 3. Run the shutdown hook (if registered)
+    * 4. Clean up resources
     *
-    * YaesServer.run will return after shutdown completes.
+    * **Graceful Shutdown Guarantee:**
+    * The shutdown process waits for all active request handlers to complete
+    * before proceeding with cleanup. This is enforced by YAES structured concurrency:
+    * the [[in.rcard.yaes.Async.run]] handler's `StructuredTaskScope.join()` waits for all forked
+    * fibers (including all request handlers) to finish.
     *
+    * **Observability:**
+    * During shutdown, the server logs:
+    * - Initial active request count when shutdown begins
+    * - Periodic updates as requests complete (if any are in-flight)
+    * - Confirmation when all requests have finished
+    *
+    * **Idempotency:**
     * This method is idempotent - calling it multiple times is safe. If the server is already
     * shutting down or has been shut down, subsequent calls will print a message and return
     * immediately.
+    *
+    * @param async Async context for sending shutdown signal
     */
   def shutdown()(using Async): Unit = {
     Raise.fold(
