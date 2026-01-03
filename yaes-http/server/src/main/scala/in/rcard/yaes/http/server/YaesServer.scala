@@ -148,8 +148,16 @@ object YaesServer {
     *   - Unmatched routes result in 404 Not Found responses
     *   - HttpExchange resources are automatically closed via [[Resource]] effect (internal)
     *
+    * **Automatic Shutdown Hook:**
+    *   - A JVM shutdown hook is automatically registered when the server starts
+    *   - When the JVM receives SIGTERM, SIGINT, or begins shutdown (e.g., Ctrl+C, container stop), the hook triggers graceful shutdown
+    *   - This ensures clean termination in containers (Kubernetes, Docker) and local development
+    *   - The shutdown hook is automatically removed if the server stops normally via [[Server.shutdown]]
+    *   - No configuration needed - shutdown hooks are always enabled
+    *
     * **Graceful Shutdown:**
-    *   - Call [[Server.shutdown]] on the returned handle to stop the server
+    *   - Call [[Server.shutdown]] on the returned handle to stop the server programmatically
+    *   - Shutdown is also triggered automatically via JVM shutdown hook (see above)
     *   - New requests are immediately rejected with 503 Service Unavailable
     *   - All in-flight requests (already accepted) complete before shutdown finishes
     *   - This is enforced by YAES structured concurrency:
@@ -202,7 +210,35 @@ object YaesServer {
     // Server state - volatile for thread-safe access from HTTP executor threads
     @volatile var serverState: ServerState = ServerState.RUNNING
 
+    // Register JVM shutdown hook for automatic graceful shutdown on SIGTERM/SIGINT
+    val shutdownHook = new Thread(() => {
+      println("[YaesServer] Shutdown hook triggered - initiating graceful shutdown")
+      // Send shutdown signal to trigger existing graceful shutdown machinery
+      // Use Raise.fold to handle ChannelClosed error (channel may already be closed)
+      Raise.fold(
+        shutdownChannel.send(())
+      )(
+        onError = (_: Channel.ChannelClosed.type) =>
+          println("[YaesServer] Shutdown already in progress")
+      )(
+        onSuccess = (_: Unit) => ()
+      )
+    }, "yaes-server-shutdown-hook")
+
+    Runtime.getRuntime.addShutdownHook(shutdownHook)
+
     Resource.run {
+      // Remove shutdown hook when server stops normally (prevents hook from running unnecessarily)
+      Resource.ensuring {
+        try {
+          Runtime.getRuntime.removeShutdownHook(shutdownHook)
+        } catch {
+          case _: IllegalStateException =>
+            // JVM is already shutting down, can't remove hook
+            ()
+        }
+      }
+
       // Install server as a resource with automatic cleanup
       val jdkServer = Resource.install(
         acquire = {
