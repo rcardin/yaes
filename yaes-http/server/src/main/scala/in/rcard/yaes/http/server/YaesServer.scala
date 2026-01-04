@@ -150,9 +150,11 @@ object YaesServer {
     *
     * **Automatic Shutdown Hook:**
     *   - A JVM shutdown hook is automatically registered when the server starts
-    *   - When the JVM receives SIGTERM, SIGINT, or begins shutdown (e.g., Ctrl+C, container stop), the hook triggers graceful shutdown
+    *   - When the JVM receives SIGTERM, SIGINT, or begins shutdown (e.g., Ctrl+C, container stop),
+    *     the hook triggers graceful shutdown
     *   - This ensures clean termination in containers (Kubernetes, Docker) and local development
-    *   - The shutdown hook is automatically removed if the server stops normally via [[Server.shutdown]]
+    *   - The shutdown hook is automatically removed if the server stops normally via
+    *     [[Server.shutdown]]
     *   - No configuration needed - shutdown hooks are always enabled
     *
     * **Graceful Shutdown:**
@@ -211,19 +213,22 @@ object YaesServer {
     @volatile var serverState: ServerState = ServerState.RUNNING
 
     // Register JVM shutdown hook for automatic graceful shutdown on SIGTERM/SIGINT
-    val shutdownHook = new Thread(() => {
-      println("[YaesServer] Shutdown hook triggered - initiating graceful shutdown")
-      // Send shutdown signal to trigger existing graceful shutdown machinery
-      // Use Raise.fold to handle ChannelClosed error (channel may already be closed)
-      Raise.fold(
-        shutdownChannel.send(())
-      )(
-        onError = (_: Channel.ChannelClosed.type) =>
-          println("[YaesServer] Shutdown already in progress")
-      )(
-        onSuccess = (_: Unit) => ()
-      )
-    }, "yaes-server-shutdown-hook")
+    val shutdownHook = new Thread(
+      () => {
+        println("[YaesServer] Shutdown hook triggered - initiating graceful shutdown")
+        // Send shutdown signal to trigger existing graceful shutdown machinery
+        // Use Raise.fold to handle ChannelClosed error (channel may already be closed)
+        Raise.fold(
+          shutdownChannel.send(())
+        )(
+          onError =
+            (_: Channel.ChannelClosed.type) => println("[YaesServer] Shutdown already in progress")
+        )(
+          onSuccess = (_: Unit) => ()
+        )
+      },
+      "yaes-server-shutdown-hook"
+    )
 
     Runtime.getRuntime.addShutdownHook(shutdownHook)
 
@@ -257,23 +262,23 @@ object YaesServer {
                 // Increment counter when request starts
                 tracker.increment()
 
-                // Fork a fiber for this request
-                // Structured concurrency ensures shutdown waits for this fiber
-                Async.fork(s"http-request-${exchange.getRequestURI}") {
-                  Resource.run {
-                    Resource.ensuring {
-                      // Decrement counter when request completes (guaranteed)
-                      tracker.decrement()
-                      exchange.close()
-                    }
-                    handleRequest(exchange, serverDef.routes)
+                Resource.run {
+                  Resource.ensuring {
+                    // Decrement counter when request completes (guaranteed)
+                    tracker.decrement()
+                    exchange.close()
                   }
+                  handleRequest(exchange, serverDef.routes)
                 }
               }
             }
           )
 
-          srv.setExecutor(null) // Use default executor
+          srv.setExecutor { cmd =>
+            Async.fork(s"http-request-${cmd.hashCode()}") {
+              cmd.run()
+            }
+          } // Use default executor
           srv.start()
           srv // Return the started server
         }
@@ -306,7 +311,9 @@ object YaesServer {
                 Async.delay(1.second)
                 val currentCount = tracker.count()
                 if (currentCount != lastCount) {
-                  Output.printLn(s"[YaesServer] Waiting for requests to complete. Remaining: $currentCount")
+                  Output.printLn(
+                    s"[YaesServer] Waiting for requests to complete. Remaining: $currentCount"
+                  )
                   lastCount = currentCount
                 }
               }
@@ -359,7 +366,7 @@ object YaesServer {
     val headers = exchange.getRequestHeaders.asScala.map { case (k, v) =>
       k -> v.asScala.headOption.getOrElse("")
     }.toMap
-    val body = new String(exchange.getRequestBody.readAllBytes())
+    val body        = new String(exchange.getRequestBody.readAllBytes())
     val queryString = parseQueryString(Option(uri.getQuery).getOrElse(""))
 
     Request(method, path, headers, body, queryString)
@@ -372,7 +379,7 @@ object YaesServer {
       query.split("&").foldLeft(Map.empty[String, List[String]]) { (acc, pair) =>
         pair.split("=", 2) match {
           case Array(key, value) =>
-            val decodedKey = java.net.URLDecoder.decode(key, "UTF-8")
+            val decodedKey   = java.net.URLDecoder.decode(key, "UTF-8")
             val decodedValue = java.net.URLDecoder.decode(value, "UTF-8")
             acc.updatedWith(decodedKey) {
               case Some(existing) => Some(existing :+ decodedValue)
@@ -406,14 +413,14 @@ object YaesServer {
 
   /** Internal tracker for active HTTP requests.
     *
-    * Uses AtomicInteger for thread-safe counting of in-flight requests. This enables
-    * observability during server shutdown.
+    * Uses AtomicInteger for thread-safe counting of in-flight requests. This enables observability
+    * during server shutdown.
     */
   private class RequestTracker {
     private val activeRequests = new java.util.concurrent.atomic.AtomicInteger(0)
 
     def increment(): Unit = { activeRequests.incrementAndGet(); () }
     def decrement(): Unit = { activeRequests.decrementAndGet(); () }
-    def count(): Int = activeRequests.get()
+    def count(): Int      = activeRequests.get()
   }
 }
