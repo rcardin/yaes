@@ -26,6 +26,8 @@ sbt compile
 # Compile specific module
 sbt yaes-core/compile
 sbt yaes-data/compile
+sbt yaes-cats/compile
+sbt server/compile
 
 # Clean build artifacts
 sbt clean
@@ -39,13 +41,17 @@ sbt test
 # Run tests for specific module
 sbt yaes-core/test
 sbt yaes-data/test
+sbt yaes-cats/test
+sbt server/test
 
 # Run a single test class
 sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec"
 sbt "yaes-data/testOnly in.rcard.yaes.FlowSpec"
+sbt "server/testOnly in.rcard.yaes.http.server.RoutesSpec"
 
 # Run a single test within a class
 sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec -- -z \"should handle errors\""
+sbt "server/testOnly in.rcard.yaes.http.server.ServerShutdownSpec -- -z \"graceful shutdown\""
 ```
 
 ### Publishing
@@ -67,7 +73,7 @@ sbt doc
 
 ### Module Structure
 
-The project consists of two main modules:
+The project consists of several modules:
 
 1. **yaes-core** (`yaes-core/src/main/scala/in/rcard/yaes/`)
    - Contains all effect implementations
@@ -77,6 +83,7 @@ The project consists of two main modules:
 2. **yaes-data** (`yaes-data/src/main/scala/in/rcard/yaes/`)
    - Contains data structures for use with effects
    - Main file: `Flow.scala` (cold asynchronous data streams)
+   - Includes `FlowPublisher.scala` for Reactive Streams integration
 
 3. **yaes-cats** (`yaes-cats/src/main/scala/in/rcard/yaes/`)
    - Cats/Cats Effect integration module
@@ -86,6 +93,24 @@ The project consists of two main modules:
      - `syntax/` - Extension methods and syntax enhancements
      - `interop/` - Interop with other libraries (e.g., `catseffect` for Cats Effect conversions)
    - **Test structure**: Tests follow the same package structure (e.g., `instances/AccumulateInstancesSpec.scala`)
+
+4. **yaes-http-server** (`yaes-http/server/src/main/scala/in/rcard/yaes/http/server/`)
+   - HTTP server built on YAES effects and JDK HttpServer
+   - Uses virtual threads for request handling (each request gets its own fiber via `Async.fork`)
+   - **Key components**:
+     - `YaesServer.scala` - Server builder and lifecycle management
+     - `Routes.scala` - Router with efficient exact/parameterized route matching
+     - `Request.scala`/`Response.scala` - HTTP request/response models
+     - `PathDSL.scala`/`MethodDSL.scala` - Type-safe route definition DSL
+     - `QueryParams.scala`/`PathParams.scala` - Parameter extraction with type-safe parsing
+     - `BodyCodec.scala` - Request/response body encoding/decoding
+     - `Server.scala` - Running server instance with graceful shutdown
+   - **Features**:
+     - Graceful shutdown with in-flight request tracking
+     - Type-safe path/query parameter extraction
+     - Route optimization (O(1) exact matches, sequential parameterized routes)
+     - Shutdown hooks for cleanup
+     - Built on structured concurrency principles
 
 ### Core Effect System Design
 
@@ -181,6 +206,8 @@ object EffectName {
 Tests are located in:
 - `yaes-core/src/test/scala/in/rcard/yaes/`
 - `yaes-data/src/test/scala/in/rcard/yaes/`
+- `yaes-cats/src/test/scala/in/rcard/yaes/`
+- `yaes-http/server/src/test/scala/in/rcard/yaes/http/server/`
 
 Tests use ScalaTest with the following structure:
 ```scala
@@ -190,6 +217,25 @@ import org.scalatest.matchers.should.Matchers
 class EffectNameSpec extends AnyFlatSpec with Matchers {
   "EffectName" should "do something" in {
     // Test implementation
+  }
+}
+```
+
+**HTTP Server Testing:**
+- Integration tests use actual HTTP requests via `YaesServer.run`
+- Tests verify graceful shutdown, route matching, parameter parsing, and body encoding/decoding
+- Example test pattern:
+```scala
+import in.rcard.yaes.http.server.*
+
+"YaesServer" should "handle GET requests" in {
+  Async.run {
+    IO.run {
+      val routes = Routes(GET / "users" -> { req => Response.ok("Users list") })
+      val server = YaesServer(routes).run(port = 8080)
+      // Test request handling
+      server.shutdown()
+    }
   }
 }
 ```
@@ -260,6 +306,14 @@ Running handlers (`IO.run`, `Raise.run`, etc.) executes effects and breaks refer
 ### Java 24 Requirement
 The library requires Java 24+ for Virtual Threads and Structured Concurrency features. Ensure your development environment has Java 24 or higher.
 
+### HTTP Server Shutdown Behavior
+The HTTP server provides graceful shutdown with the following guarantees:
+- `server.shutdown()` is idempotent - safe to call multiple times
+- Shutdown waits for all in-flight requests to complete before cleanup
+- New requests during shutdown receive 503 Service Unavailable
+- Shutdown hooks run during `Resource` cleanup, before server stops
+- Structured concurrency ensures all request handler fibers complete via `Async.run`'s `StructuredTaskScope.join()`
+
 ## Code Style and Patterns
 
 ### Effect Declaration
@@ -289,6 +343,42 @@ val result = OuterEffect.run {
 - Effect types use PascalCase: `IO`, `Async`, `Raise[E]`
 - Effect DSL methods use camelCase: `Random.nextInt`, `Raise.raise`, `Async.fork`
 - Handlers are typically named `run`, with variants like `runBlocking`, `either`, `option`
+
+### HTTP Server Route Definition
+When defining HTTP server routes, use the type-safe DSL:
+```scala
+import in.rcard.yaes.http.server.*
+
+// Simple route
+val route1 = GET / "users" -> { req => Response.ok("Users") }
+
+// Route with path parameters (use *: for type-safe extraction)
+val route2 = GET / "users" / *:[Int] -> { (req, userId) =>
+  Response.ok(s"User $userId")
+}
+
+// Route with query parameters
+val route3 = GET / "search" ? "q" *: StringParam -> { (req, query) =>
+  Response.ok(s"Searching for: $query")
+}
+
+// Route with both path and query parameters
+val route4 = GET / "users" / *:[Int] ? "include" *: StringParam -> { (req, userId, include) =>
+  Response.ok(s"User $userId with $include")
+}
+
+// Combine routes and run server
+val routes = Routes(route1, route2, route3, route4)
+val server = YaesServer(routes)
+  .onShutdown(() => println("Cleanup"))
+  .run(port = 8080)
+```
+
+**Route Matching Order:**
+- Exact routes (no parameters) are checked first via map lookup (O(1))
+- Parameterized routes are checked sequentially in definition order
+- First matching route wins
+- Returns 404 if no route matches
 
 ## Documentation Standards
 
