@@ -215,14 +215,14 @@ object YaesServer {
     // Register JVM shutdown hook for automatic graceful shutdown on SIGTERM/SIGINT
     val shutdownHook = new Thread(
       () => {
-        println("[YaesServer] Shutdown hook triggered - initiating graceful shutdown")
+        Output.printLn("[YaesServer] Shutdown hook triggered - initiating graceful shutdown")
         // Send shutdown signal to trigger existing graceful shutdown machinery
         // Use Raise.fold to handle ChannelClosed error (channel may already be closed)
         Raise.fold(
           shutdownChannel.send(())
         )(
           onError =
-            (_: Channel.ChannelClosed.type) => println("[YaesServer] Shutdown already in progress")
+            (_: Channel.ChannelClosed.type) => Output.printLn("[YaesServer] Shutdown already in progress")
         )(
           onSuccess = (_: Unit) => ()
         )
