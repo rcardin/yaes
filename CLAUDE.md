@@ -72,7 +72,7 @@ The project consists of two main modules:
 1. **yaes-core** (`yaes-core/src/main/scala/in/rcard/yaes/`)
    - Contains all effect implementations
    - Depends on `yaes-data`
-   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `IO.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
+   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `IO.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `Shutdown.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
 
 2. **yaes-data** (`yaes-data/src/main/scala/in/rcard/yaes/`)
    - Contains data structures for use with effects
@@ -158,6 +158,20 @@ object EffectName {
   - `install` for custom acquisition/release
   - `ensuring` for cleanup actions
 - Cleanup occurs even on exceptions
+
+**Shutdown Coordination (Shutdown Effect):**
+- Provides graceful shutdown coordination for long-running applications
+- Automatically registers JVM shutdown hooks (SIGTERM, SIGINT, Ctrl+C)
+- Three main operations:
+  - `isShuttingDown()` - check if shutdown has been initiated
+  - `initiateShutdown()` - manually trigger graceful shutdown
+  - `onShutdown(hook)` - register callbacks to execute when shutdown begins
+- Thread-safe state management using `ReentrantLock`
+- Idempotent - multiple shutdown calls are safe
+- Hooks execute outside locks to prevent deadlock
+- Hook failures are logged but don't prevent other hooks from running
+- Hooks registered after shutdown has started are silently ignored
+- Particularly useful with `Async` for daemon processes
 
 **Channels (Communication Primitive):**
 - Based on `java.util.concurrent` blocking queues with suspending operations
