@@ -194,7 +194,7 @@ Shutdown.run {
 
 ### With Async (Daemon Processes)
 
-The `Shutdown` effect is designed to work seamlessly with `Async.runDaemon`:
+The `Shutdown` effect is designed to work seamlessly with `Async` for daemon processes:
 
 ```scala
 import in.rcard.yaes.Shutdown.*
@@ -202,13 +202,17 @@ import in.rcard.yaes.Async.*
 import scala.concurrent.duration.*
 
 def daemonServer()(using Shutdown, Async): Unit = {
-  // Async.runDaemon uses Shutdown.onShutdown internally
-  val serverShutdown = Async.runDaemon(timeout = 30.seconds) {
+  val server = Async.fork {
     startServer()
   }
 
-  // Blocks until shutdown signal received
-  serverShutdown
+  // Wait until shutdown is initiated
+  while (!Shutdown.isShuttingDown()) {
+    Async.delay(100.millis)
+  }
+
+  // Gracefully stop the server
+  server.cancel()
 }
 
 Shutdown.run {
@@ -225,26 +229,27 @@ Shutdown.run {
 ```scala
 import in.rcard.yaes.Shutdown.*
 import in.rcard.yaes.Output.*
+import java.util.concurrent.atomic.AtomicInteger
 
 case class Request(path: String)
 case class Response(status: Int, body: String)
 
 def httpServer(port: Int)(using Shutdown, Output): Unit = {
-  @volatile var activeRequests = 0
+  val activeRequests = new AtomicInteger(0)
 
   Shutdown.onShutdown(() => {
-    Output.printLn(s"Shutdown initiated with $activeRequests active requests")
+    Output.printLn(s"Shutdown initiated with ${activeRequests.get()} active requests")
     Output.printLn("Waiting for active requests to complete...")
   })
 
-  while (!Shutdown.isShuttingDown() || activeRequests > 0) {
+  while (!Shutdown.isShuttingDown() || activeRequests.get() > 0) {
     // Accept new requests only if not shutting down
     if (!Shutdown.isShuttingDown()) {
       val request = acceptRequest()
-      activeRequests += 1
+      activeRequests.incrementAndGet()
 
       processRequest(request)
-      activeRequests -= 1
+      activeRequests.decrementAndGet()
     } else {
       Thread.sleep(100)  // Wait for active requests
     }

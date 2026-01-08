@@ -171,7 +171,7 @@ object EffectName {
 - Hooks execute outside locks to prevent deadlock
 - Hook failures are logged but don't prevent other hooks from running
 - Hooks registered after shutdown has started are silently ignored
-- Particularly useful with `Async.runDaemon` for daemon processes
+- Particularly useful with `Async` for daemon processes
 
 **Channels (Communication Primitive):**
 - Based on `java.util.concurrent` blocking queues with suspending operations

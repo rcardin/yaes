@@ -2,6 +2,7 @@ package in.rcard.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import java.util.concurrent.atomic.AtomicInteger
 
 class ShutdownSpec extends AnyFlatSpec with Matchers {
 
@@ -70,15 +71,15 @@ class ShutdownSpec extends AnyFlatSpec with Matchers {
 
   it should "not invoke hooks multiple times on repeated shutdown calls" in {
     Shutdown.run {
-      @volatile var callCount = 0
+      val callCount = new AtomicInteger(0)
 
-      Shutdown.onShutdown { callCount += 1 }
+      Shutdown.onShutdown { callCount.incrementAndGet() }
 
       Shutdown.initiateShutdown()
       Shutdown.initiateShutdown()
       Shutdown.initiateShutdown()
 
-      callCount shouldBe 1
+      callCount.get() shouldBe 1
     }
   }
 
@@ -99,11 +100,11 @@ class ShutdownSpec extends AnyFlatSpec with Matchers {
 
   it should "handle concurrent hook registration safely" in {
     Shutdown.run {
-      @volatile var hookCount = 0
+      val hookCount = new AtomicInteger(0)
       val threads = (1 to 10).map { _ =>
         new Thread(() => {
           Shutdown.onShutdown {
-            hookCount += 1
+            hookCount.incrementAndGet()
           }
         })
       }
@@ -113,15 +114,15 @@ class ShutdownSpec extends AnyFlatSpec with Matchers {
 
       Shutdown.initiateShutdown()
 
-      hookCount shouldBe 10
+      hookCount.get() shouldBe 10
     }
   }
 
   it should "handle concurrent shutdown initiation safely" in {
     Shutdown.run {
-      @volatile var hookCallCount = 0
+      val hookCallCount = new AtomicInteger(0)
 
-      Shutdown.onShutdown { hookCallCount += 1 }
+      Shutdown.onShutdown { hookCallCount.incrementAndGet() }
 
       val threads = (1 to 10).map { _ =>
         new Thread(() => {
@@ -132,7 +133,7 @@ class ShutdownSpec extends AnyFlatSpec with Matchers {
       threads.foreach(_.start())
       threads.foreach(_.join())
 
-      hookCallCount shouldBe 1
+      hookCallCount.get() shouldBe 1
     }
   }
 

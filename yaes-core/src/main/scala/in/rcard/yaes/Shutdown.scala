@@ -51,11 +51,18 @@ private enum ShutdownState:
   * Example - Daemon server (with Async):
   * {{{
   * Shutdown.run {
-  *   val serverShutdown = Async.runDaemon(timeout = 30.seconds) {
-  *     // Async.runDaemon uses onShutdown internally to coordinate scope shutdown
-  *     startServer()
+  *   Async.run {
+  *     val server = Async.fork {
+  *       startServer()
+  *     }
+  *
+  *     // Wait until shutdown is initiated
+  *     while (!Shutdown.isShuttingDown()) {
+  *       Async.delay(100.millis)
+  *     }
+  *
+  *     server.cancel()
   *   }
-  *   serverShutdown  // Blocks until shutdown
   * }
   * }}}
   */
@@ -110,7 +117,7 @@ object Shutdown {
     * hooks will still execute.
     *
     * **Use cases:**
-    *   - Notify scopes to begin graceful termination (used by [[Async.runDaemon]])
+    *   - Notify async scopes to begin graceful termination
     *   - Log shutdown initiation
     *   - Trigger application-specific shutdown logic
     *
@@ -176,8 +183,8 @@ object Shutdown {
               try {
                 hook()
               } catch {
-                case e: Exception =>
-                  java.lang.System.err.println(s"Shutdown hook failed: ${e.getClass.getName}: ${e.getMessage}")
+                case t: Throwable =>
+                  java.lang.System.err.println(s"Shutdown hook failed: ${t.getClass.getName}: ${t.getMessage}")
               }
             }
           }
