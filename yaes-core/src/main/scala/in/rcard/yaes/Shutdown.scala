@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
 import scala.collection.mutable.ListBuffer
+import java.util.concurrent.locks.ReentrantLock
 
 type Shutdown = Yaes[Shutdown.Unsafe]
 
@@ -151,30 +152,42 @@ object Shutdown {
   def run[A](program: Shutdown ?=> A): A = {
     val handler = new Yaes.Handler[Shutdown.Unsafe, A, A] {
       override def handle(prog: Shutdown ?=> A): A = {
-        @volatile var state: ShutdownState = ShutdownState.RUNNING
+        var state: ShutdownState = ShutdownState.RUNNING
         val hooks = ListBuffer[() => Unit]()
+        val lock = new ReentrantLock()
 
         val shutdownImpl = new Unsafe {
-          override def requestShutdown(): Unit = synchronized {
-            if (state == ShutdownState.RUNNING) {
-              state = ShutdownState.SHUTTING_DOWN
+          override def requestShutdown(): Unit = {
+            val hooksToExecute = lock.synchronized {
+              if (state == ShutdownState.RUNNING) {
+                state = ShutdownState.SHUTTING_DOWN
+                hooks.toList // Create immutable snapshot
+              } else {
+                List.empty[() => Unit]
+              }
+            }
 
-              hooks.foreach { hook =>
-                try {
-                  hook()
-                } catch {
-                  case _: Exception => ()
-                }
+            // Execute hooks outside the lock to prevent deadlock
+            hooksToExecute.foreach { hook =>
+              try {
+                hook()
+              } catch {
+                case e: Exception =>
+                  java.lang.System.err.println(s"Shutdown hook failed: ${e.getClass.getName}: ${e.getMessage}")
               }
             }
           }
 
-          override def registerHook(hook: () => Unit): Unit = synchronized {
-            hooks += hook
+          override def registerHook(hook: () => Unit): Unit = lock.synchronized {
+            if (state == ShutdownState.RUNNING) {
+              hooks += hook
+            }
+            // Silently ignore hooks registered after shutdown has started
           }
 
-          override def checkShuttingDown(): Boolean =
+          override def checkShuttingDown(): Boolean = lock.synchronized {
             state == ShutdownState.SHUTTING_DOWN
+          }
         }
 
         // Register JVM shutdown hook (triggers shutdown on SIGTERM/SIGINT)

@@ -94,6 +94,30 @@ Shutdown.run {
 }
 ```
 
+### Late Hook Registration
+
+Hooks registered after shutdown has begun are **silently ignored**:
+
+```scala
+import in.rcard.yaes.Shutdown.*
+
+Shutdown.run {
+  Shutdown.onShutdown(() => {
+    println("First hook executing")
+
+    // This hook will NOT be called
+    Shutdown.onShutdown(() => println("Late hook - won't execute"))
+  })
+
+  Shutdown.initiateShutdown()
+  // Output:
+  // First hook executing
+  // (Late hook is ignored)
+}
+```
+
+This behavior prevents race conditions and ensures predictable shutdown sequences. Register all hooks before shutdown begins.
+
 ## Error Handling
 
 ### Exception Safety
@@ -323,9 +347,22 @@ This means your application will automatically respond to:
 4. **Allow Work to Complete**: Don't abruptly terminate - let in-flight operations finish
 5. **Log Shutdown Progress**: Use hooks to log shutdown milestones for debugging
 
+## Thread Safety
+
+The `Shutdown` effect provides thread-safe operations:
+
+- **State transitions** are protected by locks - multiple threads can safely call `initiateShutdown()`
+- **Hook registration** is thread-safe - `onShutdown()` can be called from any thread
+- **State checking** is thread-safe - `isShuttingDown()` can be called from any thread
+- **Hook callbacks** execute outside the lock to prevent deadlock scenarios
+- **Late registration**: Hooks registered after shutdown has begun are silently ignored
+
+**Important**: Your hook callbacks themselves must be thread-safe if they access shared state.
+
 ## Notes
 
 - Shutdown hooks are **user callbacks**, not JVM Runtime shutdown hooks
 - For resource cleanup, prefer the `Resource` effect which guarantees LIFO order
 - Hooks execute **after** the state transitions to SHUTTING_DOWN
-- The `Shutdown` effect is **not thread-safe** for state modifications, but uses proper synchronization internally
+- Hooks registered after shutdown has started are **silently ignored**
+- Hook execution failures are logged to `System.err` but don't prevent other hooks from running
