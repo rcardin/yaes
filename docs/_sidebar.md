@@ -9,6 +9,7 @@
   * [Raise](effects/raise.md)
   * [State](effects/state.md)
   * [Resource](effects/resource.md)
+  * [Shutdown](effects/shutdown.md)
   * [Input & Output](effects/io-effects.md)
   * [Random](effects/random.md)
   * [Clock & System](effects/system-clock.md)

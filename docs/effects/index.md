@@ -22,6 +22,9 @@ Enables stateful computations and mutable state management in a functional way.
 ### [Resource Effect](resource.html)
 Automatic resource management with guaranteed cleanup in LIFO order.
 
+### [Shutdown Effect](shutdown.html)
+Graceful shutdown coordination with callback hooks and signal handling.
+
 ## I/O Operations
 
 ### [Input & Output Effects](io-effects.html)

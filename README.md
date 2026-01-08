@@ -107,6 +107,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
 - [`Resource`](#the-resource-effect): Allows for automatic resource management with guaranteed cleanup.
+- [`Shutdown`](#the-shutdown-effect): Allows for graceful shutdown coordination with callback hooks.
 - [`Input`](#the-input-effect): Allows for reading input from the console.
 - [`Output`](#the-output-effect): Allows for printing output to the console.
 - [`Random`](#the-random-effect): Allows for generating random content.
@@ -778,6 +779,69 @@ The `Resource` effect guarantees that:
 - Cleanup occurs even if exceptions are thrown
 - Resource cleanup exceptions are handled appropriately
 - Original exceptions from the main program are preserved
+
+### The `Shutdown` Effect
+
+The `Shutdown` effect provides graceful shutdown coordination for long-running applications. It automatically handles JVM shutdown signals (SIGTERM, SIGINT, Ctrl+C) and provides mechanisms to cleanly terminate concurrent operations while rejecting new work.
+
+```scala 3
+import in.rcard.yaes.Shutdown.*
+
+def processWork()(using Shutdown): Unit = {
+  while (!Shutdown.isShuttingDown()) {
+    // Process work items
+    println("Processing...")
+    Thread.sleep(1000)
+  }
+  println("Shutdown initiated, stopping work")
+}
+```
+
+The `Shutdown` effect provides three main operations:
+
+- `Shutdown.isShuttingDown()`: Checks if shutdown has been initiated
+- `Shutdown.initiateShutdown()`: Manually triggers graceful shutdown
+- `Shutdown.onShutdown(hook)`: Registers callbacks to execute when shutdown begins
+
+Here's an example using shutdown hooks:
+
+```scala 3
+import in.rcard.yaes.Shutdown.*
+import in.rcard.yaes.Output.*
+
+def serverWithHooks()(using Shutdown, Output): Unit = {
+  Shutdown.onShutdown(() => {
+    Output.printLn("Shutdown signal received")
+    Output.printLn("Stopping new request acceptance")
+  })
+
+  while (!Shutdown.isShuttingDown()) {
+    // Accept and process requests
+  }
+}
+```
+
+To run shutdown-aware code, use the `Shutdown.run` handler:
+
+```scala 3
+import in.rcard.yaes.Shutdown.*
+import in.rcard.yaes.Output.*
+
+Shutdown.run {
+  Output.run {
+    serverWithHooks()
+  }
+}
+// Automatically responds to Ctrl+C, SIGTERM, and container stop signals
+```
+
+The `Shutdown` effect is particularly useful when combined with the `Async` effect for daemon processes and long-running services. It ensures graceful termination by:
+
+- Automatically registering JVM shutdown hooks
+- Providing state checks to reject new work during shutdown
+- Executing registered callbacks in order when shutdown is initiated
+- Being idempotent - multiple shutdown calls are safe
+- Wrapping hooks in exception handling so one failure doesn't prevent others
 
 ### The `Input` Effect
 
