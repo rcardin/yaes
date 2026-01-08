@@ -15,10 +15,11 @@ private enum ShutdownState:
   * signals.
   *
   * **Shutdown Flow:**
-  *   1. JVM receives SIGTERM/SIGINT (or user calls [[initiateShutdown]]) 2. State transitions to
-  *      SHUTTING_DOWN 3. All registered hooks are invoked 4. Application checks [[isShuttingDown]]
-  *      to reject new work 5. Existing work completes (managed by [[Async]] structured
-  *      concurrency)
+  *   1. JVM receives SIGTERM/SIGINT (or user calls [[initiateShutdown]])
+  *   2. State transitions to SHUTTING_DOWN
+  *   3. All registered hooks are invoked
+  *   4. Application checks [[isShuttingDown]] to reject new work
+  *   5. Existing work completes (managed by [[Async]] structured concurrency)
   *
   * Example - Simple shutdown:
   * {{{
