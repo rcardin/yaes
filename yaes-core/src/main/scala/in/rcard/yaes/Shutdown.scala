@@ -134,7 +134,7 @@ object Shutdown {
     * @param shutdown
     *   the Shutdown effect context
     */
-  def onShutdown(hook: () => Unit)(using shutdown: Shutdown): Unit =
+  def onShutdown(hook: => Unit)(using shutdown: Shutdown): Unit =
     shutdown.unsafe.registerHook(hook)
 
   /** Runs a program with shutdown coordination.
@@ -158,14 +158,18 @@ object Shutdown {
 
         val shutdownImpl = new Unsafe {
           override def requestShutdown(): Unit = {
-            val hooksToExecute = lock.synchronized {
-              if (state == ShutdownState.RUNNING) {
-                state = ShutdownState.SHUTTING_DOWN
-                hooks.toList // Create immutable snapshot
-              } else {
-                List.empty[() => Unit]
+            lock.lock()
+            val hooksToExecute =
+              try {
+                if (state == ShutdownState.RUNNING) {
+                  state = ShutdownState.SHUTTING_DOWN
+                  hooks.toList // Create immutable snapshot
+                } else {
+                  List.empty[() => Unit]
+                }
+              } finally {
+                lock.unlock()
               }
-            }
 
             // Execute hooks outside the lock to prevent deadlock
             hooksToExecute.foreach { hook =>
@@ -178,15 +182,25 @@ object Shutdown {
             }
           }
 
-          override def registerHook(hook: () => Unit): Unit = lock.synchronized {
-            if (state == ShutdownState.RUNNING) {
-              hooks += hook
+          override def registerHook(hook: => Unit): Unit = {
+            lock.lock()
+            try {
+              if (state == ShutdownState.RUNNING) {
+                hooks += (() => hook)
+              }
+              // Silently ignore hooks registered after shutdown has started
+            } finally {
+              lock.unlock()
             }
-            // Silently ignore hooks registered after shutdown has started
           }
 
-          override def checkShuttingDown(): Boolean = lock.synchronized {
-            state == ShutdownState.SHUTTING_DOWN
+          override def checkShuttingDown(): Boolean = {
+            lock.lock()
+            try {
+              state == ShutdownState.SHUTTING_DOWN
+            } finally {
+              lock.unlock()
+            }
           }
         }
 
@@ -233,6 +247,6 @@ object Shutdown {
       * @param hook
       *   the callback function to register
       */
-    def registerHook(hook: () => Unit): Unit
+    def registerHook(hook: => Unit): Unit
   }
 }
