@@ -14,6 +14,8 @@ import ju.concurrent.SynchronousQueue
 import ju.concurrent.ThreadFactory
 import ju.function.Consumer
 import ju.concurrent.ConcurrentHashMap
+import ju.concurrent.CountDownLatch
+import ju.concurrent.Callable
 
 type Async = Yaes[Async.Unsafe]
 
@@ -188,6 +190,103 @@ object JvmAsync {
   private[yaes] def namedThreadFactory(name: String): ThreadFactory = {
     Thread.ofVirtual().name(name).factory()
   }
+}
+
+/** A StructuredTaskScope that supports graceful shutdown with timeout enforcement.
+  *
+  * This scope extends the base `StructuredTaskScope` to provide coordination between external
+  * shutdown signals (from the [[Shutdown]] effect) and internal timeout enforcement.
+  *
+  * **Design Notes:**
+  *   - Uses `CountDownLatch` for signaling between external thread (Shutdown hook) and internal
+  *     timeout enforcer fiber
+  *   - `requestGracefulShutdown()` can be called from external threads safely
+  *   - `awaitShutdownSignal()` blocks the timeout enforcer until shutdown is requested
+  *   - Only fibers inside the scope call `shutdown()` - respects structured concurrency
+  *
+  * @param name
+  *   the name for threads created by this scope
+  * @param factory
+  *   the thread factory for creating virtual threads
+  */
+private class GracefulShutdownScope(
+    name: String,
+    factory: ThreadFactory
+) extends StructuredTaskScope[Any](name, factory) {
+
+  @volatile private var shutdownInitiated = false
+  private val shutdownLatch               = new CountDownLatch(1)
+  private val inFlightTasks               = new ju.concurrent.atomic.AtomicInteger(0)
+
+  /** Signals that graceful shutdown should begin.
+    *
+    * Called from the Shutdown effect hook when `Shutdown.initiateShutdown()` is invoked. This
+    * method is thread-safe and idempotent. It sets `shutdownInitiated` to true and counts down the
+    * latch to wake up the timeout enforcer.
+    */
+  def initiateGracefulShutdown(): Unit = {
+    if (!shutdownInitiated) {
+      shutdownInitiated = true
+      shutdownLatch.countDown()
+    }
+  }
+
+  /** Signals the timeout enforcer to wake up without initiating a full shutdown.
+    *
+    * Called when the main task completes naturally. The timeout enforcer will check
+    * `wasShutdownInitiated` to decide whether to wait for the timeout period.
+    */
+  def wakeUpEnforcer(): Unit = {
+    shutdownLatch.countDown()
+  }
+
+  /** Blocks until the latch is signaled or the timeout expires.
+    *
+    * Called from timeout enforcer fiber (inside scope). This allows the enforcer to wait
+    * efficiently without polling until a signal arrives.
+    *
+    * @param timeout
+    *   the maximum time to wait
+    * @param unit
+    *   the time unit of the timeout argument
+    * @return
+    *   true if signaled, false if timeout expired
+    */
+  def awaitSignal(timeout: Long, unit: ju.concurrent.TimeUnit): Boolean = {
+    shutdownLatch.await(timeout, unit)
+  }
+
+  /** Checks if graceful shutdown was explicitly initiated via `Shutdown.initiateShutdown()`.
+    *
+    * @return
+    *   true if shutdown was explicitly initiated
+    */
+  def wasShutdownInitiated: Boolean = shutdownInitiated
+
+  /** Increments the in-flight task counter when a new task is forked.
+    *
+    * Overrides the base `fork` to track all forked tasks.
+    */
+  override def fork[U <: Any](task: Callable[? <: U]): Subtask[U] = {
+    inFlightTasks.incrementAndGet()
+    super.fork(task)
+  }
+
+  /** Decrements the in-flight task counter when a task completes.
+    *
+    * Called by the StructuredTaskScope when a subtask finishes.
+    */
+  override protected def handleComplete(subtask: Subtask[?]): Unit = {
+    inFlightTasks.decrementAndGet()
+    super.handleComplete(subtask)
+  }
+
+  /** Returns the current number of in-flight tasks.
+    *
+    * @return
+    *   the number of tasks currently running (excluding the timeout enforcer)
+    */
+  def inFlightCount: Int = inFlightTasks.get()
 }
 
 /** Companion object for [[Async]] providing utility methods and constructors.
@@ -552,6 +651,120 @@ object Async {
         }
       }
     }
+
+  /** Runs daemon fibers that continue until explicit shutdown with timeout enforcement.
+    *
+    * Unlike [[run]], which completes when the block exits, `runDaemon` is designed for long-running
+    * processes (like servers) that run indefinitely until shutdown is requested via the
+    * [[Shutdown]] effect.
+    *
+    * **Timeout Enforcement:** After shutdown is initiated, fibers have `timeout` duration to
+    * complete gracefully. If work is still running after the timeout, remaining fibers are
+    * cancelled via cooperative interruption (`StructuredTaskScope.shutdown()`).
+    *
+    * **Lifecycle:**
+    *   1. Fibers spawn and run indefinitely
+    *   1. Shutdown initiated (JVM hook or `Shutdown.initiateShutdown()`)
+    *   1. Shutdown hook triggers `scope.requestGracefulShutdown()`
+    *   1. Timeout enforcer wakes up and waits for timeout duration
+    *   1. If still running after timeout, calls `scope.shutdown()` to cancel remaining fibers
+    *   1. `scope.join()` completes when all fibers finish (or are cancelled)
+    *   1. Cleanup happens (Resource effect, finally blocks)
+    *
+    * **Integration with Shutdown Effect:** This method returns `Shutdown ?=> A`, meaning it
+    * requires a Shutdown context. It automatically registers a hook with `Shutdown.onShutdown` to
+    * trigger graceful shutdown when the Shutdown effect transitions to shutting down state.
+    *
+    * Example:
+    * {{{
+    * Shutdown.run {
+    *   Async.runDaemon(timeout = 30.seconds) {
+    *     Async.fork("server") {
+    *       while (!Shutdown.isShuttingDown()) {
+    *         handleRequest()
+    *       }
+    *       // Graceful cleanup
+    *     }
+    *   }
+    * }
+    * // Blocks until shutdown initiated and all fibers complete/timeout
+    * }}}
+    *
+    * @param timeout
+    *   Maximum time to wait for graceful shutdown before cancelling fibers
+    * @param block
+    *   The daemon computation to run, with access to both Async and Shutdown effects
+    * @tparam A
+    *   The result type of the daemon computation
+    * @return
+    *   A program requiring Shutdown context that blocks until shutdown completes
+    */
+  def runDaemon[A](timeout: Duration)(block: (Async, Shutdown) ?=> A): Shutdown ?=> A = {
+    (shutdown: Shutdown) ?=>
+      {
+        val async: Async = Yaes(new JvmAsync())
+        val scope = new GracefulShutdownScope(
+          "yaes-async-daemon",
+          JvmAsync.namedThreadFactory("yaes-async-daemon")
+        )
+
+        try {
+          // Register hook FIRST to trigger graceful shutdown
+          // This must happen before forking the main program to avoid race conditions
+          Shutdown.onShutdown {
+            scope.initiateGracefulShutdown()
+          }
+
+          // Fork timeout enforcer INSIDE scope
+          scope.fork(() => {
+            // Wait for signal (either shutdown initiated or main task completed)
+            val pollIntervalMs = 100L
+            var signaled = false
+            while (!signaled && !Thread.currentThread().isInterrupted) {
+              signaled = scope.awaitSignal(pollIntervalMs, ju.concurrent.TimeUnit.MILLISECONDS)
+            }
+
+            // Only wait for timeout and cancel fibers if shutdown was explicitly initiated
+            // Note: inFlightCount > 1 because this timeout enforcer itself is one of the tasks
+            if (scope.wasShutdownInitiated && scope.inFlightCount > 1) {
+              // Wait for timeout period, checking periodically if all tasks completed
+              val endTime = java.lang.System.currentTimeMillis() + timeout.toMillis
+              while (java.lang.System.currentTimeMillis() < endTime &&
+                     scope.inFlightCount > 1 &&
+                     !Thread.currentThread().isInterrupted) {
+                try {
+                  Thread.sleep(Math.min(pollIntervalMs, Math.max(1, endTime - java.lang.System.currentTimeMillis())))
+                } catch {
+                  case _: InterruptedException => Thread.currentThread().interrupt()
+                }
+              }
+              // After timeout expires, cancel remaining work if any (excluding this enforcer)
+              if (scope.inFlightCount > 1) {
+                scope.shutdown()
+              }
+            }
+            // If shutdown wasn't initiated or no tasks remain, exit immediately
+          })
+
+          // Fork main program (task tracking happens automatically via scope.fork override)
+          val mainTask = scope.fork(() => {
+            try {
+              JvmAsync.scope.set(scope)
+              block(using async, shutdown)
+            } finally {
+              JvmAsync.scope.remove()
+              // Wake up timeout enforcer when main task completes
+              scope.wakeUpEnforcer()
+            }
+          })
+
+          scope.join()
+          mainTask.get()
+        } finally {
+          scope.close()
+        }
+      }
+  }
 
   /** A trait representing asynchronous computations.
     *
