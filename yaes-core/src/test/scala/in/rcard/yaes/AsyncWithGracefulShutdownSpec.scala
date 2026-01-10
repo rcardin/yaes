@@ -6,13 +6,14 @@ import scala.concurrent.duration.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import in.rcard.yaes.Async.Deadline
 
-class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
+class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
 
-  "Async.runDaemon" should "complete when shutdown is initiated immediately" in {
+  "Async.withGracefulShutdown" should "complete when shutdown is initiated immediately" in {
     // Simplest test - just initiate shutdown immediately
     Shutdown.run {
-      Async.runDaemon(timeout = 1.second) {
+      Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
         Shutdown.initiateShutdown()
       }
     }
@@ -24,9 +25,9 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
     val counter = new AtomicInteger(0)
 
     Shutdown.run {
-      Async.runDaemon(timeout = 5.seconds) {
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
         Async.fork("worker") {
-          while (!Shutdown.isShuttingDown()) {
+          while (true) {
             counter.incrementAndGet()
             Async.delay(100.millis)
           }
@@ -45,7 +46,7 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
     val completed = new AtomicBoolean(false)
 
     Shutdown.run {
-      Async.runDaemon(timeout = 500.millis) {
+      Async.withGracefulShutdown(deadline = Deadline.after(500.millis)) {
         Async.fork("long-task") {
           Async.delay(10.seconds) // Will be cancelled by timeout
           completed.set(true)
@@ -63,7 +64,7 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
     val completed = new AtomicBoolean(false)
 
     Shutdown.run {
-      Async.runDaemon(timeout = 5.seconds) {
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
         Async.fork("quick-task") {
           Async.delay(200.millis)
           completed.set(true)
@@ -81,7 +82,7 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
     val results = new ConcurrentLinkedQueue[String]()
 
     Shutdown.run {
-      Async.runDaemon(timeout = 5.seconds) {
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
         Async.fork("fiber1") {
           Async.delay(100.millis)
           results.add("fiber1")
@@ -111,7 +112,7 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
         hookCalled.set(true)
       }
 
-      Async.runDaemon(timeout = 5.seconds) {
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
         Async.fork("worker") {
           while (!Shutdown.isShuttingDown()) {
             Async.delay(100.millis)
@@ -131,7 +132,7 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
     val startTime = java.lang.System.currentTimeMillis()
 
     Shutdown.run {
-      Async.runDaemon(timeout = 1.second) {
+      Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
         Async.fork("infinite-loop") {
           // Simulates a fiber that doesn't check isShuttingDown
           // but has interruptible points (delay)
@@ -151,18 +152,17 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "propagate exceptions from main program" in {
-    // Note: Raise.run must be INSIDE the async block because boundary/break
-    // cannot cross thread boundaries. The raise happens in a forked virtual thread.
     var capturedError: Option[String] = None
 
     Shutdown.run {
-      Async.runDaemon(timeout = 5.seconds) {
-        val result = Raise.run {
+      val result = Raise.run {
+        Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
+
           Raise.raise("Error from daemon")
           "should not reach here"
         }
-        capturedError = Some(result)
       }
+      capturedError = Some(result)
     }
 
     capturedError shouldBe Some("Error from daemon")
@@ -172,7 +172,7 @@ class AsyncDaemonSpec extends AnyFlatSpec with Matchers {
     val results = new ConcurrentLinkedQueue[String]()
 
     Shutdown.run {
-      Async.runDaemon(timeout = 5.seconds) {
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
         Async.fork("parent") {
           Async.fork("child1") {
             Async.delay(100.millis)
