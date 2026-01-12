@@ -142,6 +142,8 @@ Shutdown.run {
       }
       println("Server stopped accepting work")
     }
+    // For demonstration purposes, initiate a graceful shutdown programmatically
+    Shutdown.initiateShutdown()
   }
 }
 ```
