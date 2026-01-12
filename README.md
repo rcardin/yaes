@@ -360,7 +360,7 @@ For complete documentation including lifecycle details, deadline configuration, 
 
 ### The `Raise` Effect
 
-The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavinly inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
+The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavily inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
 
 Let's see an example:
 
