@@ -278,7 +278,7 @@ private class GracefulShutdownScope(
     try {
       if (subtask.state() == Subtask.State.FAILED && firstException == null) {
         firstException = subtask.exception()
-        super.shutdown()
+        this.shutdown()
       } else if (timeoutExpired.get()) {
         this.shutdown()
       } else if ((subtask eq mainTask) && shutdownInitiated.get()) {
@@ -294,11 +294,9 @@ private class GracefulShutdownScope(
 
   def throwIfFailed[X <: Throwable](esf: Throwable => X): Unit = {
     ensureOwnerAndJoined()
-    // Objects.requireNonNull(esf); TODO
     val exception: Throwable = firstException;
     if (exception != null) {
       val ex: X = esf(exception);
-      // Objects.requireNonNull(ex, "esf returned null"); TODO
       throw ex;
     }
   }
