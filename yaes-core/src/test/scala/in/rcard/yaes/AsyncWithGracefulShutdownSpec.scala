@@ -286,4 +286,18 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     // Hook should only be called once despite multiple initiateShutdown calls
     shutdownCount.get() shouldBe 1
   }
+
+  it should "shutdown cleanly even if no initiateShutdown is called" in {
+    val completed = new AtomicBoolean(false)
+
+    Shutdown.run {
+      Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
+        Async.delay(100.millis)
+        completed.set(true)
+        // No explicit shutdown initiated
+      }
+    }
+
+    completed.get() shouldBe true
+  }
 }

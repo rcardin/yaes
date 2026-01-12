@@ -350,6 +350,8 @@ Shutdown.run {
       while (!Shutdown.isShuttingDown()) {
         // Accept and process work
       }
+
+      Shutdown.initiateShutdown()
       // Cleanup after shutdown
     }
   }

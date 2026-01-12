@@ -281,7 +281,7 @@ private class GracefulShutdownScope(
         this.shutdown()
       } else if (timeoutExpired.get()) {
         this.shutdown()
-      } else if ((subtask eq mainTask) && shutdownInitiated.get()) {
+      } else if ((subtask eq mainTask)) {
         // Main task completed after shutdown initiated - all work is done
         this.shutdown()
       } else {
@@ -675,6 +675,39 @@ object Async {
     def after(duration: Duration): Deadline = duration
   }
 
+  def withGracefulShutdownHandler[A](
+      deadline: Deadline
+  )(using Shutdown): Yaes.Handler[Async.Unsafe, A, A] =
+    new Yaes.Handler[Async.Unsafe, A, A] {
+      override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
+        val async     = new JvmAsync()
+        val loomScope = new GracefulShutdownScope(
+          "yaes-async-with-graceful-shutdown",
+          JvmAsync.namedThreadFactory("yaes-async-with-graceful-shutdown"),
+          inFlightTasksCompletionTimeout = deadline
+        )
+        try {
+
+          Shutdown.onShutdown {
+            loomScope.initiateGracefulShutdown()
+          }
+
+          val mainTask = loomScope.forkMainTask(() => {
+            try {
+              JvmAsync.scope.set(loomScope)
+              program(using new Yaes(async))
+            } finally {
+              JvmAsync.scope.remove()
+            }
+          })
+          loomScope.join().throwIfFailed(identity)
+          mainTask.get()
+        } finally {
+          loomScope.close()
+        }
+      }
+    }
+
   /** Runs an async computation with graceful shutdown support and timeout enforcement.
     *
     * This method wraps an async computation in a [[GracefulShutdownScope]] that coordinates with
@@ -730,38 +763,7 @@ object Async {
     */
   def withGracefulShutdown[A](deadline: Deadline)(block: Async ?=> A): Shutdown ?=> A = {
 
-    def handler[A]: Yaes.Handler[Async.Unsafe, A, A] =
-      new Yaes.Handler[Async.Unsafe, A, A] {
-        override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-          val async     = new JvmAsync()
-          val loomScope = new GracefulShutdownScope(
-            "yaes-async-with-graceful-shutdown",
-            JvmAsync.namedThreadFactory("yaes-async-with-graceful-shutdown"),
-            inFlightTasksCompletionTimeout = deadline
-          )
-          try {
-
-            Shutdown.onShutdown {
-              loomScope.initiateGracefulShutdown()
-            }
-
-            val mainTask = loomScope.forkMainTask(() => {
-              try {
-                JvmAsync.scope.set(loomScope)
-                program(using new Yaes(async))
-              } finally {
-                JvmAsync.scope.remove()
-              }
-            })
-            loomScope.join().throwIfFailed(identity)
-            mainTask.get()
-          } finally {
-            loomScope.close()
-          }
-        }
-      }
-
-    Yaes.handle(block)(using handler)
+    Yaes.handle(block)(using withGracefulShutdownHandler(deadline))
   }
 
   /** A trait representing asynchronous computations.
