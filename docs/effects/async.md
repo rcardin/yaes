@@ -156,6 +156,7 @@ The graceful shutdown lifecycle follows seven steps:
 4. **Grace Period**: Main task continues executing, allowing cleanup code to run while checking `Shutdown.isShuttingDown()`
 5. **Main Task Completion**: When the main task completes, the scope shuts down and cooperatively cancels any remaining forked fibers
 6. **Deadline Enforcement**: If the main task doesn't complete within the deadline, the timeout enforcer triggers and remaining fibers are cancelled
+7. **Completion**: `scope.join()` completes when all fibers finish (or are cancelled)
 
 **Key Distinctions:**
 - **Main Task**: The block passed to `withGracefulShutdown` - tracked separately for completion logic
