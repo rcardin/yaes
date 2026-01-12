@@ -17,7 +17,6 @@ import ju.concurrent.ConcurrentHashMap
 import ju.concurrent.CountDownLatch
 import ju.concurrent.Callable
 import ju.concurrent.atomic.AtomicBoolean
-import ju.concurrent.atomic.AtomicInteger
 import ju.concurrent.locks.ReentrantLock
 
 type Async = Yaes[Async.Unsafe]
@@ -221,20 +220,18 @@ private class GracefulShutdownScope(
   private val shutdownInitiated = new AtomicBoolean(false)
   private val timeoutExpired    = new AtomicBoolean(false)
   private val shutdownLatch     = new CountDownLatch(1)
-  private val activeTasks       = new AtomicInteger(0)
-  private val inFlightTasks     = new AtomicInteger(0)
 
   private val exceptionLock             = new ReentrantLock()
   private var firstException: Throwable = null
 
+  @volatile private var mainTask: Subtask[?] = null
+
   // Fork the fiber that enforces the timeout after shutdown is initiated
-  private val timeoutEnforcer = this.fork(() => {
+  private val timeoutEnforcer = super.fork(() => {
     shutdownLatch.await()
-    if (inFlightTasks.get() > 0) {
-      Thread.sleep(
-        inFlightTasksCompletionTimeout.toMillis
-      )
-    }
+    Thread.sleep(
+      inFlightTasksCompletionTimeout.toMillis
+    )
     timeoutExpired.set(true)
   })
 
@@ -246,44 +243,40 @@ private class GracefulShutdownScope(
     */
   def initiateGracefulShutdown(): Unit = {
     if (shutdownInitiated.compareAndSet(false, true)) {
-      inFlightTasks.set(activeTasks.get() - 1)
       shutdownLatch.countDown()
     }
   }
 
-  /** Increments the in-flight task counter when a new task is forked.
+  /** Forks the main task and stores reference for completion tracking.
     *
-    * Overrides the base `fork` to track all forked tasks.
+    * @param task
+    *   the task to fork
+    * @return
+    *   the subtask representing the forked computation
     */
-  override def fork[U <: Any](task: Callable[? <: U]): Subtask[U] = {
-    activeTasks.incrementAndGet()
-    super.fork(task)
+  def forkMainTask[U](task: Callable[? <: U]): Subtask[U] = {
+    val subtask = super.fork(task)
+    mainTask = subtask
+    subtask
   }
 
-  /** Decrements the in-flight task counter when a task completes.
+  /** Handles task completion with graceful shutdown support.
     *
     * Called by the StructuredTaskScope when a subtask finishes.
     */
   override protected def handleComplete(subtask: Subtask[?]): Unit = {
     exceptionLock.lock()
     try {
-      val activeTasksCount = activeTasks.decrementAndGet()
       if (subtask.state() == Subtask.State.FAILED && firstException == null) {
         firstException = subtask.exception()
-        super.shutdown();
+        super.shutdown()
+      } else if (timeoutExpired.get()) {
+        this.shutdown()
+      } else if ((subtask eq mainTask) && shutdownInitiated.get()) {
+        // Main task completed after shutdown initiated - all work is done
+        this.shutdown()
       } else {
-        if (shutdownInitiated.get()) {
-          val inFlightTasksCount = inFlightTasks.decrementAndGet()
-          if (timeoutExpired.get()) {
-            this.shutdown()
-          } else if (inFlightTasksCount == 0) {
-            this.shutdown()
-          } else {
-            super.handleComplete(subtask)
-          }
-        } else {
-          super.handleComplete(subtask)
-        }
+        super.handleComplete(subtask)
       }
     } finally {
       exceptionLock.unlock()
@@ -739,7 +732,7 @@ object Async {
               loomScope.initiateGracefulShutdown()
             }
 
-            val mainTask = loomScope.fork(() => {
+            val mainTask = loomScope.forkMainTask(() => {
               try {
                 JvmAsync.scope.set(loomScope)
                 program(using new Yaes(async))
