@@ -221,6 +221,7 @@ private class GracefulShutdownScope(
   private val shutdownInitiated = new AtomicBoolean(false)
   private val timeoutExpired    = new AtomicBoolean(false)
   private val shutdownLatch     = new CountDownLatch(1)
+  private val activeTasks       = new AtomicInteger(0)
   private val inFlightTasks     = new AtomicInteger(0)
 
   private val exceptionLock             = new ReentrantLock()
@@ -229,20 +230,12 @@ private class GracefulShutdownScope(
   // Fork the fiber that enforces the timeout after shutdown is initiated
   private val timeoutEnforcer = this.fork(() => {
     shutdownLatch.await()
-    println(s"[${Thread.currentThread().getName}] Shutdown initiated, waiting for timeout...")
-    if (inFlightTasks.get() > 1) {
-      println(
-        s"[${Thread.currentThread().getName}] Waiting up to $inFlightTasksCompletionTimeout for $inFlightTasks in-flight tasks to complete..."
-      )
+    if (inFlightTasks.get() > 0) {
       Thread.sleep(
         inFlightTasksCompletionTimeout.toMillis
       )
-      println(
-        s"[${Thread.currentThread().getName}] Timeout expired, cancelling remaining tasks."
-      )
     }
     timeoutExpired.set(true)
-    println(s"[${Thread.currentThread().getName}] Calling shutdown() to cancel remaining tasks.")
   })
 
   /** Signals that graceful shutdown should begin.
@@ -253,48 +246,17 @@ private class GracefulShutdownScope(
     */
   def initiateGracefulShutdown(): Unit = {
     if (shutdownInitiated.compareAndSet(false, true)) {
+      inFlightTasks.set(activeTasks.get() - 1)
       shutdownLatch.countDown()
     }
   }
-
-  /** Signals the timeout enforcer to wake up without initiating a full shutdown.
-    *
-    * Called when the main task completes naturally. The timeout enforcer will check
-    * `wasShutdownInitiated` to decide whether to wait for the timeout period.
-    */
-  def wakeUpEnforcer(): Unit = {
-    shutdownLatch.countDown()
-  }
-
-  /** Blocks until the latch is signaled or the timeout expires.
-    *
-    * Called from timeout enforcer fiber (inside scope). This allows the enforcer to wait
-    * efficiently without polling until a signal arrives.
-    *
-    * @param timeout
-    *   the maximum time to wait
-    * @param unit
-    *   the time unit of the timeout argument
-    * @return
-    *   true if signaled, false if timeout expired
-    */
-  def awaitSignal(timeout: Long, unit: ju.concurrent.TimeUnit): Boolean = {
-    shutdownLatch.await(timeout, unit)
-  }
-
-  /** Checks if graceful shutdown was explicitly initiated via `Shutdown.initiateShutdown()`.
-    *
-    * @return
-    *   true if shutdown was explicitly initiated
-    */
-  def wasShutdownInitiated: Boolean = shutdownInitiated.get()
 
   /** Increments the in-flight task counter when a new task is forked.
     *
     * Overrides the base `fork` to track all forked tasks.
     */
   override def fork[U <: Any](task: Callable[? <: U]): Subtask[U] = {
-    inFlightTasks.incrementAndGet()
+    activeTasks.incrementAndGet()
     super.fork(task)
   }
 
@@ -305,31 +267,21 @@ private class GracefulShutdownScope(
   override protected def handleComplete(subtask: Subtask[?]): Unit = {
     exceptionLock.lock()
     try {
-      if (
-        subtask.state() == Subtask.State.FAILED
-        && firstException == null
-      ) {
+      val activeTasksCount = activeTasks.decrementAndGet()
+      if (subtask.state() == Subtask.State.FAILED && firstException == null) {
         firstException = subtask.exception()
         super.shutdown();
       } else {
-
-        val inFlightTasksCount = inFlightTasks.decrementAndGet()
-        if (shutdownInitiated.get() && timeoutExpired.get()) {
-          println(
-            s"[${Thread.currentThread().getName}] Timeout expired and shutdown initiated, shutting down."
-          )
-          // All tasks completed after timeout expired - safe to shutdown
-          this.shutdown()
-        } else if (shutdownInitiated.get() && inFlightTasksCount == 1) {
-          println(
-            s"[${Thread.currentThread().getName}] Last task completed after shutdown initiated."
-          )
-          // All tasks completed before timeout expired - safe to shutdown
-          this.shutdown()
+        if (shutdownInitiated.get()) {
+          val inFlightTasksCount = inFlightTasks.decrementAndGet()
+          if (timeoutExpired.get()) {
+            this.shutdown()
+          } else if (inFlightTasksCount == 0) {
+            this.shutdown()
+          } else {
+            super.handleComplete(subtask)
+          }
         } else {
-          println(
-            s"[${Thread.currentThread().getName}] Task completed, $inFlightTasksCount in-flight tasks remaining."
-          )
           super.handleComplete(subtask)
         }
       }
@@ -353,13 +305,6 @@ private class GracefulShutdownScope(
     super.join()
     this
   }
-
-  /** Returns the current number of in-flight tasks.
-    *
-    * @return
-    *   the number of tasks currently running (excluding the timeout enforcer)
-    */
-  def inFlightCount: Int = inFlightTasks.get()
 }
 
 /** Companion object for [[Async]] providing utility methods and constructors.

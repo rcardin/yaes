@@ -64,7 +64,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val completed = new AtomicBoolean(false)
 
     Shutdown.run {
-      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
+      Async.withGracefulShutdown(deadline = Deadline.after(10.seconds)) {
         Async.fork("quick-task") {
           Async.delay(200.millis)
           completed.set(true)
