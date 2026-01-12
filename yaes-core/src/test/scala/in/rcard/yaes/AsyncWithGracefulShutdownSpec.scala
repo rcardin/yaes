@@ -193,4 +193,97 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
 
     results.toArray should contain allOf ("parent", "child1", "child2")
   }
+
+  it should "wait for forked fibers within deadline after shutdown initiated" in {
+    val mainCompleted = new AtomicBoolean(false)
+    val fiberCompleted = new AtomicBoolean(false)
+
+    Shutdown.run {
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
+        Async.fork("background") {
+          // Fiber takes 200ms - well within the 5 second deadline
+          Async.delay(200.millis)
+          fiberCompleted.set(true)
+        }
+
+        // Initiate shutdown immediately, then wait in main task
+        // The main task must not exit until fibers complete (or deadline)
+        Shutdown.initiateShutdown()
+        mainCompleted.set(true)
+
+        // Main task waits for fiber to finish
+        Async.delay(500.millis)
+      }
+    }
+
+    // Both should complete - main task waited for fiber
+    mainCompleted.get() shouldBe true
+    fiberCompleted.get() shouldBe true
+  }
+
+  it should "handle shutdown with no forked fibers" in {
+    val completed = new AtomicBoolean(false)
+
+    Shutdown.run {
+      Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
+        // No Async.fork calls - just main task work
+        Async.delay(100.millis)
+        completed.set(true)
+        Shutdown.initiateShutdown()
+      }
+    }
+
+    completed.get() shouldBe true
+  }
+
+  it should "propagate exceptions from forked fibers" in {
+    var caughtException: Throwable = null
+
+    try {
+      Shutdown.run {
+        Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
+          Async.fork("failing-fiber") {
+            Async.delay(100.millis)
+            throw new RuntimeException("Fiber failed!")
+          }
+
+          // Main task waits longer than the fiber
+          Async.delay(500.millis)
+        }
+      }
+    } catch {
+      case e: RuntimeException => caughtException = e
+    }
+
+    caughtException should not be null
+    caughtException.getMessage shouldBe "Fiber failed!"
+  }
+
+  it should "handle multiple calls to initiateShutdown idempotently" in {
+    val shutdownCount = new AtomicInteger(0)
+
+    Shutdown.run {
+      Shutdown.onShutdown {
+        shutdownCount.incrementAndGet()
+      }
+
+      Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
+        Async.fork("worker") {
+          while (!Shutdown.isShuttingDown()) {
+            Async.delay(50.millis)
+          }
+        }
+
+        Async.delay(100.millis)
+
+        // Call initiateShutdown multiple times
+        Shutdown.initiateShutdown()
+        Shutdown.initiateShutdown()
+        Shutdown.initiateShutdown()
+      }
+    }
+
+    // Hook should only be called once despite multiple initiateShutdown calls
+    shutdownCount.get() shouldBe 1
+  }
 }
