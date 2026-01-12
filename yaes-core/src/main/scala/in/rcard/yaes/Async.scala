@@ -199,17 +199,26 @@ object JvmAsync {
   * This scope extends the base `StructuredTaskScope` to provide coordination between external
   * shutdown signals (from the [[Shutdown]] effect) and internal timeout enforcement.
   *
-  * **Design Notes:**
+  * **Key Features:**
+  *   - Tracks the main task separately from other forked fibers
   *   - Uses `CountDownLatch` for signaling between external thread (Shutdown hook) and internal
   *     timeout enforcer fiber
-  *   - `requestGracefulShutdown()` can be called from external threads safely
-  *   - `awaitShutdownSignal()` blocks the timeout enforcer until shutdown is requested
+  *   - `initiateGracefulShutdown()` can be called from external threads safely
+  *   - When main task completes after shutdown is initiated, the scope shuts down immediately
+  *   - If the timeout expires before main task completion, remaining fibers are cancelled
+  *   - Fail-fast behavior: any fiber exception triggers immediate scope shutdown
+  *
+  * **Thread Safety:**
+  *   - `initiateGracefulShutdown()` is thread-safe and idempotent
+  *   - Exception handling uses `ReentrantLock` to ensure only the first exception is captured
   *   - Only fibers inside the scope call `shutdown()` - respects structured concurrency
   *
   * @param name
   *   the name for threads created by this scope
   * @param factory
   *   the thread factory for creating virtual threads
+  * @param inFlightTasksCompletionTimeout
+  *   the maximum time to wait for the main task to complete after shutdown is initiated
   */
 private class GracefulShutdownScope(
     name: String,
@@ -668,24 +677,29 @@ object Async {
     def after(duration: Duration): Deadline = duration
   }
 
-  /** Runs daemon fibers that continue until explicit shutdown with timeout enforcement.
+  /** Runs an async computation with graceful shutdown support and timeout enforcement.
     *
-    * Unlike [[run]], which completes when the block exits, `runDaemon` is designed for long-running
-    * processes (like servers) that run indefinitely until shutdown is requested via the
-    * [[Shutdown]] effect.
+    * This method wraps an async computation in a [[GracefulShutdownScope]] that coordinates with
+    * the [[Shutdown]] effect. When shutdown is initiated, the scope allows in-flight work to
+    * complete gracefully within the specified deadline before cancelling remaining fibers.
     *
-    * **Timeout Enforcement:** After shutdown is initiated, fibers have `timeout` duration to
-    * complete gracefully. If work is still running after the timeout, remaining fibers are
-    * cancelled via cooperative interruption (`StructuredTaskScope.shutdown()`).
+    * **Behavior:**
+    *   - The main task (the `block` parameter) runs normally within the async scope
+    *   - When `Shutdown.initiateShutdown()` is called, the scope is notified via the registered
+    *     shutdown hook
+    *   - After the main task completes (post-shutdown), the scope shuts down immediately
+    *   - If the main task doesn't complete within the deadline after shutdown is initiated, the
+    *     timeout enforcer triggers and remaining fibers are cancelled via cooperative interruption
+    *   - Any forked fibers that fail with an exception cause immediate scope shutdown (fail-fast)
     *
     * **Lifecycle:**
-    *   1. Fibers spawn and run indefinitely
-    *   1. Shutdown initiated (JVM hook or `Shutdown.initiateShutdown()`)
-    *   1. Shutdown hook triggers `scope.requestGracefulShutdown()`
-    *   1. Timeout enforcer wakes up and waits for timeout duration
-    *   1. If still running after timeout, calls `scope.shutdown()` to cancel remaining fibers
+    *   1. Main task and any forked fibers start running
+    *   1. Shutdown is initiated (via JVM hook or `Shutdown.initiateShutdown()`)
+    *   1. Shutdown hook triggers `scope.initiateGracefulShutdown()`
+    *   1. Main task continues running, allowing cleanup code to execute
+    *   1. When main task completes, scope shuts down and cancels remaining fibers
+    *   1. If deadline expires before main task completes, remaining fibers are cancelled
     *   1. `scope.join()` completes when all fibers finish (or are cancelled)
-    *   1. Cleanup happens (Resource effect, finally blocks)
     *
     * **Integration with Shutdown Effect:** This method returns `Shutdown ?=> A`, meaning it
     * requires a Shutdown context. It automatically registers a hook with `Shutdown.onShutdown` to
@@ -694,26 +708,27 @@ object Async {
     * Example:
     * {{{
     * Shutdown.run {
-    *   Async.runDaemon(timeout = 30.seconds) {
-    *     Async.fork("server") {
+    *   Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+    *     val serverFiber = Async.fork("server") {
     *       while (!Shutdown.isShuttingDown()) {
     *         handleRequest()
     *       }
-    *       // Graceful cleanup
+    *       // Graceful cleanup after shutdown initiated
     *     }
+    *     serverFiber.join()
     *   }
     * }
-    * // Blocks until shutdown initiated and all fibers complete/timeout
     * }}}
     *
-    * @param timeout
-    *   Maximum time to wait for graceful shutdown before cancelling fibers
+    * @param deadline
+    *   Maximum time to wait for the main task to complete after shutdown is initiated before
+    *   cancelling remaining fibers
     * @param block
-    *   The daemon computation to run, with access to both Async and Shutdown effects
+    *   The async computation to run
     * @tparam A
-    *   The result type of the daemon computation
+    *   The result type of the computation
     * @return
-    *   A program requiring Shutdown context that blocks until shutdown completes
+    *   A program requiring Shutdown context that blocks until the computation completes
     */
   def withGracefulShutdown[A](deadline: Deadline)(block: Async ?=> A): Shutdown ?=> A = {
 
