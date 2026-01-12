@@ -294,10 +294,10 @@ private class GracefulShutdownScope(
 
   def throwIfFailed[X <: Throwable](esf: Throwable => X): Unit = {
     ensureOwnerAndJoined()
-    val exception: Throwable = firstException;
+    val exception: Throwable = firstException
     if (exception != null) {
-      val ex: X = esf(exception);
-      throw ex;
+      val ex: X = esf(exception)
+      throw ex
     }
   }
 
