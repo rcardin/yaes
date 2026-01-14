@@ -486,6 +486,6 @@ def validateUser(email: String, age: Int)(using Raise[ValidationError]): User = 
 ## Best Practices
 
 - Use specific error types rather than generic exceptions
-- Combine with other effects like `IO` for comprehensive error handling
+- Combine with other effects like `Sync` for comprehensive error handling
 - Handle errors at appropriate boundaries in your application
 - Use union types for simple error handling, `Either` for more complex scenarios
