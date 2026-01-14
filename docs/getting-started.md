@@ -21,7 +21,7 @@ The library is only available for **Scala 3** and is currently in an experimenta
 
 ### Modules
 
-- **yaes-core**: Essential effects for functional programming (IO, Async, Raise, etc.)
+- **yaes-core**: Essential effects for functional programming (Sync, Async, Raise, etc.)
 - **yaes-data**: Functional data structures that work with effects (Flow, etc.)
 
 ## Your First Effect

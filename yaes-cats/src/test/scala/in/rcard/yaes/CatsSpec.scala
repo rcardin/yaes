@@ -1,33 +1,33 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.{IO => YaesIO, Raise}
+import in.rcard.yaes.{Sync => YaesSync, Raise}
 import in.rcard.yaes.interop.catseffect
 import in.rcard.yaes.syntax.catseffect.*
 import _root_.cats.effect.{IO => CatsIO}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scala.concurrent.ExecutionContext.Implicits.global // Needed for YaesIO.run
+import scala.concurrent.ExecutionContext.Implicits.global // Needed for YaesSync.run
 import _root_.cats.effect.unsafe.implicits.global as catsRuntime // Needed for CatsIO.unsafeRunSync
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class CatsSpec extends AnyFlatSpec with Matchers {
 
-  "Cats" should "convert simple YAES IO to Cats Effect IO" in {
-    val yaesProgram: YaesIO ?=> Int = YaesIO {
+  "Cats" should "convert simple YAES Sync to Cats Effect IO" in {
+    val yaesProgram: YaesSync ?=> Int = YaesSync {
       42
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
     val result = catsIO.unsafeRunSync()
 
     result shouldBe 42
   }
 
-  it should "convert Cats Effect IO to YAES IO" in {
+  it should "convert Cats Effect IO to YAES Sync" in {
     val catsIO = CatsIO.pure(42)
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value
       }
@@ -37,12 +37,12 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     outcome shouldBe Right(42)
   }
 
-  it should "preserve errors when converting YAES IO to Cats IO" in {
-    val yaesProgram: YaesIO ?=> Int = YaesIO {
+  it should "preserve errors when converting YAES Sync to Cats IO" in {
+    val yaesProgram: YaesSync ?=> Int = YaesSync {
       throw new RuntimeException("YAES error")
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
 
     val exception = intercept[RuntimeException] {
       catsIO.unsafeRunSync()
@@ -50,10 +50,10 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     exception.getMessage shouldBe "YAES error"
   }
 
-  it should "preserve errors when converting Cats IO to YAES IO" in {
+  it should "preserve errors when converting Cats IO to YAES Sync" in {
     val catsIO = CatsIO.raiseError[Int](new RuntimeException("Cats error"))
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value
       }
@@ -67,11 +67,11 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "handle side effects in YAES to Cats conversion" in {
     var sideEffect = 0
 
-    val yaesProgram: YaesIO ?=> Unit = YaesIO {
+    val yaesProgram: YaesSync ?=> Unit = YaesSync {
       sideEffect += 1
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
     catsIO.unsafeRunSync()
 
     sideEffect shouldBe 1
@@ -84,7 +84,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       sideEffect += 1
     }
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value
       }
@@ -94,10 +94,10 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     sideEffect shouldBe 1
   }
 
-  it should "support timeout when converting Cats IO to YAES IO" in {
+  it should "support timeout when converting Cats IO to YAES Sync" in {
     val slowCatsIO = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         slowCatsIO.value(100.millis)
       }
@@ -109,12 +109,12 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "compose multiple conversions" in {
-    val originalYaes: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO { 21 }
+    val originalYaes: (YaesSync, Raise[Throwable]) ?=> Int = YaesSync { 21 }
 
     // YAES -> Cats -> YAES -> Cats
-    val catsIO = catseffect.blockingIO(originalYaes).map(_ * 2)
+    val catsIO = catseffect.blockingSync(originalYaes).map(_ * 2)
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value
       }
@@ -127,12 +127,12 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "handle complex computations with both side effects and values" in {
     var counter = 0
 
-    val yaesProgram: (YaesIO, Raise[Throwable]) ?=> String = YaesIO {
+    val yaesProgram: (YaesSync, Raise[Throwable]) ?=> String = YaesSync {
       counter += 1
       s"Count: $counter"
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
       .flatMap { msg =>
         CatsIO {
           counter += 10
@@ -140,7 +140,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
         }
       }
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value
       }
@@ -154,13 +154,13 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "defer execution until Cats IO is run (referential transparency)" in {
     var sideEffect = 0
 
-    val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
+    val yaesProgram: (YaesSync, Raise[Throwable]) ?=> Int = YaesSync {
       sideEffect += 1
       42
     }
 
     // Creating the Cats IO should NOT execute the YAES program
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
     sideEffect shouldBe 0 // Side effect should not have happened yet!
 
     // Only when we run the Cats IO should the side effect occur
@@ -172,12 +172,12 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "allow multiple executions of the same Cats IO (referential transparency)" in {
     var counter = 0
 
-    val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
+    val yaesProgram: (YaesSync, Raise[Throwable]) ?=> Int = YaesSync {
       counter += 1
       counter
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
 
     // Each execution should increment the counter
     val result1 = catsIO.unsafeRunSync()
@@ -190,10 +190,10 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     result3 shouldBe 3
   }
 
-  "Extension methods" should "convert Cats Effect IO to YAES IO using fluent syntax" in {
+  "Extension methods" should "convert Cats Effect IO to YAES Sync using fluent syntax" in {
     val catsIO = CatsIO.pure(42)
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value  // Extension method
       }
@@ -206,7 +206,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "support timeout using fluent syntax" in {
     val slowCatsIO = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         slowCatsIO.value(100.millis)  // Extension method
       }
@@ -218,7 +218,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "allow fluent chaining of Cats operations before conversion" in {
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         CatsIO.pure(21)
           .map(_ * 2)
@@ -234,7 +234,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "preserve errors when using extension method" in {
     val catsIO = CatsIO.raiseError[Int](new RuntimeException("Extension error"))
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value  // Extension method
       }
@@ -253,7 +253,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       sideEffect
     }
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value  // Extension method
       }
@@ -273,7 +273,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
       result <- CatsIO.pure(counter)
     } yield result
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value  // Extension method
       }
@@ -284,10 +284,10 @@ class CatsSpec extends AnyFlatSpec with Matchers {
     counter shouldBe 11
   }
 
-  "Raise integration" should "handle errors with Raise.either when converting Cats IO to YAES IO" in {
+  "Raise integration" should "handle errors with Raise.either when converting Cats IO to YAES Sync" in {
     val catsIO = CatsIO.raiseError[Int](new RuntimeException("Error in Cats"))
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.either {
         catsIO.value
       }
@@ -302,7 +302,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "raise TimeoutException via Raise when timeout occurs" in {
     val slowCatsIO = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.fold(
         slowCatsIO.value(100.millis)
       )(
@@ -317,13 +317,13 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "handle Raise[Throwable] in yaesProgram when converting to Cats IO" in {
-    val yaesProgram: (YaesIO, Raise[Throwable]) ?=> String = YaesIO {
+    val yaesProgram: (YaesSync, Raise[Throwable]) ?=> String = YaesSync {
       Raise.catching {
         throw new RuntimeException("YAES raised error")
       } { ex => ex }
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
 
     val exception = intercept[RuntimeException] {
       catsIO.unsafeRunSync()
@@ -332,13 +332,13 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "successfully execute when Raise[Throwable] is in context but no error occurs" in {
-    val yaesProgram: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
+    val yaesProgram: (YaesSync, Raise[Throwable]) ?=> Int = YaesSync {
       Raise.catching {
         42
       } { ex => ex }
     }
 
-    val catsIO = catseffect.blockingIO(yaesProgram)
+    val catsIO = catseffect.blockingSync(yaesProgram)
     val result = catsIO.unsafeRunSync()
 
     result shouldBe 42
@@ -347,7 +347,7 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   it should "support Raise.recover for default values" in {
     val catsIO = CatsIO.raiseError[Int](new RuntimeException("Error"))
 
-    val result = YaesIO.run {
+    val result = YaesSync.run {
       Raise.recover {
         catsIO.value
       } { _ => 0 }  // Default value
@@ -357,12 +357,12 @@ class CatsSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "compose Raise handlers across multiple conversions" in {
-    val originalYaes: (YaesIO, Raise[Throwable]) ?=> Int = YaesIO {
+    val originalYaes: (YaesSync, Raise[Throwable]) ?=> Int = YaesSync {
       Raise.catching { 42 } { ex => ex }
     }
 
-    val result = YaesIO.run {
-      val catsIO = catseffect.blockingIO(originalYaes).map(_ * 2)
+    val result = YaesSync.run {
+      val catsIO = catseffect.blockingSync(originalYaes).map(_ * 2)
       Raise.either {
         catsIO.value
       }

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 λÆS (Yet Another Effect System) is an experimental effect system for Scala 3 inspired by Algebraic Effects. It uses Scala 3 context parameters and context functions to provide modular, composable effect management with deferred execution.
 
 **Key Concepts:**
-- Effects describe side effects in a type-safe way (e.g., `Random`, `Raise[E]`, `IO`, `Async`)
+- Effects describe side effects in a type-safe way (e.g., `Random`, `Raise[E]`, `Sync`, `Async`)
 - Effects are managed via **context parameters** (`using` clauses)
 - Execution is **deferred** until handlers run the effects
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
@@ -97,7 +97,7 @@ The project consists of three main modules:
 1. **yaes-core** (`yaes-core/src/main/scala/in/rcard/yaes/`)
    - Contains all effect implementations
    - Depends on `yaes-data`
-   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `IO.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `Shutdown.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
+   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `Sync.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `Shutdown.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
 
 2. **yaes-data** (`yaes-data/src/main/scala/in/rcard/yaes/`)
    - Contains data structures for use with effects
@@ -158,15 +158,15 @@ object EffectName {
 
 **Handler Order Matters:**
 - When composing multiple effects, handlers must be applied in the correct nesting order
-- Example in `YaesApp`: IO (outermost) → Output → Input → Random → Clock → System → Log (innermost)
+- Example in `YaesApp`: Sync (outermost) → Output → Input → Random → Clock → System → Log (innermost)
 - Each handler removes one effect from the context, unwrapping the computation step by step
 
 ### Key Implementation Details
 
-**Virtual Threads (IO Effect):**
-- The `IO` effect uses Java's Virtual Thread machinery via `Executors.newVirtualThreadPerTaskExecutor()`
+**Virtual Threads (Sync Effect):**
+- The `Sync` effect uses Java's Virtual Thread machinery via `Executors.newVirtualThreadPerTaskExecutor()`
 - Creates a new virtual thread for each effectful computation
-- Provides both non-blocking (`IO.run`) and blocking (`IO.runBlocking`) handlers
+- Provides both non-blocking (`Sync.run`) and blocking (`Sync.runBlocking`) handlers
 
 **Structured Concurrency (Async Effect):**
 - Built on Java Structured Concurrency (requires Java 21+)
@@ -313,7 +313,7 @@ The `State` effect is not thread-safe. Use appropriate synchronization (e.g., `j
 Canceling a fiber via `fiber.cancel()` does not immediately terminate it. The fiber must reach an interruptible operation (like `Async.delay`) to be canceled.
 
 ### Handler Execution Breaks Referential Transparency
-Running handlers (`IO.run`, `Raise.run`, etc.) executes effects and breaks referential transparency. Handlers should only be used at the edges of the application (e.g., in `main` or `YaesApp`).
+Running handlers (`Sync.run`, `Raise.run`, etc.) executes effects and breaks referential transparency. Handlers should only be used at the edges of the application (e.g., in `main` or `YaesApp`).
 
 ### Java 24 Requirement
 The library requires Java 24+ for Virtual Threads and Structured Concurrency features. Ensure your development environment has Java 24 or higher.
@@ -344,7 +344,7 @@ val result = OuterEffect.run {
 ```
 
 ### Naming Conventions
-- Effect types use PascalCase: `IO`, `Async`, `Raise[E]`
+- Effect types use PascalCase: `Sync`, `Async`, `Raise[E]`
 - Effect DSL methods use camelCase: `Random.nextInt`, `Raise.raise`, `Async.fork`
 - Handlers are typically named `run`, with variants like `runBlocking`, `either`, `option`
 

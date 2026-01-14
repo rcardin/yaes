@@ -103,7 +103,7 @@ The library is only available for Scala 3 and is currently in an experimental st
 
 The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
 
-- [`IO`](#the-io-effect): Allows for running side-effecting operations.
+- [`Sync`](#the-sync-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
 - [`Resource`](#the-resource-effect): Allows for automatic resource management with guaranteed cleanup.
@@ -150,20 +150,20 @@ object MyApp extends YaesApp {
 
 For more details, see the [YaesApp documentation](docs/yaes-app.md).
 
-### The `IO` Effect
+### The `Sync` Effect
 
-The `IO` effect allows for running side-effecting operations:
+The `Sync` effect allows for running side-effecting operations:
 
 ```scala 3
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 case class User(name: String)
 
-def saveUser(user: User)(using IO): Long =
+def saveUser(user: User)(using Sync): Long =
   throw new RuntimeException("Read timed out")
 ```
 
-The above code can throw an uncontrolled exception if the connection with the database times out. The generic `IO` effect lift the function in the world of the effectful computations, making it referentially transparent. It means that everything that is not referentially transparent should be defined using the `IO` effect. In fact, the `IO` effect provides a guard rail to uncontrolled exceptions since its handler returns always a monad that wraps the result of the effectful computation.
+The above code can throw an uncontrolled exception if the connection with the database times out. The generic `Sync` effect lift the function in the world of the effectful computations, making it referentially transparent. It means that everything that is not referentially transparent should be defined using the `Sync` effect. In fact, the `Sync` effect provides a guard rail to uncontrolled exceptions since its handler returns always a monad that wraps the result of the effectful computation.
 
 
 To run the effectful computation, we can use the provided handlers.
@@ -171,12 +171,12 @@ To run the effectful computation, we can use the provided handlers.
 The first handler doesn't block the current thread:
 
 ```scala 3
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
-val result: Future[Long] = IO.run {
+val result: Future[Long] = Sync.run {
   saveUser(User("John"))
 }
 ```
@@ -184,20 +184,20 @@ val result: Future[Long] = IO.run {
 The library also provides a blocking handler that will block the current thread until the effectful computation is finished:
 
 ```scala 3
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
-val result: Long = IO.blockingRun {
+val result: Long = Sync.blockingRun {
   saveUser(User("John"))
 }
 ```
 
-Please, be aware that running an `IO` effectful computation both using the `IO.run` and `IO.blockingRun` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
+Please, be aware that running a `Sync` effectful computation both using the `Sync.run` and `Sync.blockingRun` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
 
-The default `IO` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
+The default `Sync` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
 
 ### The `Async` Effect
 
@@ -244,7 +244,7 @@ val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
 
 The above code shows another important aspect of the λÆS library. We can handle an effect eliminating it from the list of effects one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
 
-The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
+The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `Sync` effect if you think the effectful computation can throw any exception.
 
 #### Structured Concurrency
 
