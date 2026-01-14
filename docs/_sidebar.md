@@ -4,7 +4,7 @@
 
 * **Effects**
   * [Overview](effects/index.md)
-  * [IO](effects/io.md)
+  * [Sync](effects/sync.md)
   * [Async](effects/async.md)
   * [Raise](effects/raise.md)
   * [State](effects/state.md)

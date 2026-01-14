@@ -5,7 +5,7 @@
 
 ## Core Effects
 
-### [IO Effect](io.html)
+### [Sync Effect](sync.html)
 Manages side-effecting operations with referential transparency.
 
 ### [Async Effect](async.html) 
