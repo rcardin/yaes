@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Execution is **deferred** until handlers run the effects
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
 
-**Current Version:** 0.11.0
+**Current Version:** 0.12.0
 **Scala Version:** 3.7.4
 **Java Requirement:** Java 24+ (for Virtual Threads and Structured Concurrency)
 
