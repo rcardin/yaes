@@ -333,9 +333,36 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 - `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 
+#### Graceful Shutdown Integration
+
+For long-running applications and daemon processes, the `Async.withGracefulShutdown` handler provides automatic shutdown coordination with the `Shutdown` effect. This handler ensures your application can cleanly terminate concurrent operations within a specified deadline.
+
+When shutdown is initiated (either via JVM signals like SIGTERM/SIGINT or programmatically), the handler gives your main task a deadline to complete cleanup operations. If the deadline expires, remaining fibers are cooperatively cancelled. This prevents hanging shutdowns while allowing in-flight work to complete gracefully.
+
+```scala
+import in.rcard.yaes.{Async, Shutdown}
+import in.rcard.yaes.Async.Deadline
+import scala.concurrent.duration.*
+
+Shutdown.run {
+  Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+    val serverFiber = Async.fork("server") {
+      while (!Shutdown.isShuttingDown()) {
+        // Accept and process work
+      }
+
+      Shutdown.initiateShutdown()
+      // Cleanup after shutdown
+    }
+  }
+}
+```
+
+For complete documentation including lifecycle details, deadline configuration, and practical examples, see [Async Effect - Graceful Shutdown](https://rcardin.github.io/yaes/effects/async.html#graceful-shutdown-with-async).
+
 ### The `Raise` Effect
 
-The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavinly inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
+The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavily inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
 
 Let's see an example:
 

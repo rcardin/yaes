@@ -14,6 +14,10 @@ import ju.concurrent.SynchronousQueue
 import ju.concurrent.ThreadFactory
 import ju.function.Consumer
 import ju.concurrent.ConcurrentHashMap
+import ju.concurrent.CountDownLatch
+import ju.concurrent.Callable
+import ju.concurrent.atomic.AtomicBoolean
+import ju.concurrent.locks.ReentrantLock
 
 type Async = Yaes[Async.Unsafe]
 
@@ -187,6 +191,119 @@ object JvmAsync {
 
   private[yaes] def namedThreadFactory(name: String): ThreadFactory = {
     Thread.ofVirtual().name(name).factory()
+  }
+}
+
+/** A StructuredTaskScope that supports graceful shutdown with timeout enforcement.
+  *
+  * This scope extends the base `StructuredTaskScope` to provide coordination between external
+  * shutdown signals (from the [[Shutdown]] effect) and internal timeout enforcement.
+  *
+  * **Key Features:**
+  *   - Tracks the main task separately from other forked fibers
+  *   - Uses `CountDownLatch` for signaling between external thread (Shutdown hook) and internal
+  *     timeout enforcer fiber
+  *   - `initiateGracefulShutdown()` can be called from external threads safely
+  *   - When main task completes after shutdown is initiated, the scope shuts down immediately
+  *   - If the timeout expires before main task completion, remaining fibers are cancelled
+  *   - Fail-fast behavior: any fiber exception triggers immediate scope shutdown
+  *
+  * **Thread Safety:**
+  *   - `initiateGracefulShutdown()` is thread-safe and idempotent
+  *   - Exception handling uses `ReentrantLock` to ensure only the first exception is captured
+  *   - Only fibers inside the scope call `shutdown()` - respects structured concurrency
+  *
+  * @param name
+  *   the name for threads created by this scope
+  * @param factory
+  *   the thread factory for creating virtual threads
+  * @param inFlightTasksCompletionTimeout
+  *   the maximum time to wait for the main task to complete after shutdown is initiated
+  */
+private class GracefulShutdownScope(
+    name: String,
+    factory: ThreadFactory,
+    private val inFlightTasksCompletionTimeout: Duration
+) extends StructuredTaskScope[Any](name, factory) {
+
+  private val shutdownInitiated = new AtomicBoolean(false)
+  private val timeoutExpired    = new AtomicBoolean(false)
+  private val shutdownLatch     = new CountDownLatch(1)
+
+  private val exceptionLock             = new ReentrantLock()
+  private var firstException: Throwable = null
+
+  @volatile private var mainTask: Subtask[?] = null
+
+  // Fork the fiber that enforces the timeout after shutdown is initiated
+  private val timeoutEnforcer = super.fork(() => {
+    shutdownLatch.await()
+    Thread.sleep(
+      inFlightTasksCompletionTimeout.toMillis
+    )
+    timeoutExpired.set(true)
+  })
+
+  /** Signals that graceful shutdown should begin.
+    *
+    * Called from the Shutdown effect hook when `Shutdown.initiateShutdown()` is invoked. This
+    * method is thread-safe and idempotent. It sets `shutdownInitiated` to true and counts down the
+    * latch to wake up the timeout enforcer.
+    */
+  def initiateGracefulShutdown(): Unit = {
+    if (shutdownInitiated.compareAndSet(false, true)) {
+      shutdownLatch.countDown()
+    }
+  }
+
+  /** Forks the main task and stores reference for completion tracking.
+    *
+    * @param task
+    *   the task to fork
+    * @return
+    *   the subtask representing the forked computation
+    */
+  def forkMainTask[U](task: Callable[? <: U]): Subtask[U] = {
+    val subtask = super.fork(task)
+    mainTask = subtask
+    subtask
+  }
+
+  /** Handles task completion with graceful shutdown support.
+    *
+    * Called by the StructuredTaskScope when a subtask finishes.
+    */
+  override protected def handleComplete(subtask: Subtask[?]): Unit = {
+    exceptionLock.lock()
+    try {
+      if (subtask.state() == Subtask.State.FAILED && firstException == null) {
+        firstException = subtask.exception()
+        this.shutdown()
+      } else if (timeoutExpired.get()) {
+        this.shutdown()
+      } else if ((subtask eq mainTask)) {
+        // Main task completed after shutdown initiated - all work is done
+        this.shutdown()
+      } else {
+        super.handleComplete(subtask)
+      }
+    } finally {
+      exceptionLock.unlock()
+    }
+  }
+
+  def throwIfFailed[X <: Throwable](esf: Throwable => X): Unit = {
+    ensureOwnerAndJoined()
+    val exception: Throwable = firstException
+    if (exception != null) {
+      val ex: X = esf(exception)
+      throw ex
+    }
+  }
+
+  override def join(): GracefulShutdownScope = {
+    super.join()
+    this
   }
 }
 
@@ -552,6 +669,103 @@ object Async {
         }
       }
     }
+
+  opaque type Deadline = Duration
+  object Deadline {
+    def after(duration: Duration): Deadline = duration
+  }
+
+  def withGracefulShutdownHandler[A](
+      deadline: Deadline
+  )(using Shutdown): Yaes.Handler[Async.Unsafe, A, A] =
+    new Yaes.Handler[Async.Unsafe, A, A] {
+      override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
+        val async     = new JvmAsync()
+        val loomScope = new GracefulShutdownScope(
+          "yaes-async-with-graceful-shutdown",
+          JvmAsync.namedThreadFactory("yaes-async-with-graceful-shutdown"),
+          inFlightTasksCompletionTimeout = deadline
+        )
+        try {
+
+          Shutdown.onShutdown {
+            loomScope.initiateGracefulShutdown()
+          }
+
+          val mainTask = loomScope.forkMainTask(() => {
+            try {
+              JvmAsync.scope.set(loomScope)
+              program(using new Yaes(async))
+            } finally {
+              JvmAsync.scope.remove()
+            }
+          })
+          loomScope.join().throwIfFailed(identity)
+          mainTask.get()
+        } finally {
+          loomScope.close()
+        }
+      }
+    }
+
+  /** Runs an async computation with graceful shutdown support and timeout enforcement.
+    *
+    * This method wraps an async computation in a [[GracefulShutdownScope]] that coordinates with
+    * the [[Shutdown]] effect. When shutdown is initiated, the scope allows in-flight work to
+    * complete gracefully within the specified deadline before cancelling remaining fibers.
+    *
+    * **Behavior:**
+    *   - The main task (the `block` parameter) runs normally within the async scope
+    *   - When `Shutdown.initiateShutdown()` is called, the scope is notified via the registered
+    *     shutdown hook
+    *   - When the main task completes, the scope shuts down immediately and cancels remaining
+    *     fibers
+    *   - If the main task doesn't complete within the deadline after shutdown is initiated, the
+    *     timeout enforcer triggers and remaining fibers are cancelled via cooperative interruption
+    *   - Any forked fibers that fail with an exception cause immediate scope shutdown (fail-fast)
+    *
+    * **Lifecycle:**
+    *   1. Main task and any forked fibers start running
+    *   1. Shutdown is initiated (via JVM hook or `Shutdown.initiateShutdown()`)
+    *   1. Shutdown hook triggers `scope.initiateGracefulShutdown()`
+    *   1. Main task continues running, allowing cleanup code to execute
+    *   1. When main task completes, scope shuts down and cancels remaining fibers
+    *   1. If deadline expires before main task completes, remaining fibers are cancelled
+    *   1. `scope.join()` completes when all fibers finish (or are cancelled)
+    *
+    * **Integration with Shutdown Effect:** This method returns `Shutdown ?=> A`, meaning it
+    * requires a Shutdown context. It automatically registers a hook with `Shutdown.onShutdown` to
+    * trigger graceful shutdown when the Shutdown effect transitions to shutting down state.
+    *
+    * Example:
+    * {{{
+    * Shutdown.run {
+    *   Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+    *     val serverFiber = Async.fork("server") {
+    *       while (!Shutdown.isShuttingDown()) {
+    *         handleRequest()
+    *       }
+    *       // Graceful cleanup after shutdown initiated
+    *     }
+    *     serverFiber.join()
+    *   }
+    * }
+    * }}}
+    *
+    * @param deadline
+    *   Maximum time to wait for the main task to complete after shutdown is initiated before
+    *   cancelling remaining fibers
+    * @param block
+    *   The async computation to run
+    * @tparam A
+    *   The result type of the computation
+    * @return
+    *   A program requiring Shutdown context that blocks until the computation completes
+    */
+  def withGracefulShutdown[A](deadline: Deadline)(block: Async ?=> A): Shutdown ?=> A = {
+
+    Yaes.handle(block)(using withGracefulShutdownHandler(deadline))
+  }
 
   /** A trait representing asynchronous computations.
     *

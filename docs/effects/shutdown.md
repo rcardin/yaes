@@ -192,9 +192,11 @@ Shutdown.run {
 }
 ```
 
-### With Async (Daemon Processes)
+### With Async
 
-The `Shutdown` effect is designed to work seamlessly with `Async` for daemon processes:
+#### Basic Async Integration
+
+The `Shutdown` effect can be combined with `Async` for basic daemon process coordination using manual shutdown checking:
 
 ```scala
 import in.rcard.yaes.Shutdown.*
@@ -221,6 +223,25 @@ Shutdown.run {
   }
 }
 ```
+
+#### Advanced: Using withGracefulShutdown Handler
+
+For production applications, the `Async.withGracefulShutdown` handler provides automatic shutdown coordination with deadline enforcement. This handler is specifically designed for long-running services and daemon processes that need to:
+
+- Automatically respond to shutdown signals
+- Enforce maximum shutdown duration
+- Coordinate cleanup across multiple fibers
+- Ensure in-flight operations complete
+
+**When to Use Each Approach:**
+
+| Approach | Best For | Shutdown Logic |
+|----------|----------|----------------|
+| Manual (`Async.run`) | Simple cases, learning | You implement shutdown coordination |
+| Handler (`withGracefulShutdown`) | Production services | Automatic with deadline enforcement |
+
+**See Also:**
+- [Async Effect - Graceful Shutdown](async.html#graceful-shutdown-with-async) - Complete documentation on `withGracefulShutdown`
 
 ## Practical Examples
 
