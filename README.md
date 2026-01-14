@@ -84,13 +84,13 @@ The above code shows how to handle only the `Random` effect. The `Raise` effect 
 The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.11.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.12.0"
 ```
 
 For Cats integration, add:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.11.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.12.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
@@ -103,10 +103,11 @@ The library is only available for Scala 3 and is currently in an experimental st
 
 The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
 
-- [`IO`](#the-io-effect): Allows for running side-effecting operations.
+- [`Sync`](#the-sync-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
 - [`Raise`](#the-raise-effect): Allows for raising and handling errors.
 - [`Resource`](#the-resource-effect): Allows for automatic resource management with guaranteed cleanup.
+- [`Shutdown`](#the-shutdown-effect): Allows for graceful shutdown coordination with callback hooks.
 - [`Input`](#the-input-effect): Allows for reading input from the console.
 - [`Output`](#the-output-effect): Allows for printing output to the console.
 - [`Random`](#the-random-effect): Allows for generating random content.
@@ -149,20 +150,20 @@ object MyApp extends YaesApp {
 
 For more details, see the [YaesApp documentation](docs/yaes-app.md).
 
-### The `IO` Effect
+### The `Sync` Effect
 
-The `IO` effect allows for running side-effecting operations:
+The `Sync` effect allows for running side-effecting operations:
 
 ```scala 3
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 case class User(name: String)
 
-def saveUser(user: User)(using IO): Long =
+def saveUser(user: User)(using Sync): Long =
   throw new RuntimeException("Read timed out")
 ```
 
-The above code can throw an uncontrolled exception if the connection with the database times out. The generic `IO` effect lift the function in the world of the effectful computations, making it referentially transparent. It means that everything that is not referentially transparent should be defined using the `IO` effect. In fact, the `IO` effect provides a guard rail to uncontrolled exceptions since its handler returns always a monad that wraps the result of the effectful computation.
+The above code can throw an uncontrolled exception if the connection with the database times out. The generic `Sync` effect lift the function in the world of the effectful computations, making it referentially transparent. It means that everything that is not referentially transparent should be defined using the `Sync` effect. In fact, the `Sync` effect provides a guard rail to uncontrolled exceptions since its handler returns always a monad that wraps the result of the effectful computation.
 
 
 To run the effectful computation, we can use the provided handlers.
@@ -170,12 +171,12 @@ To run the effectful computation, we can use the provided handlers.
 The first handler doesn't block the current thread:
 
 ```scala 3
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
-val result: Future[Long] = IO.run {
+val result: Future[Long] = Sync.run {
   saveUser(User("John"))
 }
 ```
@@ -183,20 +184,20 @@ val result: Future[Long] = IO.run {
 The library also provides a blocking handler that will block the current thread until the effectful computation is finished:
 
 ```scala 3
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
-val result: Long = IO.blockingRun {
+val result: Long = Sync.runBlocking(2.seconds) {
   saveUser(User("John"))
 }
 ```
 
-Please, be aware that running an `IO` effectful computation both using the `IO.run` and `IO.blockingRun` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
+Please, be aware that running a `Sync` effectful computation both using the `Sync.run` and `Sync.runBlocking` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
 
-The default `IO` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
+The default `Sync` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
 
 ### The `Async` Effect
 
@@ -228,7 +229,7 @@ Or, we can just wait for the computation to finish:
 val p: Async ?=> Option[User] = fb.join()
 ```
 
-As for the `IO` effect, forking a new fiber or joining it doesn't execute the effectful computation. It just returns a value that represents the computation that can be run but hasn't yet.
+As for the `Sync` effect, forking a new fiber or joining it doesn't execute the effectful computation. It just returns a value that represents the computation that can be run but hasn't yet.
 
 Again, we can run the effectful computation using the provided handlers:
 
@@ -243,7 +244,7 @@ val maybeUser: Raise[Cancelled] ?=> Option[User] = Async.run {
 
 The above code shows another important aspect of the λÆS library. We can handle an effect eliminating it from the list of effects one at time. In the above code, we are handling the `Async` effect first, and we remain with the `Raise` effect. It's a powerful feature that allows for a fine-grained management of the effects.
 
-The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `IO` effect if you think the effectful computation can throw any exception.
+The `Async` effect is transparent to possible exceptions thrown by the effectful computation. Please, add the `Sync` effect if you think the effectful computation can throw any exception.
 
 #### Structured Concurrency
 
@@ -332,9 +333,36 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 - `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 
+#### Graceful Shutdown Integration
+
+For long-running applications and daemon processes, the `Async.withGracefulShutdown` handler provides automatic shutdown coordination with the `Shutdown` effect. This handler ensures your application can cleanly terminate concurrent operations within a specified deadline.
+
+When shutdown is initiated (either via JVM signals like SIGTERM/SIGINT or programmatically), the handler gives your main task a deadline to complete cleanup operations. If the deadline expires, remaining fibers are cooperatively cancelled. This prevents hanging shutdowns while allowing in-flight work to complete gracefully.
+
+```scala
+import in.rcard.yaes.{Async, Shutdown}
+import in.rcard.yaes.Async.Deadline
+import scala.concurrent.duration.*
+
+Shutdown.run {
+  Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+    val serverFiber = Async.fork("server") {
+      while (!Shutdown.isShuttingDown()) {
+        // Accept and process work
+      }
+
+      Shutdown.initiateShutdown()
+      // Cleanup after shutdown
+    }
+  }
+}
+```
+
+For complete documentation including lifecycle details, deadline configuration, and practical examples, see [Async Effect - Graceful Shutdown](https://rcardin.github.io/yaes/effects/async.html#graceful-shutdown-with-async).
+
 ### The `Raise` Effect
 
-The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavinly inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
+The `Raise[E]` type describes the possibility that a function can raise an error of type `E`. `E` can be a logic typed error or an exception. The DSL is heavily inspired by the [`raise4s`](https://github.com/rcardin/raise4s) library.
 
 Let's see an example:
 
@@ -778,6 +806,69 @@ The `Resource` effect guarantees that:
 - Cleanup occurs even if exceptions are thrown
 - Resource cleanup exceptions are handled appropriately
 - Original exceptions from the main program are preserved
+
+### The `Shutdown` Effect
+
+The `Shutdown` effect provides graceful shutdown coordination for long-running applications. It automatically handles JVM shutdown signals (SIGTERM, SIGINT, Ctrl+C) and provides mechanisms to cleanly terminate concurrent operations while rejecting new work.
+
+```scala 3
+import in.rcard.yaes.Shutdown.*
+
+def processWork()(using Shutdown): Unit = {
+  while (!Shutdown.isShuttingDown()) {
+    // Process work items
+    println("Processing...")
+    Thread.sleep(1000)
+  }
+  println("Shutdown initiated, stopping work")
+}
+```
+
+The `Shutdown` effect provides three main operations:
+
+- `Shutdown.isShuttingDown()`: Checks if shutdown has been initiated
+- `Shutdown.initiateShutdown()`: Manually triggers graceful shutdown
+- `Shutdown.onShutdown(hook)`: Registers callbacks to execute when shutdown begins
+
+Here's an example using shutdown hooks:
+
+```scala 3
+import in.rcard.yaes.Shutdown.*
+import in.rcard.yaes.Output.*
+
+def serverWithHooks()(using Shutdown, Output): Unit = {
+  Shutdown.onShutdown(() => {
+    Output.printLn("Shutdown signal received")
+    Output.printLn("Stopping new request acceptance")
+  })
+
+  while (!Shutdown.isShuttingDown()) {
+    // Accept and process requests
+  }
+}
+```
+
+To run shutdown-aware code, use the `Shutdown.run` handler:
+
+```scala 3
+import in.rcard.yaes.Shutdown.*
+import in.rcard.yaes.Output.*
+
+Shutdown.run {
+  Output.run {
+    serverWithHooks()
+  }
+}
+// Automatically responds to Ctrl+C, SIGTERM, and container stop signals
+```
+
+The `Shutdown` effect is particularly useful when combined with the `Async` effect for daemon processes and long-running services. It ensures graceful termination by:
+
+- Automatically registering JVM shutdown hooks
+- Providing state checks to reject new work during shutdown
+- Executing registered callbacks in order when shutdown is initiated
+- Being idempotent - multiple shutdown calls are safe
+- Wrapping hooks in exception handling so one failure doesn't prevent others
 
 ### The `Input` Effect
 

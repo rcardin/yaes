@@ -170,6 +170,93 @@ class RaiseSpec extends AsyncFlatSpec with Matchers {
     sideEffect shouldBe 42
   }
 
+  "Raise.onError" should "invoke callback when error is raised" in {
+    var capturedError: Option[String] = None
+
+    Raise.onError {
+      Raise.raise("TestError")
+    } { error =>
+      capturedError = Some(error)
+    }
+
+    capturedError shouldBe Some("TestError")
+  }
+
+  it should "receive the correct error value in callback" in {
+    var capturedError: Option[Int] = None
+
+    Raise.onError {
+      Raise.raise(42)
+    } { error =>
+      capturedError = Some(error)
+    }
+
+    capturedError shouldBe Some(42)
+  }
+
+  it should "NOT invoke callback on success" in {
+    var callbackInvoked = false
+
+    Raise.onError {
+      val x = 1 + 1
+    } { _ =>
+      callbackInvoked = true
+    }
+
+    callbackInvoked shouldBe false
+  }
+
+  it should "preserve side effects in block before error" in {
+    var blockSideEffect = 0
+    var capturedError: Option[String] = None
+
+    Raise.onError {
+      blockSideEffect = 1
+      Raise.raise("Error")
+      blockSideEffect = 2
+    } { error =>
+      capturedError = Some(error)
+    }
+
+    blockSideEffect shouldBe 1
+    capturedError shouldBe Some("Error")
+  }
+
+  it should "allow exceptions from callback to propagate" in {
+    assertThrows[RuntimeException] {
+      Raise.onError {
+        Raise.raise("Error")
+      } { _ =>
+        throw new RuntimeException("Callback failed")
+      }
+    }
+  }
+
+  it should "work with custom error types" in {
+    case class CustomError(code: Int, message: String)
+    var capturedError: Option[CustomError] = None
+
+    Raise.onError {
+      Raise.raise(CustomError(404, "Not Found"))
+    } { error =>
+      capturedError = Some(error)
+    }
+
+    capturedError shouldBe Some(CustomError(404, "Not Found"))
+  }
+
+  it should "allow side effects in callback" in {
+    var loggedError = ""
+
+    Raise.onError {
+      Raise.raise("Critical")
+    } { error =>
+      loggedError = s"Logged: $error"
+    }
+
+    loggedError shouldBe "Logged: Critical"
+  }
+
   "ensure" should "raise an error if a condition is not met" in {
     val meaningOfLife = 42
     val actualResult  = Raise.run {

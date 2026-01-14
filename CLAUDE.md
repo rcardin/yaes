@@ -7,12 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 λÆS (Yet Another Effect System) is an experimental effect system for Scala 3 inspired by Algebraic Effects. It uses Scala 3 context parameters and context functions to provide modular, composable effect management with deferred execution.
 
 **Key Concepts:**
-- Effects describe side effects in a type-safe way (e.g., `Random`, `Raise[E]`, `IO`, `Async`)
+- Effects describe side effects in a type-safe way (e.g., `Random`, `Raise[E]`, `Sync`, `Async`)
 - Effects are managed via **context parameters** (`using` clauses)
 - Execution is **deferred** until handlers run the effects
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
 
-**Current Version:** 0.11.0
+**Current Version:** 0.12.0
 **Scala Version:** 3.7.4
 **Java Requirement:** Java 24+ (for Virtual Threads and Structured Concurrency)
 
@@ -26,9 +26,13 @@ sbt compile
 # Compile specific module
 sbt yaes-core/compile
 sbt yaes-data/compile
+sbt yaes-cats/compile
 
 # Clean build artifacts
 sbt clean
+
+# Continuous compilation (recompiles on file changes)
+sbt ~compile
 ```
 
 ### Testing
@@ -39,13 +43,19 @@ sbt test
 # Run tests for specific module
 sbt yaes-core/test
 sbt yaes-data/test
+sbt yaes-cats/test
 
 # Run a single test class
 sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec"
 sbt "yaes-data/testOnly in.rcard.yaes.FlowSpec"
+sbt "yaes-cats/testOnly in.rcard.yaes.instances.AccumulateInstancesSpec"
 
 # Run a single test within a class
 sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec -- -z \"should handle errors\""
+
+# Continuous testing (runs tests on file changes)
+sbt ~test
+sbt ~yaes-core/test
 ```
 
 ### Publishing
@@ -61,18 +71,33 @@ sbt publishSigned
 ```bash
 # Generate Scaladoc
 sbt doc
+
+# Generate Scaladoc for specific module
+sbt yaes-core/doc
+sbt yaes-data/doc
+sbt yaes-cats/doc
+```
+
+### Running Examples
+```bash
+# The examples/ directory contains example applications demonstrating effect usage
+# Run an example with:
+sbt "runMain <fully-qualified-main-class-name>"
+
+# Example:
+# sbt "runMain FlowFromFileExample"
 ```
 
 ## Architecture
 
 ### Module Structure
 
-The project consists of two main modules:
+The project consists of three main modules:
 
 1. **yaes-core** (`yaes-core/src/main/scala/in/rcard/yaes/`)
    - Contains all effect implementations
    - Depends on `yaes-data`
-   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `IO.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
+   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `Sync.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `Shutdown.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
 
 2. **yaes-data** (`yaes-data/src/main/scala/in/rcard/yaes/`)
    - Contains data structures for use with effects
@@ -80,12 +105,21 @@ The project consists of two main modules:
 
 3. **yaes-cats** (`yaes-cats/src/main/scala/in/rcard/yaes/`)
    - Cats/Cats Effect integration module
+   - Depends on `yaes-core`
    - **Package structure** (following Cats conventions):
      - `cats/` - Utility functions and operations (e.g., `accumulate`, `validated`)
      - `instances/` - Typeclass instances (e.g., `raise.given` for MonadError, `accumulate.given` for AccumulateCollector)
      - `syntax/` - Extension methods and syntax enhancements
      - `interop/` - Interop with other libraries (e.g., `catseffect` for Cats Effect conversions)
    - **Test structure**: Tests follow the same package structure (e.g., `instances/AccumulateInstancesSpec.scala`)
+
+**Dependency Graph:** yaes-cats → yaes-core → yaes-data
+
+**External Dependencies:**
+- ScalaTest 3.2.19 (testing)
+- ScalaCheck 3.2.19.0 (property-based testing)
+- Cats Core 2.13.0 (yaes-cats only)
+- Cats Effect 3.6.3 (yaes-cats only)
 
 ### Core Effect System Design
 
@@ -124,15 +158,15 @@ object EffectName {
 
 **Handler Order Matters:**
 - When composing multiple effects, handlers must be applied in the correct nesting order
-- Example in `YaesApp`: IO (outermost) → Output → Input → Random → Clock → System → Log (innermost)
+- Example in `YaesApp`: Sync (outermost) → Output → Input → Random → Clock → System → Log (innermost)
 - Each handler removes one effect from the context, unwrapping the computation step by step
 
 ### Key Implementation Details
 
-**Virtual Threads (IO Effect):**
-- The `IO` effect uses Java's Virtual Thread machinery via `Executors.newVirtualThreadPerTaskExecutor()`
+**Virtual Threads (Sync Effect):**
+- The `Sync` effect uses Java's Virtual Thread machinery via `Executors.newVirtualThreadPerTaskExecutor()`
 - Creates a new virtual thread for each effectful computation
-- Provides both non-blocking (`IO.run`) and blocking (`IO.runBlocking`) handlers
+- Provides both non-blocking (`Sync.run`) and blocking (`Sync.runBlocking`) handlers
 
 **Structured Concurrency (Async Effect):**
 - Built on Java Structured Concurrency (requires Java 21+)
@@ -159,6 +193,29 @@ object EffectName {
   - `ensuring` for cleanup actions
 - Cleanup occurs even on exceptions
 
+**Shutdown Coordination (Shutdown Effect):**
+- Provides graceful shutdown coordination for long-running applications
+- Automatically registers JVM shutdown hooks (SIGTERM, SIGINT, Ctrl+C)
+- Three main operations:
+  - `isShuttingDown()` - check if shutdown has been initiated
+  - `initiateShutdown()` - manually trigger graceful shutdown
+  - `onShutdown(hook)` - register callbacks to execute when shutdown begins
+- Thread-safe state management using `ReentrantLock`
+- Idempotent - multiple shutdown calls are safe
+- Hooks execute outside locks to prevent deadlock
+- Hook failures are logged but don't prevent other hooks from running
+- Hooks registered after shutdown has started are silently ignored
+- Particularly useful with `Async` for daemon processes
+
+**GracefulShutdownScope (Async + Shutdown Integration):**
+- Used by `Async.withGracefulShutdown` to coordinate shutdown with timeout enforcement
+- Creates a timeout enforcer fiber that waits for shutdown signal, then enforces deadline
+- When main task completes after shutdown, scope shuts down immediately and cancels remaining fibers
+- **JDK Protection Against Spurious Exceptions:** The JDK's `SubtaskImpl` checks `isShutdown()` after catching exceptions. If the scope is already shutdown when a fiber throws an exception (like the timeout enforcer's `InterruptedException`), the JDK **does not call** `handleComplete`, preventing spurious failure propagation
+- This design relies on JDK's structured concurrency implementation details for correct exception handling
+- Exception handling in `handleComplete` captures only genuine failures, not interruptions after shutdown
+- Key invariant: Timeout enforcer's interruption when scope shuts down early is **not** treated as a failure
+
 **Channels (Communication Primitive):**
 - Based on `java.util.concurrent` blocking queues with suspending operations
 - Three types: Unbounded, Bounded (with overflow strategies), Rendezvous
@@ -181,6 +238,7 @@ object EffectName {
 Tests are located in:
 - `yaes-core/src/test/scala/in/rcard/yaes/`
 - `yaes-data/src/test/scala/in/rcard/yaes/`
+- `yaes-cats/src/test/scala/in/rcard/yaes/` (with subdirectories for `instances/`)
 
 Tests use ScalaTest with the following structure:
 ```scala
@@ -248,14 +306,14 @@ val result = Raise.accumulate[List, String, List[Int]] {
 }
 ```
 
-### Async Effect is Not Thread-Safe
-The `State` effect is not thread-safe. Use appropriate synchronization when accessing state from multiple fibers.
+### State Effect is Not Thread-Safe
+The `State` effect is not thread-safe. Use appropriate synchronization (e.g., `java.util.concurrent` primitives) when accessing state from multiple fibers or threads.
 
 ### Cancellation is Cooperative
 Canceling a fiber via `fiber.cancel()` does not immediately terminate it. The fiber must reach an interruptible operation (like `Async.delay`) to be canceled.
 
 ### Handler Execution Breaks Referential Transparency
-Running handlers (`IO.run`, `Raise.run`, etc.) executes effects and breaks referential transparency. Handlers should only be used at the edges of the application (e.g., in `main` or `YaesApp`).
+Running handlers (`Sync.run`, `Raise.run`, etc.) executes effects and breaks referential transparency. Handlers should only be used at the edges of the application (e.g., in `main` or `YaesApp`).
 
 ### Java 24 Requirement
 The library requires Java 24+ for Virtual Threads and Structured Concurrency features. Ensure your development environment has Java 24 or higher.
@@ -286,7 +344,7 @@ val result = OuterEffect.run {
 ```
 
 ### Naming Conventions
-- Effect types use PascalCase: `IO`, `Async`, `Raise[E]`
+- Effect types use PascalCase: `Sync`, `Async`, `Raise[E]`
 - Effect DSL methods use camelCase: `Random.nextInt`, `Raise.raise`, `Async.fork`
 - Handlers are typically named `run`, with variants like `runBlocking`, `either`, `option`
 
