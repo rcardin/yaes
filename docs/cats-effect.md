@@ -9,7 +9,7 @@ The `yaes-cats` module provides seamless integration between λÆS and the Cats/
 
 The `yaes-cats` module bridges λÆS and Cats, offering:
 
-- **Cats Effect Integration**: Bidirectional conversion between λÆS `IO` and Cats Effect `IO`
+- **Cats Effect Integration**: Bidirectional conversion between λÆS `Sync` and Cats Effect `IO`
 - **MonadError Instance**: Use `Raise` with Cats abstractions and combinators
 - **Validated Conversions**: Convert between `Raise` and Cats `Validated` types
 - **Error Accumulation**: Leverage Cats `Semigroup` and `NonEmptyList` for error collection
@@ -37,7 +37,7 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.11.0"
 Convert λÆS programs to Cats Effect IO:
 
 ```scala
-import in.rcard.yaes.{IO => YaesSync, Raise}
+import in.rcard.yaes.{Sync => YaesSync, Raise}
 import in.rcard.yaes.interop.catseffect
 import cats.effect.{IO => CatsIO}
 
@@ -55,7 +55,7 @@ val result = catsIO.unsafeRunSync()  // 42
 Convert Cats Effect IO to λÆS programs:
 
 ```scala
-import in.rcard.yaes.{IO => YaesSync, Raise}
+import in.rcard.yaes.{Sync => YaesSync, Raise}
 import in.rcard.yaes.interop.catseffect
 import in.rcard.yaes.syntax.catseffect.given
 import cats.effect.{IO => CatsIO}
@@ -86,7 +86,7 @@ val result2 = YaesSync.run {
 
 ```scala
 import in.rcard.yaes.interop.catseffect
-import in.rcard.yaes.{IO => YaesSync, Raise}
+import in.rcard.yaes.{Sync => YaesSync, Raise}
 import cats.effect.{IO => CatsIO}
 
 val yaesProgram: (YaesSync, Raise[Throwable]) ?=> Int = YaesSync { 42 }

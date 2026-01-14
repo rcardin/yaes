@@ -113,7 +113,7 @@ override def run {
 
 ## Exception Handling
 
-YaesApp automatically catches all exceptions thrown during execution via the `IO` effect. The `IO.runBlocking` method returns a `Try[A]`, ensuring that any unhandled exceptions are captured and passed to the `handleError` method.
+YaesApp automatically catches all exceptions thrown during execution via the `Sync` effect. The `Sync.runBlocking` method returns a `Try[A]`, ensuring that any unhandled exceptions are captured and passed to the `handleError` method.
 
 ```scala 3
 override def run {
@@ -165,7 +165,7 @@ sbt "runMain in.rcard.yaes.ArgsApp arg1 arg2 arg3"
 
 YaesApp automatically applies effect handlers in the following order (from outermost to innermost):
 
-1. **IO** - Handles side effects, async operations, and catches all exceptions
+1. **Sync** - Handles side effects, async operations, and catches all exceptions
 2. **Output** - Console output
 3. **Random** - Random generation
 4. **Clock** - Time operations
@@ -173,12 +173,12 @@ YaesApp automatically applies effect handlers in the following order (from outer
 6. **Log** - Structured logging
 
 This ordering ensures that:
-- All effects run within an IO context
-- All exceptions are automatically caught by IO and handled via `handleError`
+- All effects run within a Sync context
+- All exceptions are automatically caught by Sync and handled via `handleError`
 - Resources are managed correctly
 - Effects can compose naturally
 
-**Note**: Unlike some effect systems (like Kyo), YaesApp does not include `Raise[Throwable]` in the automatic effect stack because `IO.runBlocking` already returns `Try[A]`, providing built-in exception handling. Use `Raise[E]` explicitly when you need typed error handling for domain-specific errors.
+**Note**: Unlike some effect systems (like Kyo), YaesApp does not include `Raise[Throwable]` in the automatic effect stack because `Sync.runBlocking` already returns `Try[A]`, providing built-in exception handling. Use `Raise[E]` explicitly when you need typed error handling for domain-specific errors.
 
 ## Customization
 
@@ -291,7 +291,7 @@ object NoExitApp extends YaesApp {
 ```scala 3
 object ManualApp {
   def main(args: Array[String]): Unit = {
-    val result = IO.runBlocking(Duration.Inf) {
+    val result = Sync.runBlocking(Duration.Inf) {
       Output.run {
         Random.run {
           Clock.run {
@@ -332,7 +332,7 @@ Much cleaner and less error-prone!
 ## See Also
 
 - [YAES Effects Documentation](effects/index.md)
-- [IO Effect](effects/io.md)
+- [Sync Effect](effects/sync.md)
 - [Raise Effect](effects/raise.md)
 - [Output Effect](effects/io-effects.md)
 - [Log Effect](effects/log.md)

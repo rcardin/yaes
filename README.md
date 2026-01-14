@@ -190,12 +190,12 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
-val result: Long = Sync.blockingRun {
+val result: Long = Sync.runBlocking {
   saveUser(User("John"))
 }
 ```
 
-Please, be aware that running a `Sync` effectful computation both using the `Sync.run` and `Sync.blockingRun` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
+Please, be aware that running a `Sync` effectful computation both using the `Sync.run` and `Sync.runBlocking` methods breaks the referential transparency. Handlers should be used only at the edge of the application.
 
 The default `Sync` handler is implemented using Java Virtual Threads machinery. For every effectful computation, a new virtual thread is created and the computation is executed in that thread. 
 
@@ -229,7 +229,7 @@ Or, we can just wait for the computation to finish:
 val p: Async ?=> Option[User] = fb.join()
 ```
 
-As for the `IO` effect, forking a new fiber or joining it doesn't execute the effectful computation. It just returns a value that represents the computation that can be run but hasn't yet.
+As for the `Sync` effect, forking a new fiber or joining it doesn't execute the effectful computation. It just returns a value that represents the computation that can be run but hasn't yet.
 
 Again, we can run the effectful computation using the provided handlers:
 
