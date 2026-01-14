@@ -26,9 +26,13 @@ sbt compile
 # Compile specific module
 sbt yaes-core/compile
 sbt yaes-data/compile
+sbt yaes-cats/compile
 
 # Clean build artifacts
 sbt clean
+
+# Continuous compilation (recompiles on file changes)
+sbt ~compile
 ```
 
 ### Testing
@@ -39,13 +43,19 @@ sbt test
 # Run tests for specific module
 sbt yaes-core/test
 sbt yaes-data/test
+sbt yaes-cats/test
 
 # Run a single test class
 sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec"
 sbt "yaes-data/testOnly in.rcard.yaes.FlowSpec"
+sbt "yaes-cats/testOnly in.rcard.yaes.instances.AccumulateInstancesSpec"
 
 # Run a single test within a class
 sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec -- -z \"should handle errors\""
+
+# Continuous testing (runs tests on file changes)
+sbt ~test
+sbt ~yaes-core/test
 ```
 
 ### Publishing
@@ -61,13 +71,28 @@ sbt publishSigned
 ```bash
 # Generate Scaladoc
 sbt doc
+
+# Generate Scaladoc for specific module
+sbt yaes-core/doc
+sbt yaes-data/doc
+sbt yaes-cats/doc
+```
+
+### Running Examples
+```bash
+# The examples/ directory contains example applications demonstrating effect usage
+# Run an example with:
+sbt "runMain <fully-qualified-main-class-name>"
+
+# Example:
+# sbt "runMain FlowFromFileExample"
 ```
 
 ## Architecture
 
 ### Module Structure
 
-The project consists of two main modules:
+The project consists of three main modules:
 
 1. **yaes-core** (`yaes-core/src/main/scala/in/rcard/yaes/`)
    - Contains all effect implementations
@@ -80,12 +105,21 @@ The project consists of two main modules:
 
 3. **yaes-cats** (`yaes-cats/src/main/scala/in/rcard/yaes/`)
    - Cats/Cats Effect integration module
+   - Depends on `yaes-core`
    - **Package structure** (following Cats conventions):
      - `cats/` - Utility functions and operations (e.g., `accumulate`, `validated`)
      - `instances/` - Typeclass instances (e.g., `raise.given` for MonadError, `accumulate.given` for AccumulateCollector)
      - `syntax/` - Extension methods and syntax enhancements
      - `interop/` - Interop with other libraries (e.g., `catseffect` for Cats Effect conversions)
    - **Test structure**: Tests follow the same package structure (e.g., `instances/AccumulateInstancesSpec.scala`)
+
+**Dependency Graph:** yaes-cats → yaes-core → yaes-data
+
+**External Dependencies:**
+- ScalaTest 3.2.19 (testing)
+- ScalaCheck 3.2.19.0 (property-based testing)
+- Cats Core 2.13.0 (yaes-cats only)
+- Cats Effect 3.6.3 (yaes-cats only)
 
 ### Core Effect System Design
 
@@ -173,6 +207,15 @@ object EffectName {
 - Hooks registered after shutdown has started are silently ignored
 - Particularly useful with `Async` for daemon processes
 
+**GracefulShutdownScope (Async + Shutdown Integration):**
+- Used by `Async.withGracefulShutdown` to coordinate shutdown with timeout enforcement
+- Creates a timeout enforcer fiber that waits for shutdown signal, then enforces deadline
+- When main task completes after shutdown, scope shuts down immediately and cancels remaining fibers
+- **JDK Protection Against Spurious Exceptions:** The JDK's `SubtaskImpl` checks `isShutdown()` after catching exceptions. If the scope is already shutdown when a fiber throws an exception (like the timeout enforcer's `InterruptedException`), the JDK **does not call** `handleComplete`, preventing spurious failure propagation
+- This design relies on JDK's structured concurrency implementation details for correct exception handling
+- Exception handling in `handleComplete` captures only genuine failures, not interruptions after shutdown
+- Key invariant: Timeout enforcer's interruption when scope shuts down early is **not** treated as a failure
+
 **Channels (Communication Primitive):**
 - Based on `java.util.concurrent` blocking queues with suspending operations
 - Three types: Unbounded, Bounded (with overflow strategies), Rendezvous
@@ -195,6 +238,7 @@ object EffectName {
 Tests are located in:
 - `yaes-core/src/test/scala/in/rcard/yaes/`
 - `yaes-data/src/test/scala/in/rcard/yaes/`
+- `yaes-cats/src/test/scala/in/rcard/yaes/` (with subdirectories for `instances/`)
 
 Tests use ScalaTest with the following structure:
 ```scala
@@ -262,8 +306,8 @@ val result = Raise.accumulate[List, String, List[Int]] {
 }
 ```
 
-### Async Effect is Not Thread-Safe
-The `State` effect is not thread-safe. Use appropriate synchronization when accessing state from multiple fibers.
+### State Effect is Not Thread-Safe
+The `State` effect is not thread-safe. Use appropriate synchronization (e.g., `java.util.concurrent` primitives) when accessing state from multiple fibers or threads.
 
 ### Cancellation is Cooperative
 Canceling a fiber via `fiber.cancel()` does not immediately terminate it. The fiber must reach an interruptible operation (like `Async.delay`) to be canceled.

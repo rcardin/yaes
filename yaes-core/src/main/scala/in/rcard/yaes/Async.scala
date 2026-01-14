@@ -718,7 +718,8 @@ object Async {
     *   - The main task (the `block` parameter) runs normally within the async scope
     *   - When `Shutdown.initiateShutdown()` is called, the scope is notified via the registered
     *     shutdown hook
-    *   - After the main task completes (post-shutdown), the scope shuts down immediately
+    *   - When the main task completes, the scope shuts down immediately and cancels remaining
+    *     fibers
     *   - If the main task doesn't complete within the deadline after shutdown is initiated, the
     *     timeout enforcer triggers and remaining fibers are cancelled via cooperative interruption
     *   - Any forked fibers that fail with an exception cause immediate scope shutdown (fail-fast)
