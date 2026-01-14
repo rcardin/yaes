@@ -311,8 +311,8 @@ object Raise {
     * @tparam E
     *   the type of error that can be raised
     */
-  def onError[E](block: Raise[E] ?=> Unit)(onError: E => Unit): Unit = {
-    fold(block)(onError = { e => onError(e); () })(onSuccess = _ => ())
+  inline def onError[E](block: Raise[E] ?=> Unit)(onError: E => Unit): Unit = {
+    fold(block)(onError = { e => onError(e); () })(onSuccess = identity)
   }
 
   /** Ensures that a condition is true and raises an error if it is not.
@@ -335,7 +335,7 @@ object Raise {
     * @tparam A
     *   the type of the result of the block
     */
-  def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
+  inline def ensure[E](condition: => Boolean)(error: => E)(using r: Raise[E]): Unit =
     if !condition then Raise.raise(error)
 
   /** Ensures that the `value` is not null; otherwise, [[Raise.raise]]s a logical failure of type
