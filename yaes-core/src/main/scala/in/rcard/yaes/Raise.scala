@@ -284,6 +284,37 @@ object Raise {
     ()
   }
 
+  /** Executes a block that returns Unit and invokes a callback if an error is raised.
+    *
+    * This is useful when you want to perform side-effecting error handling (like logging) while
+    * consuming errors. The callback receives the error value and can perform any side effects.
+    * Unlike [[ignore]], this handler allows you to observe and react to errors.
+    *
+    * If the callback itself throws an exception, that exception will propagate to the caller.
+    *
+    * Example:
+    * {{{
+    * val channel = Channel[Int](Channel.Type.Bounded(10))
+    *
+    * // Try to send and log if channel is closed
+    * Raise.onError {
+    *   channel.send(42)
+    * } { error =>
+    *   println(s"Failed to send: $error")
+    * }
+    * }}}
+    *
+    * @param block
+    *   the computation that may raise an error and returns Unit
+    * @param onError
+    *   the callback to invoke with the error if one is raised
+    * @tparam E
+    *   the type of error that can be raised
+    */
+  def onError[E](block: Raise[E] ?=> Unit)(onError: E => Unit): Unit = {
+    fold(block)(onError = { e => onError(e); () })(onSuccess = _ => ())
+  }
+
   /** Ensures that a condition is true and raises an error if it is not.
     *
     * Example:
