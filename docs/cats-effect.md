@@ -658,7 +658,7 @@ The type parameter `M[_]` specifies the error collection type. An `AccumulateCol
 ### Simple Value Conversion
 
 ```scala
-import in.rcard.yaes.{IO => YaesSync, Raise}
+import in.rcard.yaes.{Sync => YaesSync, Raise}
 import in.rcard.yaes.interop.catseffect
 import in.rcard.yaes.syntax.catseffect.given
 import cats.effect.{IO => CatsIO}

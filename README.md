@@ -190,7 +190,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
-val result: Long = Sync.runBlocking {
+val result: Long = Sync.runBlocking(2.seconds) {
   saveUser(User("John"))
 }
 ```

@@ -15,7 +15,7 @@ import scala.annotation.targetName
   * Example:
   * {{{
   * import in.rcard.yaes.syntax.catseffect.given
-  * import in.rcard.yaes.{IO => YaesSync}
+  * import in.rcard.yaes.{Sync => YaesSync}
   * import cats.effect.{IO => CatsIO}
   *
   * val catsIO: CatsIO[Int] = CatsIO.pure(42)
@@ -45,7 +45,7 @@ trait CatsEffectSyntax {
       * {{{
       * import in.rcard.yaes.syntax.catseffect.given
       * import cats.effect.{IO => CatsIO}
-      * import in.rcard.yaes.{IO => YaesSync, Raise}
+      * import in.rcard.yaes.{Sync => YaesSync, Raise}
       *
       * val catsIO: CatsIO[Int] = CatsIO.pure(42)
       *
@@ -72,7 +72,7 @@ trait CatsEffectSyntax {
       * {{{
       * import in.rcard.yaes.syntax.catseffect.given
       * import cats.effect.{IO => CatsIO}
-      * import in.rcard.yaes.{IO => YaesSync, Raise}
+      * import in.rcard.yaes.{Sync => YaesSync, Raise}
       * import scala.concurrent.duration._
       *
       * val catsIO: CatsIO[Int] = CatsIO.sleep(10.seconds) *> CatsIO.pure(42)
