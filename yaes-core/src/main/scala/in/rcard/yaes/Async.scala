@@ -244,6 +244,8 @@ private class GracefulShutdownScope(
     timeoutExpired.set(true)
   })
 
+  def isTimeoutExpired: Boolean = timeoutExpired.get()
+
   /** Signals that graceful shutdown should begin.
     *
     * Called from the Shutdown effect hook when `Shutdown.initiateShutdown()` is invoked. This
@@ -354,6 +356,13 @@ object Async {
     */
   object TimedOut
   type TimedOut = TimedOut.type
+
+  /** A type representing a shutdown timeout.
+    *
+    * This type is used to signal that a shutdown operation timed out.
+    */
+  object ShutdownTimedOut
+  type ShutdownTimedOut = ShutdownTimedOut.type
 
   extension [A](flow: Flow[A]) {
 
@@ -677,7 +686,7 @@ object Async {
 
   def withGracefulShutdownHandler[A](
       deadline: Deadline
-  )(using Shutdown): Yaes.Handler[Async.Unsafe, A, A] =
+  )(using Shutdown, Raise[ShutdownTimedOut]): Yaes.Handler[Async.Unsafe, A, A] =
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
         val async     = new JvmAsync()
@@ -693,14 +702,14 @@ object Async {
           }
 
           val mainTask = loomScope.forkMainTask(() => {
-            try {
-              JvmAsync.scope.set(loomScope)
-              program(using new Yaes(async))
-            } finally {
-              JvmAsync.scope.remove()
+            Async.run {
+              program
             }
           })
           loomScope.join().throwIfFailed(identity)
+          if (loomScope.isTimeoutExpired) {
+            Raise.raise(ShutdownTimedOut)
+          }
           mainTask.get()
         } finally {
           loomScope.close()
@@ -762,7 +771,9 @@ object Async {
     * @return
     *   A program requiring Shutdown context that blocks until the computation completes
     */
-  def withGracefulShutdown[A](deadline: Deadline)(block: Async ?=> A): Shutdown ?=> A = {
+  def withGracefulShutdown[A](
+      deadline: Deadline
+  )(block: Async ?=> A): (Shutdown, Raise[ShutdownTimedOut]) ?=> A = {
 
     Yaes.handle(block)(using withGracefulShutdownHandler(deadline))
   }
