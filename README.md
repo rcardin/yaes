@@ -337,22 +337,24 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 
 For long-running applications and daemon processes, the `Async.withGracefulShutdown` handler provides automatic shutdown coordination with the `Shutdown` effect. This handler ensures your application can cleanly terminate concurrent operations within a specified deadline.
 
-When shutdown is initiated (either via JVM signals like SIGTERM/SIGINT or programmatically), the handler gives your main task a deadline to complete cleanup operations. If the deadline expires, remaining fibers are cooperatively cancelled. This prevents hanging shutdowns while allowing in-flight work to complete gracefully.
+When shutdown is initiated (either via JVM signals like SIGTERM/SIGINT or programmatically), the handler gives your main task a deadline to complete cleanup operations. If the deadline expires, remaining fibers are cooperatively cancelled and `Async.ShutdownTimedOut` is raised. This prevents hanging shutdowns while allowing in-flight work to complete gracefully.
 
 ```scala
-import in.rcard.yaes.{Async, Shutdown}
-import in.rcard.yaes.Async.Deadline
+import in.rcard.yaes.{Async, Shutdown, Raise}
+import in.rcard.yaes.Async.{Deadline, ShutdownTimedOut}
 import scala.concurrent.duration.*
 
-Shutdown.run {
-  Async.withGracefulShutdown(Deadline.after(30.seconds)) {
-    val serverFiber = Async.fork("server") {
-      while (!Shutdown.isShuttingDown()) {
-        // Accept and process work
-      }
+val result: Either[ShutdownTimedOut, Unit] = Shutdown.run {
+  Raise.either {
+    Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+      val serverFiber = Async.fork("server") {
+        while (!Shutdown.isShuttingDown()) {
+          // Accept and process work
+        }
 
-      Shutdown.initiateShutdown()
-      // Cleanup after shutdown
+        Shutdown.initiateShutdown()
+        // Cleanup after shutdown
+      }
     }
   }
 }

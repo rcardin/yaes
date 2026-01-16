@@ -244,6 +244,8 @@ private class GracefulShutdownScope(
     timeoutExpired.set(true)
   })
 
+  def isTimeoutExpired: Boolean = timeoutExpired.get()
+
   /** Signals that graceful shutdown should begin.
     *
     * Called from the Shutdown effect hook when `Shutdown.initiateShutdown()` is invoked. This
@@ -354,6 +356,13 @@ object Async {
     */
   object TimedOut
   type TimedOut = TimedOut.type
+
+  /** A type representing a shutdown timeout.
+    *
+    * This type is used to signal that a shutdown operation timed out.
+    */
+  object ShutdownTimedOut
+  type ShutdownTimedOut = ShutdownTimedOut.type
 
   extension [A](flow: Flow[A]) {
 
@@ -677,7 +686,7 @@ object Async {
 
   def withGracefulShutdownHandler[A](
       deadline: Deadline
-  )(using Shutdown): Yaes.Handler[Async.Unsafe, A, A] =
+  )(using Shutdown, Raise[ShutdownTimedOut]): Yaes.Handler[Async.Unsafe, A, A] =
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
         val async     = new JvmAsync()
@@ -693,14 +702,14 @@ object Async {
           }
 
           val mainTask = loomScope.forkMainTask(() => {
-            try {
-              JvmAsync.scope.set(loomScope)
-              program(using new Yaes(async))
-            } finally {
-              JvmAsync.scope.remove()
+            Async.run {
+              program
             }
           })
           loomScope.join().throwIfFailed(identity)
+          if (loomScope.isTimeoutExpired) {
+            Raise.raise(ShutdownTimedOut)
+          }
           mainTask.get()
         } finally {
           loomScope.close()
@@ -721,7 +730,8 @@ object Async {
     *   - When the main task completes, the scope shuts down immediately and cancels remaining
     *     fibers
     *   - If the main task doesn't complete within the deadline after shutdown is initiated, the
-    *     timeout enforcer triggers and remaining fibers are cancelled via cooperative interruption
+    *     timeout enforcer triggers, remaining fibers are cancelled via cooperative interruption,
+    *     and [[ShutdownTimedOut]] is raised
     *   - Any forked fibers that fail with an exception cause immediate scope shutdown (fail-fast)
     *
     * **Lifecycle:**
@@ -730,39 +740,49 @@ object Async {
     *   1. Shutdown hook triggers `scope.initiateGracefulShutdown()`
     *   1. Main task continues running, allowing cleanup code to execute
     *   1. When main task completes, scope shuts down and cancels remaining fibers
-    *   1. If deadline expires before main task completes, remaining fibers are cancelled
+    *   1. If deadline expires before main task completes, remaining fibers are cancelled and
+    *      [[ShutdownTimedOut]] is raised
     *   1. `scope.join()` completes when all fibers finish (or are cancelled)
     *
-    * **Integration with Shutdown Effect:** This method returns `Shutdown ?=> A`, meaning it
-    * requires a Shutdown context. It automatically registers a hook with `Shutdown.onShutdown` to
-    * trigger graceful shutdown when the Shutdown effect transitions to shutting down state.
+    * **Integration with Shutdown Effect:** This method returns `(Shutdown, Raise[ShutdownTimedOut]) ?=> A`,
+    * meaning it requires both a Shutdown context and a Raise[ShutdownTimedOut] context. It automatically
+    * registers a hook with `Shutdown.onShutdown` to trigger graceful shutdown when the Shutdown effect
+    * transitions to shutting down state.
+    *
+    * **Error Handling:** When the deadline expires before the main task completes, the method raises
+    * [[ShutdownTimedOut]]. Handle this error using `Raise.either`, `Raise.run`, or other Raise handlers.
     *
     * Example:
     * {{{
     * Shutdown.run {
-    *   Async.withGracefulShutdown(Deadline.after(30.seconds)) {
-    *     val serverFiber = Async.fork("server") {
-    *       while (!Shutdown.isShuttingDown()) {
-    *         handleRequest()
+    *   Raise.either {
+    *     Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+    *       val serverFiber = Async.fork("server") {
+    *         while (!Shutdown.isShuttingDown()) {
+    *           handleRequest()
+    *         }
+    *         // Graceful cleanup after shutdown initiated
     *       }
-    *       // Graceful cleanup after shutdown initiated
+    *       serverFiber.join()
     *     }
-    *     serverFiber.join()
     *   }
-    * }
+    * } // Returns Either[ShutdownTimedOut, Unit]
     * }}}
     *
     * @param deadline
     *   Maximum time to wait for the main task to complete after shutdown is initiated before
-    *   cancelling remaining fibers
+    *   cancelling remaining fibers and raising [[ShutdownTimedOut]]
     * @param block
     *   The async computation to run
     * @tparam A
     *   The result type of the computation
     * @return
-    *   A program requiring Shutdown context that blocks until the computation completes
+    *   A program requiring Shutdown and Raise[ShutdownTimedOut] contexts that blocks until the
+    *   computation completes or raises [[ShutdownTimedOut]] if the deadline expires
     */
-  def withGracefulShutdown[A](deadline: Deadline)(block: Async ?=> A): Shutdown ?=> A = {
+  def withGracefulShutdown[A](
+      deadline: Deadline
+  )(block: Async ?=> A): (Shutdown, Raise[ShutdownTimedOut]) ?=> A = {
 
     Yaes.handle(block)(using withGracefulShutdownHandler(deadline))
   }
