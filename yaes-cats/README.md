@@ -15,7 +15,7 @@ Bidirectional conversion between YAES IO and Cats Effect 3 IO.
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.12.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.12.1"
 ```
 
 ## Quick Start
@@ -624,7 +624,7 @@ val cio: CatsIO[Int] = ??? // Same as cats.effect.IO[Int]
 - **Scala Version:** 3.7.4+
 - **Java Version:** 24+ (for Virtual Threads)
 - **Cats Effect Version:** 3.6.3+
-- **YAES Core:** 0.12.0+
+- **YAES Core:** 0.12.1+
 
 ## License
 

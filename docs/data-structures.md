@@ -10,7 +10,7 @@ The `yaes-data` module provides a collection of functional data structures that 
 Add the following dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.12.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.12.1"
 ```
 
 ## Available Data Structures
