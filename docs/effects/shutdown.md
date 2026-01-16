@@ -233,12 +233,14 @@ For production applications, the `Async.withGracefulShutdown` handler provides a
 - Coordinate cleanup across multiple fibers
 - Ensure in-flight operations complete
 
+The handler requires both `Shutdown` and `Raise[Async.ShutdownTimedOut]` contexts. If the deadline expires before the main task completes, `Async.ShutdownTimedOut` is raised to signal the timeout.
+
 **When to Use Each Approach:**
 
-| Approach | Best For | Shutdown Logic |
-|----------|----------|----------------|
-| Manual (`Async.run`) | Simple cases, learning | You implement shutdown coordination |
-| Handler (`withGracefulShutdown`) | Production services | Automatic with deadline enforcement |
+| Approach | Best For | Shutdown Logic | Timeout Handling |
+|----------|----------|----------------|------------------|
+| Manual (`Async.run`) | Simple cases, learning | You implement shutdown coordination | N/A |
+| Handler (`withGracefulShutdown`) | Production services | Automatic with deadline enforcement | Raises `ShutdownTimedOut` |
 
 **See Also:**
 - [Async Effect - Graceful Shutdown](async.html#graceful-shutdown-with-async) - Complete documentation on `withGracefulShutdown`

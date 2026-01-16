@@ -126,26 +126,28 @@ Unlike the standard `Async.run` handler, the `Async.withGracefulShutdown` handle
 
 ### Basic Usage
 
-The handler requires a `Shutdown` context and provides an `Async` context to the block. When shutdown is initiated, it gives your main task a grace period (deadline) to complete cleanup operations:
+The handler requires both a `Shutdown` context and a `Raise[Async.ShutdownTimedOut]` context, and provides an `Async` context to the block. When shutdown is initiated, it gives your main task a grace period (deadline) to complete cleanup operations. If the deadline expires before the main task completes, `Async.ShutdownTimedOut` is raised:
 
 ```scala
-import in.rcard.yaes.{Async, Shutdown}
-import in.rcard.yaes.Async.Deadline
+import in.rcard.yaes.{Async, Shutdown, Raise}
+import in.rcard.yaes.Async.{Deadline, ShutdownTimedOut}
 import scala.concurrent.duration.*
 
 Shutdown.run {
-  Async.withGracefulShutdown(Deadline.after(30.seconds)) {
-    val serverFiber = Async.fork("server") {
-      while (!Shutdown.isShuttingDown()) {
-        // Process work
-        Async.delay(100.millis)
+  Raise.either {
+    Async.withGracefulShutdown(Deadline.after(30.seconds)) {
+      val serverFiber = Async.fork("server") {
+        while (!Shutdown.isShuttingDown()) {
+          // Process work
+          Async.delay(100.millis)
+        }
+        println("Server stopped accepting work")
       }
-      println("Server stopped accepting work")
+      // For demonstration purposes, initiate a graceful shutdown programmatically
+      Shutdown.initiateShutdown()
     }
-    // For demonstration purposes, initiate a graceful shutdown programmatically
-    Shutdown.initiateShutdown()
   }
-}
+} // Returns Either[ShutdownTimedOut, Unit]
 ```
 
 ### How It Works
@@ -157,7 +159,7 @@ The graceful shutdown lifecycle follows seven steps:
 3. **Hook Execution**: The shutdown hook registered by `withGracefulShutdown` triggers `scope.initiateGracefulShutdown()`
 4. **Grace Period**: Main task continues executing, allowing cleanup code to run while checking `Shutdown.isShuttingDown()`
 5. **Main Task Completion**: When the main task completes, the scope shuts down and cooperatively cancels any remaining forked fibers
-6. **Deadline Enforcement**: If the main task doesn't complete within the deadline, the timeout enforcer triggers and remaining fibers are cancelled
+6. **Deadline Enforcement**: If the main task doesn't complete within the deadline, the timeout enforcer triggers, remaining fibers are cancelled, and `ShutdownTimedOut` is raised
 7. **Completion**: `scope.join()` completes when all fibers finish (or are cancelled)
 
 **Key Distinctions:**
@@ -175,22 +177,26 @@ The deadline specifies how long the main task has to complete after shutdown is 
 **Timeout Enforcement Example:**
 
 ```scala
-import in.rcard.yaes.{Async, Shutdown, Output}
-import in.rcard.yaes.Async.Deadline
+import in.rcard.yaes.{Async, Shutdown, Output, Raise}
+import in.rcard.yaes.Async.{Deadline, ShutdownTimedOut}
 import scala.concurrent.duration.*
 
-Shutdown.run {
+val result: Either[ShutdownTimedOut, Unit] = Shutdown.run {
   Output.run {
-    Async.withGracefulShutdown(Deadline.after(3.seconds)) {
-      val slowFiber = Async.fork("slow-work") {
-        Async.delay(10.seconds) // Takes longer than deadline
-        Output.printLn("Slow work completed") // Won't print
-      }
+    Raise.either {
+      Async.withGracefulShutdown(Deadline.after(3.seconds)) {
+        val slowFiber = Async.fork("slow-work") {
+          Async.delay(10.seconds) // Takes longer than deadline
+          Output.printLn("Slow work completed") // Won't print
+        }
 
-      Shutdown.initiateShutdown()
+        Shutdown.initiateShutdown()
+        slowFiber.join() // Wait for fiber that won't complete in time
+      }
     }
   }
 }
+// result is Left(ShutdownTimedOut) because deadline expired
 ```
 
 **What Happens on Timeout:**
@@ -199,6 +205,7 @@ Shutdown.run {
 3. All forked fibers are cooperatively cancelled via JVM interruption
 4. Main task continues until it completes or is interrupted
 5. `scope.join()` completes once all fibers finish
+6. `ShutdownTimedOut` is raised to signal the timeout occurred
 
 ### Exception Handling
 
@@ -222,13 +229,15 @@ When using `withGracefulShutdown`, follow these guidelines:
 
 3. **Perform Cleanup in Main Task**
    ```scala
-   Async.withGracefulShutdown(deadline) {
-     val fiber = Async.fork { /* work */ }
-     fiber.join()
+   Raise.either {
+     Async.withGracefulShutdown(deadline) {
+       val fiber = Async.fork { /* work */ }
+       fiber.join()
 
-     // Cleanup code here runs after fiber completes
-     closeConnections()
-     flushBuffers()
+       // Cleanup code here runs after fiber completes
+       closeConnections()
+       flushBuffers()
+     }
    }
    ```
 
@@ -261,8 +270,9 @@ When using `withGracefulShutdown`, follow these guidelines:
 |--------|-------------|------------------------|
 | **Use Case** | Short-lived computations | Long-running services, daemons |
 | **Shutdown Support** | None (fail-fast on errors) | Full graceful shutdown coordination |
-| **Effect Requirements** | None | Requires `Shutdown` context |
+| **Effect Requirements** | None | Requires `Shutdown` and `Raise[ShutdownTimedOut]` contexts |
 | **Deadline Enforcement** | No | Yes, configurable grace period |
+| **Timeout Error** | No | Raises `ShutdownTimedOut` on deadline expiration |
 | **JVM Signal Handling** | No | Yes (via Shutdown effect) |
 | **Cleanup Control** | Immediate cancellation on error | Controlled shutdown with cleanup time |
 | **Typical Duration** | Milliseconds to seconds | Minutes to hours (or indefinite) |
