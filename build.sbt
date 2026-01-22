@@ -16,7 +16,7 @@ inThisBuild(
 )
 
 name := "yaes"
-val scala3Version = "3.7.4"
+val scala3Version = "3.8.1"
 scalaVersion := scala3Version
 
 scalacOptions += "-target:24"
