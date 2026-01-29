@@ -274,10 +274,10 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         }
 
         Async.delay(300.millis)
-        
+
         val queueSnapshot = actualQueue.toArray.toList
         queueSnapshot should contain allOf ("p1", "p2")
-        
+
         actualQueue.put(s"c${channel.receive()}")
         actualQueue.put(s"c${channel.receive()}")
 
@@ -290,9 +290,9 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
 
     val finalQueue = actualQueue.toArray.toList.map(_.toString)
     finalQueue should contain allOf ("p1", "p2", "p3", "c1", "c2", "c3")
-    
+
     finalQueue.filter(_.startsWith("p")) should equal(List("p1", "p2", "p3"))
-    
+
     finalQueue.filter(_.startsWith("c")) should equal(List("c1", "c2", "c3"))
   }
 
@@ -337,7 +337,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         channel.send(42)
         Async.delay(100.millis)
         actualQueue.put("p2")
-        
+
         Async.delay(100.millis)
         channel.close()
       }
@@ -367,7 +367,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
           actualQueue.put("r1-start")
           val msg1 = channel.receive()
           actualQueue.put(s"r1-got-$msg1")
-          
+
           Async.delay(100.millis)
           actualQueue.put("r2-start")
           val msg2 = channel.receive()
@@ -467,13 +467,13 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
 
         // Wait to ensure sender is blocked
         Async.delay(200.millis)
-        
+
         // At this point, sender should be waiting
         actualQueue.toArray.toList should equal(List("sending"))
-        
+
         // Now receive
         actualQueue.put(s"received-${channel.receive()}")
-        
+
         Async.delay(100.millis)
         channel.close()
       }
@@ -519,7 +519,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         Async.delay(100.millis)
         actualQueue.put("cancel")
         channel.cancel()
-        
+
         actualQueue.put("receive-attempt")
         channel.receive()
       }

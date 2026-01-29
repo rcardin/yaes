@@ -95,13 +95,13 @@ sbt "runMain <fully-qualified-main-class-name>"
 The project consists of three main modules:
 
 1. **yaes-core** (`yaes-core/src/main/scala/in/rcard/yaes/`)
-   - Contains all effect implementations
-   - Depends on `yaes-data`
-   - Main files: `Async.scala`, `Channel.scala`, `Clock.scala`, `Sync.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `Shutdown.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
+   - Contains all effect implementations (foundation layer with no yaes dependencies)
+   - Main files: `Async.scala`, `Clock.scala`, `Sync.scala`, `Input.scala`, `Log.scala`, `Output.scala`, `Raise.scala`, `Random.scala`, `Resource.scala`, `Shutdown.scala`, `State.scala`, `System.scala`, `Yaes.scala`, `YaesApp.scala`
 
 2. **yaes-data** (`yaes-data/src/main/scala/in/rcard/yaes/`)
    - Contains data structures for use with effects
-   - Main file: `Flow.scala` (cold asynchronous data streams)
+   - Depends on `yaes-core`
+   - Main files: `Flow.scala` (cold asynchronous data streams), `Channel.scala` (communication primitive), `FlowPublisher.scala` (Reactive Streams integration)
 
 3. **yaes-cats** (`yaes-cats/src/main/scala/in/rcard/yaes/`)
    - Cats/Cats Effect integration module
@@ -113,7 +113,7 @@ The project consists of three main modules:
      - `interop/` - Interop with other libraries (e.g., `catseffect` for Cats Effect conversions)
    - **Test structure**: Tests follow the same package structure (e.g., `instances/AccumulateInstancesSpec.scala`)
 
-**Dependency Graph:** yaes-cats → yaes-core → yaes-data
+**Dependency Graph:** yaes-cats → yaes-data → yaes-core
 
 **External Dependencies:**
 - ScalaTest 3.2.19 (testing)
