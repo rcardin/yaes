@@ -83,11 +83,19 @@ The above code shows how to handle only the `Random` effect. The `Raise` effect 
 
 The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
 
+**For effects only** (Raise, Async, Sync, etc.):
+
 ```sbt
 libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.12.1"
 ```
 
-For Cats integration, add:
+**For effects + data structures** (Flow, Channel, and reactive streams):
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.12.1"
+```
+
+**For Cats integration** (includes all effects and data structures):
 
 ```sbt
 libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.12.1"

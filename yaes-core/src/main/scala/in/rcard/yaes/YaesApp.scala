@@ -123,7 +123,7 @@ trait YaesApp {
     */
   protected def handleError(error: Option[Throwable]): Unit = {
     error match {
-      case None => sys.exit(0)
+      case None => ()
       case Some(ex) =>
         JSystem.err.println(s"Application error: ${ex.getMessage}")
         ex.printStackTrace()

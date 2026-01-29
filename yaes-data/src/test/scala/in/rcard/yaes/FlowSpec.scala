@@ -3,6 +3,10 @@ package in.rcard.yaes
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import in.rcard.yaes.Flow.asFlow
+import in.rcard.yaes.Async.*
+
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.concurrent.duration.*
 
 class FlowSpec extends AnyFlatSpec with Matchers {
 
@@ -270,5 +274,22 @@ class FlowSpec extends AnyFlatSpec with Matchers {
     }
 
     actualResult should contain theSameElementsInOrderAs Seq(0, 1, 1, 2, 3, 5, 8, 13, 21, 34)
+  }
+
+  "forkOn on a Flow" should "execute the flow in a dedicated fiber" in {
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
+    val actualResult = Async.run {
+      val flow = Flow.flow {
+        Async.delay(1.second)
+        actualQueue.add("flow")
+        Flow.emit(42)
+      }
+      actualQueue.add("before")
+      val flowFiber: Fiber[Unit] = flow.forkOn()
+      flowFiber.join()
+      actualQueue.add("after")
+    }
+
+    actualQueue.toArray should contain theSameElementsInOrderAs List("before", "flow", "after")
   }
 }
