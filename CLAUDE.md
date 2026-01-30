@@ -39,7 +39,7 @@ sbt ~compile
 ### Testing
 ```bash
 # Run all tests
-sbt test
+sbt -batch --no-colors test
 
 # Run tests for specific module
 sbt yaes-core/test
@@ -89,6 +89,8 @@ sbt "runMain <fully-qualified-main-class-name>"
 ```
 
 ## Architecture
+
+Always prefer readability and maintainabilty to smartness. Keep It Simple, Stupid (KISS) MUST be your mantra.
 
 ### Module Structure
 
