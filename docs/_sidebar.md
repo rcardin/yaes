@@ -4,11 +4,12 @@
 
 * **Effects**
   * [Overview](effects/index.md)
-  * [IO](effects/io.md)
+  * [Sync](effects/sync.md)
   * [Async](effects/async.md)
   * [Raise](effects/raise.md)
   * [State](effects/state.md)
   * [Resource](effects/resource.md)
+  * [Shutdown](effects/shutdown.md)
   * [Input & Output](effects/io-effects.md)
   * [Random](effects/random.md)
   * [Clock & System](effects/system-clock.md)

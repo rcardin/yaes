@@ -11,8 +11,6 @@ import scala.util.Try
 import java.util.concurrent.CancellationException
 import org.scalatest.EitherValues
 import in.rcard.yaes.Async.*
-import in.rcard.yaes.Flow
-import in.rcard.yaes.Flow.*
 
 class AsyncSpec extends AnyFlatSpec with Matchers {
   "The Async effect" should "wait the completion of all the forked fibers" in {
@@ -549,22 +547,5 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     }
 
     threadNames.toArray should contain theSameElementsAs List("custom-fiber-1", "custom-fiber-2")
-  }
-
-  "forkOn on a Flow" should "execute the flow in a dedicated fiber" in {
-    val actualQueue  = new ConcurrentLinkedQueue[String]()
-    val actualResult = Async.run {
-      val flow = Flow.flow {
-        Async.delay(1.second)
-        actualQueue.add("flow")
-        Flow.emit(42)
-      }
-      actualQueue.add("before")
-      val flowFiber: Fiber[Unit] = flow.forkOn()
-      flowFiber.join()
-      actualQueue.add("after")
-    }
-
-    actualQueue.toArray should contain theSameElementsInOrderAs List("before", "flow", "after")
   }
 }

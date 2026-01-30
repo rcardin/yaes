@@ -82,7 +82,7 @@ trait YaesApp {
   /** Executes the run method with all the effect handlers in the correct order.
     *
     * The order of handlers is:
-    *   1. IO (outermost) - handles side effects, async operations, and exceptions
+    *   1. Sync (outermost) - handles side effects, async operations, and exceptions
     *   2. Output - console output
     *   3. Input - console input
     *   4. Random - random number generation
@@ -91,7 +91,7 @@ trait YaesApp {
     *   7. Log (innermost) - structured logging
     */
   private def executeRun(): Unit = {
-    val result = IO.runBlocking(runTimeout) {
+    val result = Sync.runBlocking(runTimeout) {
       Output.run {
         Input.run {
           Random.run {
@@ -123,7 +123,7 @@ trait YaesApp {
     */
   protected def handleError(error: Option[Throwable]): Unit = {
     error match {
-      case None => sys.exit(0)
+      case None => ()
       case Some(ex) =>
         JSystem.err.println(s"Application error: ${ex.getMessage}")
         ex.printStackTrace()

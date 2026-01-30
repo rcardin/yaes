@@ -5,7 +5,7 @@
 
 ## Core Effects
 
-### [IO Effect](io.html)
+### [Sync Effect](sync.html)
 Manages side-effecting operations with referential transparency.
 
 ### [Async Effect](async.html) 
@@ -21,6 +21,9 @@ Enables stateful computations and mutable state management in a functional way.
 
 ### [Resource Effect](resource.html)
 Automatic resource management with guaranteed cleanup in LIFO order.
+
+### [Shutdown Effect](shutdown.html)
+Graceful shutdown coordination with callback hooks and signal handling.
 
 ## I/O Operations
 

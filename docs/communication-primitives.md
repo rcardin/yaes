@@ -1,6 +1,6 @@
 # Communication Primitives
 
-Beyond effects, λÆS provides communication primitives for coordinating between asynchronous computations. These primitives are part of the `yaes-core` module and enable structured communication patterns between fibers.
+Beyond effects, λÆS provides communication primitives for coordinating between asynchronous computations. These primitives are part of the `yaes-data` module and enable structured communication patterns between fibers.
 
 ## Available Primitives
 

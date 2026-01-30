@@ -1,20 +1,20 @@
 
-# IO Effect
+# Sync Effect
 
-The `IO` effect allows for running side-effecting operations while maintaining referential transparency.
+The `Sync` effect allows for running side-effecting operations while maintaining referential transparency.
 
 ## Overview
 
-The `IO` effect provides a guard rail to uncontrolled exceptions by lifting functions into the world of effectful computations.
+The `Sync` effect provides a guard rail to uncontrolled exceptions by lifting functions into the world of effectful computations.
 
 ## Basic Usage
 
 ```scala
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 case class User(name: String)
 
-def saveUser(user: User)(using IO): Long =
+def saveUser(user: User)(using Sync): Long =
   throw new RuntimeException("Read timed out")
 ```
 
@@ -25,11 +25,11 @@ def saveUser(user: User)(using IO): Long =
 Returns a `Future` without blocking the current thread:
 
 ```scala
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
-val result: Future[Long] = IO.run {
+val result: Future[Long] = Sync.run {
   saveUser(User("John"))
 }
 ```
@@ -39,10 +39,10 @@ val result: Future[Long] = IO.run {
 Blocks the current thread until completion:
 
 ```scala
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 import scala.concurrent.ExecutionContext.Implicits.global
 
-val result: Long = IO.blockingRun {
+val result: Long = Sync.blockingRun {
   saveUser(User("John"))
 }
 ```
@@ -55,6 +55,6 @@ val result: Long = IO.blockingRun {
 
 ## Best Practices
 
-- Use `IO` for any operation that might throw exceptions
+- Use `Sync` for any operation that might throw exceptions
 - Combine with other effects like `Raise` for better error handling
 - Keep handlers at the application boundary

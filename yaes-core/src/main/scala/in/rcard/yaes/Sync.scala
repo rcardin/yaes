@@ -37,24 +37,24 @@ class JvmExecutor extends Executor {
   }
 }
 
-type IO = Yaes[IO.Unsafe]
+type Sync = Yaes[Sync.Unsafe]
 
-/** The `IO` effect represents a side-effecting operation that can be run in a controlled
+/** The `Sync` effect represents a side-effecting operation that can be run in a controlled
   * environment. This effect is useful to represent operations that can fail with uncotrolled
   * exceptions.
   */
-object IO {
+object Sync {
 
-  /** Lifts a side-effecting operation into the `IO` effect.
+  /** Lifts a side-effecting operation into the `Sync` effect.
     *
     * @param program
     *   The side-effecting operation to lift
     * @tparam A
     *   The result type of the operation
     * @return
-    *   The side-effecting operation lifted into the `IO` effect
+    *   The side-effecting operation lifted into the `Sync` effect
     */
-  def apply[A](program: => A): IO ?=> A = program
+  def apply[A](program: => A): Sync ?=> A = program
 
   /** Runs the given side-effecting operation in a controlled environment and blocks the current
     * thread until the operation completes.
@@ -69,7 +69,7 @@ object IO {
     */
   inline def runBlocking[A](
       timeout: Duration
-  )(program: IO ?=> A)(implicit ec: ExecutionContext): Try[A] = {
+  )(program: Sync ?=> A)(implicit ec: ExecutionContext): Try[A] = {
     Yaes.handle(program)(using blockingHandler(timeout))
   }
 
@@ -81,13 +81,13 @@ object IO {
     * @return
     *   A `Future` with the result of the operation.
     */
-  inline def run[A](program: IO ?=> A)(implicit ec: ExecutionContext): Future[A] = {
+  inline def run[A](program: Sync ?=> A)(implicit ec: ExecutionContext): Future[A] = {
     Yaes.handle(program)(using handler)
   }
 
   def blockingHandler[A](timeout: Duration)(implicit ec: ExecutionContext) =
-    new Yaes.Handler[IO.Unsafe, A, Try[A]] {
-      override def handle(program: Yaes[IO.Unsafe] ?=> A): Try[A] = {
+    new Yaes.Handler[Sync.Unsafe, A, Try[A]] {
+      override def handle(program: Yaes[Sync.Unsafe] ?=> A): Try[A] = {
         val futureResult: Future[A] = handler.handle(program)
         Try {
           Await.result(futureResult, timeout)
@@ -95,10 +95,10 @@ object IO {
       }
     }
 
-  def handler[A](implicit ec: ExecutionContext) = new Yaes.Handler[IO.Unsafe, A, Future[A]] {
-    override def handle(program: Yaes[IO.Unsafe] ?=> A): Future[A] = {
-      val executor = IO.unsafe.executor
-      executor.submit(program(using new Yaes(IO.unsafe))).transform {
+  def handler[A](implicit ec: ExecutionContext) = new Yaes.Handler[Sync.Unsafe, A, Future[A]] {
+    override def handle(program: Yaes[Sync.Unsafe] ?=> A): Future[A] = {
+      val executor = Sync.unsafe.executor
+      executor.submit(program(using new Yaes(Sync.unsafe))).transform {
         case s @ Success(_) => s
         case Failure(ex) =>
           ex match {
@@ -109,14 +109,14 @@ object IO {
     }
   }
 
-  /** The unsafe implementation of the `IO` effect. This implementation runs the side-effecting
+  /** The unsafe implementation of the `Sync` effect. This implementation runs the side-effecting
     * operations in a Java virtual thread per task executor.
     */
   private val unsafe = new Unsafe {
     override val executor: Executor = new JvmExecutor()
   }
 
-  /** The unsafe flavor of the `IO` effect.
+  /** The unsafe flavor of the `Sync` effect.
     */
   trait Unsafe {
     val executor: Executor

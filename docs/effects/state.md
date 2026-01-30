@@ -163,7 +163,7 @@ val (finalState, result) = State.run(initialValue) {
 2. **Minimize state mutations**: Prefer functional updates over direct mutations
 3. **Use `State.use` for read-only operations**: When you only need to read from state without modifying it
 4. **Thread safety**: Remember that State is not thread-safe - use appropriate synchronization for concurrent access
-5. **Combine with other effects**: State works well with other λÆS effects like `Random`, `Raise`, and `IO`
+5. **Combine with other effects**: State works well with other λÆS effects like `Random`, `Raise`, and `Sync`
 
 ## Thread Safety Considerations
 

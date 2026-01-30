@@ -6,7 +6,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.flatspec.AsyncFlatSpec
 import in.rcard.yaes.Random.*
-import in.rcard.yaes.IO.*
+import in.rcard.yaes.Sync.*
 
 class RandomSpec extends AsyncFlatSpec with Matchers {
 
@@ -61,8 +61,8 @@ class RandomSpec extends AsyncFlatSpec with Matchers {
   }
 
   it should "compose with other effects" in {
-    val actualResult: (IO, Random) ?=> Int = for {
-      io <- IO { 42 }
+    val actualResult: (Sync, Random) ?=> Int = for {
+      io <- Sync { 42 }
       result <- Random {
         if (io != 42) io
         else scala.util.Random.nextInt()
@@ -70,7 +70,7 @@ class RandomSpec extends AsyncFlatSpec with Matchers {
     } yield result
 
     for {
-      actualResult <- IO.run { Random.run { actualResult } }
+      actualResult <- Sync.run { Random.run { actualResult } }
     } yield actualResult shouldBe a[Int]
   }
 }
