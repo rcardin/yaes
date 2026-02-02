@@ -2,10 +2,8 @@ package in.rcard.yaes.http.server
 
 import in.rcard.yaes.*
 import in.rcard.yaes.Async.{Deadline, ShutdownTimedOut}
-import com.sun.net.httpserver.{HttpServer => JdkHttpServer, HttpExchange}
-import java.net.InetSocketAddress
+import java.net.{ServerSocket, Socket, SocketException}
 import scala.concurrent.duration.DurationInt
-import scala.jdk.CollectionConverters.*
 
 /** Server configuration and route definitions.
   *
@@ -21,10 +19,37 @@ case class ServerDef(routes: Routes) {
 
   /** Run the HTTP server.
     *
-    * Starts the server on the specified port and returns a Server handle. The server runs until
-    * shutdown() is called on the returned Server.
+    * Starts the server with the specified configuration. The server runs until shutdown() is
+    * called or the JVM shuts down.
     *
-    * This is a convenience method equivalent to YaesServer.run(this, port).
+    * This is a convenience method equivalent to YaesServer.run(this, config).
+    *
+    * @param config
+    *   Server configuration including port, deadline, and size limits
+    * @param async
+    *   Async context for structured concurrency and request handling
+    * @param output
+    *   Output context for lifecycle logging
+    * @param shutdown
+    *   Shutdown context for graceful shutdown coordination
+    * @param raise
+    *   Raise context for handling shutdown timeout errors
+    * @return
+    *   Unit after server stops
+    */
+  def run(config: ServerConfig)(using
+      Async,
+      Output,
+      Shutdown,
+      Raise[ShutdownTimedOut]
+  ): Unit = {
+    YaesServer.run(this, config)
+  }
+
+  /** Run the HTTP server (backward-compatible overload).
+    *
+    * Starts the server on the specified port with a deadline. This is a convenience method that
+    * creates a ServerConfig internally.
     *
     * @param port
     *   Port to bind to
@@ -32,13 +57,15 @@ case class ServerDef(routes: Routes) {
     *   Maximum time to wait for in-flight requests after shutdown is initiated (default: 30
     *   seconds)
     * @param async
-    *   Async context for forking request fibers and shutdown coordination
+    *   Async context for structured concurrency and request handling
     * @param output
-    *   Output context for logging shutdown status
+    *   Output context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param raise
+    *   Raise context for handling shutdown timeout errors
     * @return
-    *   A Server instance that can be used to stop the server
+    *   Unit after server stops
     */
   def run(port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
       Async,
@@ -46,14 +73,15 @@ case class ServerDef(routes: Routes) {
       Shutdown,
       Raise[ShutdownTimedOut]
   ): Unit = {
-    YaesServer.run(this, port, deadline)
+    YaesServer.run(this, ServerConfig(port = port, deadline = deadline))
   }
 }
 
-/** HTTP server built on YAES effects and JDK HttpServer.
+/** HTTP server built on YAES effects and java.net.ServerSocket.
   *
   * Provides a simple, effect-based HTTP server using virtual threads for request handling. Each
-  * incoming request is automatically handled in its own fiber (virtual thread) via [[Async.fork]].
+  * incoming request is automatically handled in its own fiber (virtual thread) via [[Async.fork]]
+  * under YAES structured concurrency.
   *
   * Example:
   * {{{
@@ -61,18 +89,18 @@ case class ServerDef(routes: Routes) {
   * import scala.concurrent.duration.*
   *
   * val server = YaesServer.route(
-  *   (Method.GET, "/hello", (req: Request) => Response.ok("Hello!")),
-  *   (Method.GET, "/delay", (req: Request) => {
+  *   GET / "hello" -> { req => Response.ok("Hello!") },
+  *   GET / "delay" -> { req =>
   *     Async.delay(1.second)
   *     Response.ok("Delayed response")
-  *   })
+  *   }
   * )
   *
   * Shutdown.run {
   *   Raise.run {
   *     Async.run {
   *       Output.run {
-  *         YaesServer.run(server, port = 8080)
+  *         server.run(ServerConfig(port = 8080))
   *       }
   *     }
   *   }
@@ -117,21 +145,22 @@ object YaesServer {
 
   /** Run the HTTP server.
     *
-    * Starts an HTTP server on the specified port, handling each incoming request in its own fiber.
-    * Returns a Server handle that can be used to programmatically stop the server.
+    * Starts an HTTP server using java.net.ServerSocket, handling each incoming request in its own
+    * fiber under YAES structured concurrency.
     *
     * **Effect Requirements:**
-    *   - Requires [[Async]] context for fiber-per-request handling and shutdown coordination
-    *   - Requires [[Output]] context for logging shutdown status
+    *   - Requires [[Async]] context for structured concurrency and fiber-per-request handling
+    *   - Requires [[Output]] context for lifecycle logging
     *   - Requires [[Shutdown]] context for graceful shutdown coordination with JVM signals
     *   - Requires [[Raise]]`[`[[ShutdownTimedOut]]`]` context for handling shutdown timeout errors
     *
     * **Request Handling:**
-    *   - Each request is automatically handled in a forked fiber via [[Async.fork]]
+    *   - Each request is handled in a forked fiber via [[Async.fork]]
+    *   - Requests are parsed using HTTP/1.1 protocol parser
     *   - Handlers receive the full YAES effect context
     *   - Errors in handlers result in 500 Internal Server Error responses
     *   - Unmatched routes result in 404 Not Found responses
-    *   - HttpExchange resources are automatically closed via [[Resource]] effect (internal)
+    *   - Parse errors result in appropriate error responses (400, 413, 501, 505)
     *
     * **Automatic Shutdown Hook:**
     *   - JVM shutdown hooks are automatically managed by the [[Shutdown]] effect
@@ -140,32 +169,27 @@ object YaesServer {
     *   - This ensures clean termination in containers (Kubernetes, Docker) and local development
     *
     * **Graceful Shutdown:**
-    *   - Call [[Server.shutdown]] on the returned handle to stop the server programmatically
-    *   - Shutdown is also triggered automatically via JVM shutdown hook (see above)
-    *   - New requests are immediately rejected with 503 Service Unavailable
+    *   - Shutdown can be triggered via JVM shutdown hook or by calling [[Shutdown.initiateShutdown]]
+    *   - New requests during shutdown receive 503 Service Unavailable
     *   - All in-flight requests (already accepted) complete before shutdown finishes
     *   - This is enforced by [[Async.withGracefulShutdown]] which coordinates with [[Shutdown]]
     *   - If in-flight requests don't complete within the deadline, [[ShutdownTimedOut]] is raised
-    *   - Shutdown hook (if registered) runs after all requests complete
-    *   - Server lifecycle is managed via [[Resource]] effect for automatic cleanup
+    *   - Server resources are managed via [[Resource]] effect for automatic cleanup
     *
     * Example:
     * {{{
+    * import in.rcard.yaes.http.server.*
+    * import scala.concurrent.duration.*
+    *
     * val server = YaesServer.route(
-    *   (Method.GET, "/hello", (req: Request) => Response.ok("Hello!"))
+    *   GET / "hello" -> { req => Response.ok("Hello!") }
     * )
     *
     * Shutdown.run {
     *   Raise.run {
     *     Async.run {
     *       Output.run {
-    *         println("Starting server on port 8080...")
-    *         val serverHandle = YaesServer.run(server, port = 8080)
-    *
-    *         // ... do work ...
-    *
-    *         serverHandle.shutdown()
-    *         println("Server stopped")
+    *         server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *       }
     *     }
     *   }
@@ -174,137 +198,164 @@ object YaesServer {
     *
     * @param serverDef
     *   Server configuration with routes
-    * @param port
-    *   Port to bind to
-    * @param deadline
-    *   Maximum time to wait for in-flight requests after shutdown is initiated (default: 30
-    *   seconds)
+    * @param config
+    *   Server configuration including port, deadline, and size limits
     * @param async
-    *   Async context for forking request fibers and shutdown coordination
+    *   Async context for structured concurrency and request handling
     * @param output
-    *   Output context for logging shutdown status
+    *   Output context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param raise
+    *   Raise context for handling shutdown timeout errors
     * @return
-    *   A Server instance that can be used to stop the server
+    *   Unit after server stops
     */
-  def run(serverDef: ServerDef, port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
+  def run(serverDef: ServerDef, config: ServerConfig)(using
       async: Async,
       output: Output,
       shutdown: Shutdown,
       raise: Raise[ShutdownTimedOut]
   ): Unit = {
     Resource.run {
-      // Install server as a resource with automatic cleanup
+      // Install server socket as a resource with automatic cleanup
       Resource.install({
-        Async.withGracefulShutdown(deadline) {
-          val srv = JdkHttpServer.create(new InetSocketAddress(port), 0)
+        Async.withGracefulShutdown(config.deadline) {
+          Output.printLn(s"Starting server on port ${config.port}")
+          val serverSocket = new ServerSocket(config.port)
+          Output.printLn(s"Server ready, listening on port ${config.port}")
 
-          srv.setExecutor { cmd =>
-            Async.fork(s"http-request-${cmd.hashCode()}") {
-              cmd.run()
-            }
-          }
-
-          srv.createContext(
-            "/",
-            (exchange: HttpExchange) => {
-              Resource.run {
-                Resource.ensuring {
-                  exchange.close()
+          // Accept loop - runs as main fiber in structured scope
+          // Each request is handled in a forked fiber
+          // Virtual thread interruption breaks accept() on shutdown
+          try {
+            while (!Shutdown.isShuttingDown()) {
+              try {
+                val socket = serverSocket.accept()
+                // Fork a fiber to handle this request
+                Async.fork {
+                  handleConnection(socket, serverDef.routes, config)
                 }
-                // Check if server is accepting requests using Shutdown effect
-                if (Shutdown.isShuttingDown()) {
-                  // Server is shutting down - reject with 503
-                  val shutdownResponse = Response.serviceUnavailable("Server is shutting down")
-                  writeResponse(exchange, shutdownResponse)
-                  exchange.close()
-                } else {
-                  handleRequest(exchange, serverDef.routes)
-                }
+              } catch {
+                case _: SocketException if Shutdown.isShuttingDown() =>
+                  // Expected during shutdown - ServerSocket was closed
+                  // Break out of the accept loop
+                  ()
+                case ex: Exception =>
+                  // Log unexpected errors but continue accepting
+                  Output.printLn(s"Error accepting connection: ${ex.getMessage}")
               }
             }
-          )
+          } finally {
+            Output.printLn("Server shutting down...")
+          }
 
-          srv.start()
-          srv // Return the started server
+          serverSocket // Return the server socket for cleanup
         }
-      }) { server => 
-        // Stop the JDK server immediately (0 = no grace period)
-        server.stop(0)
+      }) { serverSocket =>
+        // Cleanup: close the server socket
+        serverSocket.close()
+        Output.printLn("Server stopped")
       }
     }
   }
 
-  private def handleRequest(
-      exchange: HttpExchange,
-      routes: Routes
-  )(using async: Async): Unit = {
-    try {
-      // Parse request
-      val request = parseRequest(exchange)
-
-      // Route to handler
-      val response = routes.handle(request)
-
-      // Write response
-      writeResponse(exchange, response)
-    } catch {
-      case ex: Exception =>
-        val errorResponse = Response.internalServerError(ex.getMessage)
-        writeResponse(exchange, errorResponse)
-    }
+  /** Backward-compatible run method with port and deadline.
+    *
+    * @param serverDef
+    *   Server configuration with routes
+    * @param port
+    *   Port to bind to
+    * @param deadline
+    *   Maximum time to wait for in-flight requests after shutdown is initiated
+    * @param async
+    *   Async context for structured concurrency
+    * @param output
+    *   Output context for lifecycle logging
+    * @param shutdown
+    *   Shutdown context for graceful shutdown coordination
+    * @param raise
+    *   Raise context for handling shutdown timeout errors
+    * @return
+    *   Unit after server stops
+    */
+  def run(serverDef: ServerDef, port: Int, deadline: Deadline)(using
+      async: Async,
+      output: Output,
+      shutdown: Shutdown,
+      raise: Raise[ShutdownTimedOut]
+  ): Unit = {
+    run(serverDef, ServerConfig(port = port, deadline = deadline))
   }
 
-  private def parseRequest(exchange: HttpExchange): Request = {
-    val method  = Method.valueOf(exchange.getRequestMethod)
-    val uri     = exchange.getRequestURI
-    val path    = uri.getPath
-    val headers = exchange.getRequestHeaders.asScala.map { case (k, v) =>
-      k -> v.asScala.headOption.getOrElse("")
-    }.toMap
-    val body        = new String(exchange.getRequestBody.readAllBytes())
-    val queryString = parseQueryString(Option(uri.getQuery).getOrElse(""))
+  /** Handle a single client connection.
+    *
+    * Parses the HTTP request, routes it to the appropriate handler, and writes the response.
+    * Handles all errors by returning appropriate HTTP error responses. Closes the socket when done.
+    *
+    * @param socket
+    *   The client socket to handle
+    * @param routes
+    *   The routes to match against
+    * @param config
+    *   Server configuration for size limits
+    * @param async
+    *   Async context for potential handler effects
+    * @param shutdown
+    *   Shutdown context to check if server is shutting down
+    */
+  private def handleConnection(socket: Socket, routes: Routes, config: ServerConfig)(using
+      async: Async,
+      shutdown: Shutdown
+  ): Unit = {
+    Resource.run {
+      Resource.ensuring {
+        socket.close()
+      }
 
-    Request(method, path, headers, body, queryString)
-  }
-
-  private def parseQueryString(query: String): Map[String, List[String]] = {
-    if (query.isEmpty) {
-      Map.empty
-    } else {
-      query.split("&").foldLeft(Map.empty[String, List[String]]) { (acc, pair) =>
-        pair.split("=", 2) match {
-          case Array(key, value) =>
-            val decodedKey   = java.net.URLDecoder.decode(key, "UTF-8")
-            val decodedValue = java.net.URLDecoder.decode(value, "UTF-8")
-            acc.updatedWith(decodedKey) {
-              case Some(existing) => Some(existing :+ decodedValue)
-              case None           => Some(List(decodedValue))
-            }
-          case Array(key) =>
-            val decodedKey = java.net.URLDecoder.decode(key, "UTF-8")
-            acc.updatedWith(decodedKey) {
-              case Some(existing) => Some(existing :+ "")
-              case None           => Some(List(""))
-            }
-          case _ => acc
+      try {
+        // Check if server is shutting down
+        if (Shutdown.isShuttingDown()) {
+          val response = Response.serviceUnavailable("Server is shutting down")
+          HttpWriter.writeResponse(socket.getOutputStream, response)
+          return
         }
+
+        // Parse the HTTP request
+        val parseResult = HttpParser.parseRequest(socket.getInputStream, config)
+
+        parseResult match {
+          case Left(errorResponse) =>
+            // Parse error - write error response
+            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+
+          case Right(request) =>
+            // Route the request
+            try {
+              val response = routes.handle(request)
+              HttpWriter.writeResponse(socket.getOutputStream, response)
+            } catch {
+              case ex: Exception =>
+                // Handler threw exception - return 500
+                val errorResponse = Response.internalServerError(ex.getMessage)
+                HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+            }
+        }
+      } catch {
+        case _: SocketException =>
+          // Client disconnected or socket error - silent close (expected behavior)
+          ()
+        case ex: Exception =>
+          // Unexpected error - try to send 500 if possible, then close
+          try {
+            val errorResponse = Response.internalServerError("Internal server error")
+            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+          } catch {
+            case _: Exception =>
+              // Can't even write the error response - just close
+              ()
+          }
       }
     }
-  }
-
-  private def writeResponse(exchange: HttpExchange, response: Response): Unit = {
-    // Set headers
-    response.headers.foreach { case (k, v) =>
-      exchange.getResponseHeaders.set(k, v)
-    }
-
-    // Write response
-    val responseBytes = response.body.getBytes
-    exchange.sendResponseHeaders(response.status, responseBytes.length)
-    val os = exchange.getResponseBody
-    os.write(responseBytes)
-    os.close()
   }
 }
