@@ -321,25 +321,24 @@ object YaesServer {
           return
         }
 
-        // Parse the HTTP request
-        val parseResult = HttpParser.parseRequest(socket.getInputStream, config)
+        // Parse the HTTP request and handle parse errors
+        Raise.onError {
+          val request = HttpParser.parseRequest(socket.getInputStream, config)
 
-        parseResult match {
-          case Left(errorResponse) =>
-            // Parse error - write error response
-            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
-
-          case Right(request) =>
-            // Route the request
-            try {
-              val response = routes.handle(request)
-              HttpWriter.writeResponse(socket.getOutputStream, response)
-            } catch {
-              case ex: Exception =>
-                // Handler threw exception - return 500
-                val errorResponse = Response.internalServerError(ex.getMessage)
-                HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
-            }
+          // Route the request
+          try {
+            val response = routes.handle(request)
+            HttpWriter.writeResponse(socket.getOutputStream, response)
+          } catch {
+            case ex: Exception =>
+              // Handler threw exception - return 500
+              val errorResponse = Response.internalServerError(ex.getMessage)
+              HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+          }
+        } { parseError =>
+          // Parse error - convert to response and write
+          val errorResponse = parseError.toResponse
+          HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
         }
       } catch {
         case _: SocketException =>

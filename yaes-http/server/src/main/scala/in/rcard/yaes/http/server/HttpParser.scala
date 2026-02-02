@@ -1,5 +1,6 @@
 package in.rcard.yaes.http.server
 
+import in.rcard.yaes.*
 import java.io.InputStream
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -19,13 +20,13 @@ object HttpParser {
     * Format: `METHOD /path HTTP/version`
     *
     * @param line the request line to parse
-    * @return Either an error Response (400, 501, 505) or a tuple of (method, path, version)
+    * @return a tuple of (method, path, version), or raises HttpParseError
     */
-  def parseRequestLine(line: String): Either[Response, (String, String, String)] = {
+  def parseRequestLine(line: String): (String, String, String) raises HttpParseError = {
     val parts = line.split(" ", 3)
 
     if (parts.length != 3) {
-      return Left(Response(400, body = "Bad Request"))
+      Raise.raise(HttpParseError.MalformedRequestLine)
     }
 
     val method = parts(0)
@@ -34,15 +35,15 @@ object HttpParser {
 
     // Check if method is supported
     if (!SupportedMethods.contains(method)) {
-      return Left(Response(501, body = "Not Implemented"))
+      Raise.raise(HttpParseError.UnsupportedMethod(method))
     }
 
     // Check if HTTP version is supported (only HTTP/1.0 and HTTP/1.1)
     if (version != "HTTP/1.1" && version != "HTTP/1.0") {
-      return Left(Response(505, body = "HTTP Version Not Supported"))
+      Raise.raise(HttpParseError.UnsupportedHttpVersion(version))
     }
 
-    Right((method, path, version))
+    (method, path, version)
   }
 
   /** Parses HTTP headers.
@@ -51,14 +52,14 @@ object HttpParser {
     *
     * @param headerLines the list of header lines to parse
     * @param maxHeaderSize the maximum total size of headers in bytes
-    * @return Either an error Response (400) or a map of header names to values
+    * @return a map of header names to values, or raises HttpParseError
     */
-  def parseHeaders(headerLines: List[String], maxHeaderSize: Int): Either[Response, Map[String, String]] = {
+  def parseHeaders(headerLines: List[String], maxHeaderSize: Int): Map[String, String] raises HttpParseError = {
     // Calculate total size: each line + \r\n
     val totalSize = headerLines.map(_.length + 2).sum
 
     if (totalSize > maxHeaderSize) {
-      return Left(Response(400, body = "Bad Request"))
+      Raise.raise(HttpParseError.MalformedHeaders)
     }
 
     val headers = scala.collection.mutable.Map[String, String]()
@@ -67,7 +68,7 @@ object HttpParser {
       val colonIndex = line.indexOf(':')
 
       if (colonIndex == -1) {
-        return Left(Response(400, body = "Bad Request"))
+        Raise.raise(HttpParseError.MalformedHeaders)
       }
 
       val name = line.substring(0, colonIndex)
@@ -82,7 +83,7 @@ object HttpParser {
       headers(name) = value
     }
 
-    Right(headers.toMap)
+    headers.toMap
   }
 
   /** Parses the request body based on Content-Length header.
@@ -93,13 +94,13 @@ object HttpParser {
     * @param inputStream the input stream to read from
     * @param headers the parsed HTTP headers
     * @param maxBodySize the maximum allowed body size in bytes
-    * @return Either an error Response (400, 413) or the body string
+    * @return the body string, or raises HttpParseError
     */
-  def parseBody(inputStream: InputStream, headers: Map[String, String], maxBodySize: Int): Either[Response, String] = {
+  def parseBody(inputStream: InputStream, headers: Map[String, String], maxBodySize: Int): String raises HttpParseError = {
     headers.get("Content-Length") match {
       case None =>
         // No Content-Length header = empty body
-        Right("")
+        ""
 
       case Some(lengthStr) =>
         // Try to parse Content-Length as an integer
@@ -107,22 +108,22 @@ object HttpParser {
           lengthStr.toInt
         } catch {
           case _: NumberFormatException =>
-            return Left(Response(400, body = "Bad Request"))
+            Raise.raise(HttpParseError.InvalidContentLength)
         }
 
         // Check for negative Content-Length
         if (contentLength < 0) {
-          return Left(Response(400, body = "Bad Request"))
+          Raise.raise(HttpParseError.InvalidContentLength)
         }
 
         // Check if body size exceeds max
         if (contentLength > maxBodySize) {
-          return Left(Response(413, body = "Payload Too Large"))
+          Raise.raise(HttpParseError.PayloadTooLarge(contentLength, maxBodySize))
         }
 
         // Content-Length of 0 means empty body
         if (contentLength == 0) {
-          return Right("")
+          return ""
         }
 
         // Read the body
@@ -133,13 +134,13 @@ object HttpParser {
           val bytesRead = inputStream.read(buffer, totalRead, contentLength - totalRead)
           if (bytesRead == -1) {
             // Unexpected end of stream
-            return Left(Response(400, body = "Bad Request"))
+            Raise.raise(HttpParseError.UnexpectedEndOfStream)
           }
           totalRead += bytesRead
         }
 
         // Convert to string using UTF-8
-        Right(new String(buffer, "UTF-8"))
+        new String(buffer, "UTF-8")
     }
   }
 
@@ -150,53 +151,47 @@ object HttpParser {
     *
     * @param inputStream the input stream to read from
     * @param config the server configuration with size limits
-    * @return Either an error Response or a complete Request
+    * @return a complete Request, or raises HttpParseError
     */
-  def parseRequest(inputStream: InputStream, config: ServerConfig): Either[Response, Request] = {
+  def parseRequest(inputStream: InputStream, config: ServerConfig): Request raises HttpParseError = {
     val reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))
 
     // Read request line
     val requestLine = reader.readLine()
     if (requestLine == null) {
-      return Left(Response(400, body = "Bad Request"))
+      Raise.raise(HttpParseError.MalformedRequestLine)
     }
 
     // Parse request line
-    parseRequestLine(requestLine) match {
-      case Left(response) => return Left(response)
-      case Right((methodStr, pathWithQuery, _)) =>
-        // Split path and query string
-        val (path, queryString) = parsePathAndQuery(pathWithQuery)
+    val (methodStr, pathWithQuery, _) = parseRequestLine(requestLine)
 
-        // Convert method string to Method enum
-        val method = Method.valueOf(methodStr)
+    // Split path and query string
+    val (path, queryString) = parsePathAndQuery(pathWithQuery)
 
-        // Read header lines until blank line
-        val headerLines = mutable.ListBuffer[String]()
-        var line = reader.readLine()
-        while (line != null && line.nonEmpty) {
-          headerLines += line
-          line = reader.readLine()
-        }
+    // Convert method string to Method enum
+    val method = Method.valueOf(methodStr)
 
-        // Parse headers
-        parseHeaders(headerLines.toList, config.maxHeaderSize) match {
-          case Left(response) => return Left(response)
-          case Right(headers) =>
-            // Parse body from reader instead of raw inputStream
-            parseBodyFromReader(reader, headers, config.maxBodySize) match {
-              case Left(response) => Left(response)
-              case Right(body) =>
-                Right(Request(
-                  method = method,
-                  path = path,
-                  headers = headers,
-                  body = body,
-                  queryString = queryString
-                ))
-            }
-        }
+    // Read header lines until blank line
+    val headerLines = mutable.ListBuffer[String]()
+    var line = reader.readLine()
+    while (line != null && line.nonEmpty) {
+      headerLines += line
+      line = reader.readLine()
     }
+
+    // Parse headers
+    val headers = parseHeaders(headerLines.toList, config.maxHeaderSize)
+
+    // Parse body from reader instead of raw inputStream
+    val body = parseBodyFromReader(reader, headers, config.maxBodySize)
+
+    Request(
+      method = method,
+      path = path,
+      headers = headers,
+      body = body,
+      queryString = queryString
+    )
   }
 
   /** Parses the request body from a BufferedReader based on Content-Length header.
@@ -207,13 +202,13 @@ object HttpParser {
     * @param reader the BufferedReader positioned after headers
     * @param headers the parsed HTTP headers
     * @param maxBodySize the maximum allowed body size in bytes
-    * @return Either an error Response (400, 413) or the body string
+    * @return the body string, or raises HttpParseError
     */
-  private def parseBodyFromReader(reader: BufferedReader, headers: Map[String, String], maxBodySize: Int): Either[Response, String] = {
+  private def parseBodyFromReader(reader: BufferedReader, headers: Map[String, String], maxBodySize: Int): String raises HttpParseError = {
     headers.get("Content-Length") match {
       case None =>
         // No Content-Length header = empty body
-        Right("")
+        ""
 
       case Some(lengthStr) =>
         // Try to parse Content-Length as an integer
@@ -221,22 +216,22 @@ object HttpParser {
           lengthStr.toInt
         } catch {
           case _: NumberFormatException =>
-            return Left(Response(400, body = "Bad Request"))
+            Raise.raise(HttpParseError.InvalidContentLength)
         }
 
         // Check for negative Content-Length
         if (contentLength < 0) {
-          return Left(Response(400, body = "Bad Request"))
+          Raise.raise(HttpParseError.InvalidContentLength)
         }
 
         // Check if body size exceeds max
         if (contentLength > maxBodySize) {
-          return Left(Response(413, body = "Payload Too Large"))
+          Raise.raise(HttpParseError.PayloadTooLarge(contentLength, maxBodySize))
         }
 
         // Content-Length of 0 means empty body
         if (contentLength == 0) {
-          return Right("")
+          return ""
         }
 
         // Read the body using the reader
@@ -247,13 +242,13 @@ object HttpParser {
           val charsRead = reader.read(buffer, totalRead, contentLength - totalRead)
           if (charsRead == -1) {
             // Unexpected end of stream
-            return Left(Response(400, body = "Bad Request"))
+            Raise.raise(HttpParseError.UnexpectedEndOfStream)
           }
           totalRead += charsRead
         }
 
         // Convert to string (already decoded as UTF-8 by InputStreamReader)
-        Right(new String(buffer))
+        new String(buffer)
     }
   }
 
