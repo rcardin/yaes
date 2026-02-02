@@ -29,6 +29,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
 
   private val client = HttpClient.newHttpClient()
 
+  // Short deadline for tests to avoid 30-second waits during shutdown
+  private val testDeadline = Async.Deadline.after(2.seconds)
+
   /** Wait for server to be ready by attempting to connect with retries.
     *
     * @param port
@@ -38,7 +41,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     * @param delayBetweenRetries
     *   Time to wait between attempts
     */
-  private def waitForServer(port: Int, maxRetries: Int = 20, delayBetweenRetries: scala.concurrent.duration.FiniteDuration = 100.millis)(using Async): Unit = {
+  private def waitForServer(port: Int, maxRetries: Int = 20, delayBetweenRetries: scala.concurrent.duration.FiniteDuration = 50.millis)(using Async): Unit = {
     var retries = 0
     var connected = false
 
@@ -75,9 +78,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -115,14 +118,14 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
             val server = YaesServer.route(
               GET(p"/concurrent") { req =>
                 // Simulate some processing time
-                Async.delay(100.millis)
+                Async.delay(50.millis)
                 Response.ok("Concurrent response")
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -175,9 +178,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -202,7 +205,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     }
 
     // Wait a bit for port to be fully released
-    Thread.sleep(200)
+    Thread.sleep(50)
 
     // Second server lifecycle - verify port is available for reuse
     Shutdown.run {
@@ -216,7 +219,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
             )
 
             val serverFiber2 = Async.fork("server2") {
-              server2.run(port)
+              server2.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -255,9 +258,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -299,9 +302,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -345,9 +348,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -388,9 +391,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -430,9 +433,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -472,9 +475,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -527,15 +530,15 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
           Output.run {
             val server = YaesServer.route(
               GET(p"/slow") { req =>
-                // Simulate slow processing
-                Async.delay(1.second)
+                // Simulate slow processing (reduced from 1s to 200ms for faster tests)
+                Async.delay(200.millis)
                 Response.ok("Slow response completed")
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -555,7 +558,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
             }
 
             // Give the request time to start processing
-            Async.delay(200.millis)
+            Async.delay(50.millis)
 
             // Initiate shutdown while request is in-flight
             Shutdown.initiateShutdown()
@@ -584,9 +587,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -605,7 +608,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
             Shutdown.initiateShutdown()
 
             // Give shutdown time to register
-            Async.delay(100.millis)
+            Async.delay(50.millis)
 
             // Try to make a new request after shutdown initiated
             val request2 = HttpRequest
@@ -636,15 +639,15 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
           Output.run {
             val server = YaesServer.route(
               GET(p"/very-slow") { req =>
-                // This request takes 5 seconds, longer than the 1 second deadline
-                Async.delay(5.seconds)
+                // This request takes 500ms, longer than the 200ms deadline
+                Async.delay(500.millis)
                 Response.ok("Should not complete")
               }
             )
 
-            // Start server with short deadline (1 second)
+            // Start server with short deadline (200ms)
             val serverFiber = Async.fork("server") {
-              server.run(ServerConfig(port = port, deadline = Async.Deadline.after(1.second)))
+              server.run(ServerConfig(port = port, deadline = Async.Deadline.after(200.millis)))
             }
 
             // Wait for server to be ready
@@ -669,7 +672,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
             }
 
             // Give the request time to start processing
-            Async.delay(200.millis)
+            Async.delay(50.millis)
 
             // Initiate shutdown - this should timeout because request takes too long
             Shutdown.initiateShutdown()
@@ -715,9 +718,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server in a background fiber
+            // Start server in a background fiber with short deadline
             val serverFiber = Async.fork("server") {
-              server.run(port)
+              server.run(ServerConfig(port = port, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -770,9 +773,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server with small maxBodySize (1 KB)
+            // Start server with small maxBodySize (1 KB) and short deadline
             val serverFiber = Async.fork("server") {
-              server.run(ServerConfig(port = port, maxBodySize = 1024))
+              server.run(ServerConfig(port = port, maxBodySize = 1024, deadline = testDeadline))
             }
 
             // Wait for server to be ready
@@ -815,9 +818,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               }
             )
 
-            // Start server with small maxHeaderSize (256 bytes)
+            // Start server with small maxHeaderSize (256 bytes) and short deadline
             val serverFiber = Async.fork("server") {
-              server.run(ServerConfig(port = port, maxHeaderSize = 256))
+              server.run(ServerConfig(port = port, maxHeaderSize = 256, deadline = testDeadline))
             }
 
             // Wait for server to be ready
