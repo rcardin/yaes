@@ -340,6 +340,190 @@ The HTTP server provides graceful shutdown with the following guarantees:
 - Shutdown hooks run during `Resource` cleanup, before server stops
 - Structured concurrency ensures all request handler fibers complete via `Async.run`'s `StructuredTaskScope.join()`
 
+## Common Issues and Resolutions
+
+This section documents issues encountered during development and their solutions, to help future developers avoid the same pitfalls.
+
+### Issue 1: SBT Project Naming for HTTP Server Module
+
+**Problem:**
+When trying to compile the HTTP server module with `sbt "yaes-http/server/compile"`, SBT fails with the error:
+```
+Expected configuration
+Not a valid key: server (similar: serverPort, serverHost, serverUseJni)
+yaes-http/server/compile
+```
+
+**Root Cause:**
+The project is defined in `build.sbt` as:
+```scala
+lazy val server = project.in(file("yaes-http/server"))
+```
+This creates a project named `server` (not `yaes-http/server`), with sources located in the `yaes-http/server` directory.
+
+**Resolution:**
+Use the project name, not the directory path:
+```bash
+# ✅ CORRECT
+sbt "server/compile"
+sbt "server/test"
+sbt "server/testOnly in.rcard.yaes.http.server.HttpParserSpec"
+
+# ❌ INCORRECT
+sbt "yaes-http/server/compile"
+```
+
+### Issue 2: Testing Functions with Raise Effect - Raise.option vs Raise.either
+
+**Problem:**
+When testing functions that use custom error types with the Raise effect (e.g., `HttpParseError`), using `Raise.option` results in compilation errors:
+```scala
+// ❌ INCORRECT - Compilation error
+val result = Raise.option { HttpParser.parseRequestLine(line) }
+// Error: No given instance of type Raise[HttpParseError] was found
+```
+
+**Root Cause:**
+`Raise.option` is specifically designed to work with `Raise[None.type]` as the error type, not custom error types:
+```scala
+// From Raise.scala
+def option[A](block: Raise[None.type] ?=> A): Option[A] = ...
+```
+
+When you call a function requiring `Raise[HttpParseError]` inside a `Raise.option` block, there's a type mismatch: the block provides `Raise[None.type]`, but the function needs `Raise[HttpParseError]`.
+
+**Resolution:**
+Use `Raise.either[ErrorType, ResultType]` for testing functions with custom error types:
+
+```scala
+// ✅ CORRECT - Success case
+val result = Raise.either[HttpParseError, (String, String, String)] {
+  HttpParser.parseRequestLine("GET /path HTTP/1.1")
+}
+result shouldBe Right(("GET", "/path", "HTTP/1.1"))
+
+// ✅ CORRECT - Error case
+val error = Raise.either[HttpParseError, (String, String, String)] {
+  HttpParser.parseRequestLine("INVALID")
+}
+error shouldBe Left(HttpParseError.MalformedRequestLine)
+error.left.toOption.map(_.toResponse.status) shouldBe Some(400)
+```
+
+**When to use each handler:**
+- `Raise.option`: Only when the function uses `Raise[None.type]` (rarely used directly)
+- `Raise.either[E, A]`: For functions with custom error types, returns `Either[E, A]`
+- `Raise.run`: For functions that raise errors you want to catch as the error value
+
+### Issue 3: Understanding Raise Context in Tests
+
+**Problem:**
+Compilation errors when calling functions with `raises` syntax inside test blocks:
+```
+No given instance of type in.rcard.yaes.Raise[ErrorType] was found
+```
+
+**Root Cause:**
+Functions declared with `raises ErrorType` are syntactic sugar for context parameters:
+```scala
+// These are equivalent:
+def parse(line: String): Result raises HttpParseError
+def parse(line: String): Raise[HttpParseError] ?=> Result
+```
+
+The function requires a `Raise[HttpParseError]` context parameter to be available in scope. Test code must create this context.
+
+**Resolution:**
+Use `Raise.either`, `Raise.fold`, or other handlers that **automatically provide** the Raise context:
+
+```scala
+// ✅ CORRECT - Raise.either provides Raise[HttpParseError] context
+val result = Raise.either[HttpParseError, Request] {
+  HttpParser.parseRequest(inputStream, config)
+  // Inside this block, Raise[HttpParseError] is available as an implicit context parameter
+}
+
+// ✅ CORRECT - Raise.fold also works
+val result = Raise.fold(
+  { HttpParser.parseRequest(inputStream, config) }
+)(
+  onError = error => fail(s"Unexpected error: ${error.message}"),
+  onSuccess = request => request
+)
+```
+
+**Pattern for Test Cases:**
+
+Success assertions:
+```scala
+val result = Raise.either[ErrorType, ResultType] {
+  functionThatRaises(args)
+}
+result shouldBe Right(expectedValue)
+```
+
+Error assertions:
+```scala
+val error = Raise.either[ErrorType, ResultType] {
+  functionThatRaises(args)
+}
+error shouldBe Left(ExpectedError.SomeCase)
+error.left.toOption.map(_.toResponse.status) shouldBe Some(expectedStatusCode)
+```
+
+### Issue 4: HTTP Parser Refactoring Pattern - Either to Raise
+
+**Context:**
+When refactoring error-handling code from `Either[ErrorResponse, Result]` to the `Raise` effect.
+
+**Pattern Summary:**
+
+**Before (Either-based):**
+```scala
+def parseRequestLine(line: String): Either[Response, (String, String, String)] = {
+  if (condition) {
+    return Left(Response(400, body = "Bad Request"))
+  }
+  Right((method, path, version))
+}
+```
+
+**After (Raise-based):**
+```scala
+def parseRequestLine(line: String): (String, String, String) raises HttpParseError = {
+  if (condition) {
+    Raise.raise(HttpParseError.MalformedRequestLine)
+  }
+  (method, path, version)  // Direct return
+}
+```
+
+**Key Changes:**
+1. Return type: `Either[Response, T]` → `T raises HttpParseError`
+2. Error returns: `Left(Response(...))` → `Raise.raise(ErrorType)`
+3. Success returns: `Right(value)` → Direct return of `value`
+4. Remove all pattern matching on `Either` results from called functions
+5. Create sealed error trait with `toResponse: Response` method for HTTP conversion
+
+**Integration at Call Site:**
+```scala
+// Use Raise.onError to handle errors at the boundary
+Raise.onError {
+  val request = HttpParser.parseRequest(inputStream, config)
+  // Process request...
+} { parseError =>
+  // Convert error to HTTP response
+  val errorResponse = parseError.toResponse
+  HttpWriter.writeResponse(outputStream, errorResponse)
+}
+```
+
+**Benefits:**
+- Cleaner sequential code without nested pattern matching
+- Type-safe error handling with specific error types
+- Composable with other YAES effects
+- Errors as values, not exceptions
+
 ## Code Style and Patterns
 
 ### Effect Declaration
