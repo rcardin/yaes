@@ -690,8 +690,6 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
           succeed
         case Right(_) =>
           fail("Expected ShutdownTimedOut error but server completed normally")
-        case Left(other) =>
-          fail(s"Expected ShutdownTimedOut but got: $other")
       }
     }
   }
