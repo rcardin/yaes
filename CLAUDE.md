@@ -524,6 +524,97 @@ Raise.onError {
 - Composable with other YAES effects
 - Errors as values, not exceptions
 
+### Issue 5: URL Decoding and Path Traversal Security
+
+**Context:**
+When implementing HTTP path or query parameter parsing that involves URL decoding.
+
+**Problem:**
+URL encoding can be used to bypass naive security checks. For example, path traversal attempts can be hidden using percent-encoding:
+- Literal: `/files/../etc/passwd` (might be caught by simple string checks)
+- Encoded: `/files/%2e%2e/etc/passwd` (bypasses naive checks)
+
+**Critical Security Pattern:**
+
+**❌ INCORRECT - Validate before decoding:**
+```scala
+// This can be bypassed with encoded characters!
+if (rawPath.contains("..")) {
+  Raise.raise(HttpParseError.MalformedPath)
+}
+val decoded = URLDecoder.decode(rawPath, StandardCharsets.UTF_8)
+```
+
+**✅ CORRECT - Decode first, then validate:**
+```scala
+// Decode the path segment
+val decoded = try {
+  URLDecoder.decode(segment, StandardCharsets.UTF_8)
+} catch {
+  case _: IllegalArgumentException =>
+    Raise.raise(HttpParseError.MalformedPath)
+}
+
+// Now validate the decoded value
+if (decoded == ".." || decoded.contains("..")) {
+  Raise.raise(HttpParseError.MalformedPath)
+}
+```
+
+**Implementation Pattern for Path Decoding:**
+```scala
+private def decodeAndValidatePath(path: String): String raises HttpParseError = {
+  try {
+    // Split into segments, decode each one
+    val segments = path.split("/").filter(_.nonEmpty)
+
+    val decodedSegments = segments.map { segment =>
+      val decoded = URLDecoder.decode(segment, StandardCharsets.UTF_8)
+
+      // Security check AFTER decoding
+      if (decoded == ".." || decoded.contains("..")) {
+        Raise.raise(HttpParseError.MalformedPath)
+      }
+
+      decoded
+    }
+
+    // Reconstruct path with leading slash if present
+    val result = decodedSegments.mkString("/")
+    if (path.startsWith("/")) s"/$result" else result
+
+  } catch {
+    case _: IllegalArgumentException =>
+      Raise.raise(HttpParseError.MalformedPath)
+  }
+}
+```
+
+**Key Principles:**
+1. **Always decode at the boundary** - Decode URLs as soon as they enter your system
+2. **Validate after decoding** - Security checks must run on decoded values
+3. **Never trust encoded input** - Encoding can hide malicious patterns
+4. **Consistent error handling** - Use the same error type for both invalid encoding and security violations
+5. **Decode once** - Don't decode multiple times or at multiple layers
+
+**Common Encoding Attacks:**
+- Path traversal: `%2e%2e` → `..`
+- Null bytes: `%00` → `\0` (can truncate strings in some languages)
+- Space encoding: `%20` or `+` → ` ` (can break parsing)
+- Slash encoding: `%2F` → `/` (can create new path segments)
+
+**Testing Strategy:**
+Always test both literal and encoded versions of security-sensitive patterns:
+```scala
+it should "reject literal path traversal" in {
+  // Test: /files/../etc/passwd
+}
+
+it should "reject encoded path traversal" in {
+  // Test: /files/%2e%2e/etc/passwd
+}
+```
+
 ## Code Style and Patterns
 
 ### Effect Declaration

@@ -5,9 +5,8 @@ package in.rcard.yaes.http.server
   * Query parameter errors are raised during route matching and are typically converted to 400 Bad
   * Request responses. These errors represent invalid client input.
   */
-sealed trait QueryParamError extends Throwable {
+sealed trait QueryParamError {
   def message: String
-  override def getMessage: String = message
 }
 
 object QueryParamError {

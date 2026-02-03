@@ -101,4 +101,29 @@ object HttpParseError {
     def message: String = "Bad Request"
     def toResponse: Response = Response(400, body = message)
   }
+
+  /** Error indicating the query string contains malformed URL encoding.
+    *
+    * This occurs when query parameters contain invalid percent-encoding sequences
+    * that cannot be decoded (e.g., %ZZ, incomplete sequences).
+    *
+    * HTTP Status: 400 Bad Request
+    */
+  case object MalformedQueryString extends HttpParseError {
+    def message: String = "Bad Request"
+    def toResponse: Response = Response(400, body = message)
+  }
+
+  /** Error indicating the request path contains malformed URL encoding or path traversal attempts.
+    *
+    * This occurs when:
+    * - Path segments contain invalid percent-encoding sequences (e.g., %ZZ)
+    * - Path contains path traversal attempts (e.g., .. or %2e%2e)
+    *
+    * HTTP Status: 400 Bad Request
+    */
+  case object MalformedPath extends HttpParseError {
+    def message: String = "Bad Request"
+    def toResponse: Response = Response(400, body = message)
+  }
 }

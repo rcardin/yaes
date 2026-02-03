@@ -73,5 +73,24 @@ object Request {
       */
     def as[A](using codec: BodyCodec[A]): A raises DecodingError =
       codec.decode(req.body)
+
+    /** Get a header value by name (case-insensitive).
+      *
+      * HTTP header names are case-insensitive according to RFC 7230 Section 3.2.
+      * This method normalizes the header name to lowercase for lookup.
+      *
+      * Example:
+      * {{{
+      * val contentType = request.header("Content-Type")
+      * val contentType2 = request.header("content-type")  // Same result
+      * }}}
+      *
+      * @param name
+      *   The header name (case-insensitive)
+      * @return
+      *   The header value if present, None otherwise
+      */
+    def header(name: String): Option[String] =
+      req.headers.get(name.toLowerCase)
   }
 }

@@ -4,6 +4,8 @@ import in.rcard.yaes.*
 import java.io.InputStream
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import scala.collection.mutable
 
 /** HTTP/1.x request parser for YaesServer.
@@ -80,7 +82,8 @@ object HttpParser {
         ""
       }
 
-      headers(name) = value
+      // HTTP/1.1 header names are case-insensitive (RFC 7230 Section 3.2)
+      headers(name.toLowerCase) = value
     }
 
     headers.toMap
@@ -97,7 +100,7 @@ object HttpParser {
     * @return the body string, or raises HttpParseError
     */
   def parseBody(inputStream: InputStream, headers: Map[String, String], maxBodySize: Int): String raises HttpParseError = {
-    headers.get("Content-Length") match {
+    headers.get("content-length") match {
       case None =>
         // No Content-Length header = empty body
         ""
@@ -205,7 +208,7 @@ object HttpParser {
     * @return the body string, or raises HttpParseError
     */
   private def parseBodyFromReader(reader: BufferedReader, headers: Map[String, String], maxBodySize: Int): String raises HttpParseError = {
-    headers.get("Content-Length") match {
+    headers.get("content-length") match {
       case None =>
         // No Content-Length header = empty body
         ""
@@ -254,32 +257,88 @@ object HttpParser {
 
   /** Splits a path with query string into path and parsed query parameters.
     *
+    * URL-decodes the path according to RFC 3986 and validates against path traversal attempts.
+    *
     * Example: "/search?q=scala&lang=en" -> ("/search", Map("q" -> List("scala"), "lang" -> List("en")))
     *
     * @param pathWithQuery the path potentially containing a query string
-    * @return tuple of (path, queryString map)
+    * @return tuple of (decoded path, queryString map), or raises HttpParseError
     */
-  private def parsePathAndQuery(pathWithQuery: String): (String, Map[String, List[String]]) = {
+  private def parsePathAndQuery(pathWithQuery: String): (String, Map[String, List[String]]) raises HttpParseError = {
     val queryIndex = pathWithQuery.indexOf('?')
-    if (queryIndex == -1) {
-      // No query string
-      (pathWithQuery, Map.empty)
+    val rawPath = if (queryIndex == -1) {
+      pathWithQuery
     } else {
-      val path = pathWithQuery.substring(0, queryIndex)
+      pathWithQuery.substring(0, queryIndex)
+    }
+
+    // Decode and validate the path
+    val decodedPath = decodeAndValidatePath(rawPath)
+
+    val queryString = if (queryIndex == -1) {
+      Map.empty
+    } else {
       val queryPart = pathWithQuery.substring(queryIndex + 1)
-      val queryString = parseQueryString(queryPart)
-      (path, queryString)
+      parseQueryString(queryPart)
+    }
+
+    (decodedPath, queryString)
+  }
+
+  /** Decodes a URL-encoded path and validates it for security.
+    *
+    * Performs the following:
+    * - URL-decodes each path segment
+    * - Rejects path traversal attempts (.. segments)
+    * - Raises MalformedPath on invalid encoding
+    *
+    * @param path the raw path to decode
+    * @return the decoded path, or raises HttpParseError.MalformedPath
+    */
+  private def decodeAndValidatePath(path: String): String raises HttpParseError = {
+    if (path.isEmpty) {
+      return path
+    }
+
+    try {
+      // Split into segments, preserving leading slash
+      val startsWithSlash = path.startsWith("/")
+      val segments = path.split("/").filter(_.nonEmpty)
+
+      // Decode each segment and check for path traversal
+      val decodedSegments = segments.map { segment =>
+        val decoded = URLDecoder.decode(segment, StandardCharsets.UTF_8)
+
+        // Reject path traversal attempts
+        if (decoded == ".." || decoded.contains("..")) {
+          Raise.raise(HttpParseError.MalformedPath)
+        }
+
+        decoded
+      }
+
+      // Reconstruct path with leading slash if present
+      val result = decodedSegments.mkString("/")
+      if (startsWithSlash) s"/$result" else result
+
+    } catch {
+      case _: IllegalArgumentException =>
+        // Invalid percent-encoding
+        Raise.raise(HttpParseError.MalformedPath)
     }
   }
 
   /** Parses a query string into a map of parameter names to lists of values.
     *
-    * Example: "q=scala&lang=en&tag=fp&tag=java" -> Map("q" -> List("scala"), "lang" -> List("en"), "tag" -> List("fp", "java"))
+    * URL-decodes both parameter names and values according to RFC 3986.
+    * Handles both percent-encoding (%20) and plus-encoding (+) for spaces.
+    *
+    * Example: "q=scala%20lang&tag=fp&tag=java" -> Map("q" -> List("scala lang"), "tag" -> List("fp", "java"))
     *
     * @param query the query string without the leading '?'
-    * @return map of parameter names to lists of values
+    * @return map of parameter names to lists of values, or raises HttpParseError.MalformedQueryString
     */
-  private def parseQueryString(query: String): Map[String, List[String]] = {
+  private def parseQueryString(query: String): Map[String, List[String]] raises HttpParseError = {
     if (query.isEmpty) {
       return Map.empty
     }
@@ -289,8 +348,23 @@ object HttpParser {
     for (pair <- query.split("&")) {
       val eqIndex = pair.indexOf('=')
       if (eqIndex != -1) {
-        val name = pair.substring(0, eqIndex)
-        val value = pair.substring(eqIndex + 1)
+        val rawName = pair.substring(0, eqIndex)
+        val rawValue = pair.substring(eqIndex + 1)
+
+        // Decode both name and value, raising error if decoding fails
+        val name = try {
+          URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        } catch {
+          case _: IllegalArgumentException =>
+            Raise.raise(HttpParseError.MalformedQueryString)
+        }
+
+        val value = try {
+          URLDecoder.decode(rawValue, StandardCharsets.UTF_8)
+        } catch {
+          case _: IllegalArgumentException =>
+            Raise.raise(HttpParseError.MalformedQueryString)
+        }
 
         if (!params.contains(name)) {
           params(name) = mutable.ListBuffer[String]()
