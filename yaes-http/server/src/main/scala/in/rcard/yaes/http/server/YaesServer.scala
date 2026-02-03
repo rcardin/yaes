@@ -6,6 +6,8 @@ import in.rcard.yaes.http.server.parsing.{HttpParser, HttpWriter}
 import in.rcard.yaes.http.server.routing.Route
 import java.net.{ServerSocket, Socket, SocketException}
 import scala.concurrent.duration.DurationInt
+import scala.util.boundary
+import scala.util.boundary.break
 
 /** Server configuration and route definitions.
   *
@@ -316,31 +318,33 @@ object YaesServer {
       }
 
       try {
-        // Check if server is shutting down
-        if (Shutdown.isShuttingDown()) {
-          val response = Response.serviceUnavailable("Server is shutting down")
-          HttpWriter.writeResponse(socket.getOutputStream, response)
-          return
-        }
-
-        // Parse the HTTP request and handle parse errors
-        Raise.onError {
-          val request = HttpParser.parseRequest(socket.getInputStream, config)
-
-          // Route the request
-          try {
-            val response = routes.handle(request)
+        boundary {
+          // Check if server is shutting down
+          if (Shutdown.isShuttingDown()) {
+            val response = Response.serviceUnavailable("Server is shutting down")
             HttpWriter.writeResponse(socket.getOutputStream, response)
-          } catch {
-            case ex: Exception =>
-              // Handler threw exception - return 500
-              val errorResponse = Response.internalServerError(ex.getMessage)
-              HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+            break()
           }
-        } { parseError =>
-          // Parse error - convert to response and write
-          val errorResponse = parseError.toResponse
-          HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+
+          // Parse the HTTP request and handle parse errors
+          Raise.onError {
+            val request = HttpParser.parseRequest(socket.getInputStream, config)
+
+            // Route the request
+            try {
+              val response = routes.handle(request)
+              HttpWriter.writeResponse(socket.getOutputStream, response)
+            } catch {
+              case ex: Exception =>
+                // Handler threw exception - return 500
+                val errorResponse = Response.internalServerError(ex.getMessage)
+                HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+            }
+          } { parseError =>
+            // Parse error - convert to response and write
+            val errorResponse = parseError.toResponse
+            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+          }
         }
       } catch {
         case _: SocketException =>
