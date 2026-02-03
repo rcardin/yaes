@@ -1,4 +1,4 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.params.query
 
 /** Context type for accessing query parameters in a type-safe way.
   *

@@ -1,4 +1,4 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.params.path
 
 /** Type-level encoding of path parameters using HList-style types.
   *

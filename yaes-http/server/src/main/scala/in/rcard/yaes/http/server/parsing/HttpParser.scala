@@ -1,6 +1,7 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.parsing
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.server.{Request, ServerConfig, Method}
 import java.io.InputStream
 import java.io.BufferedReader
 import java.io.InputStreamReader

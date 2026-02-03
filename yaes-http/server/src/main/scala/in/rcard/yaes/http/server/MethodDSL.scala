@@ -1,5 +1,8 @@
 package in.rcard.yaes.http.server
 
+import in.rcard.yaes.http.server.routing.*
+import in.rcard.yaes.http.server.params.path.*
+import in.rcard.yaes.http.server.params.query.*
 import scala.annotation.targetName
 
 /** DSL for defining GET routes.

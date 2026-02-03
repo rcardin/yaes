@@ -1,4 +1,4 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.params.query
 
 /** Errors that can occur during query parameter parsing and validation.
   *

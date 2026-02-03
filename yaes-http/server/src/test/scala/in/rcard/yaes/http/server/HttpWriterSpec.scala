@@ -1,5 +1,6 @@
 package in.rcard.yaes.http.server
 
+import in.rcard.yaes.http.server.parsing.HttpWriter
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

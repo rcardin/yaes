@@ -1,4 +1,6 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.parsing
+
+import in.rcard.yaes.http.server.Response
 
 /** Represents errors that occur during HTTP request parsing.
   *

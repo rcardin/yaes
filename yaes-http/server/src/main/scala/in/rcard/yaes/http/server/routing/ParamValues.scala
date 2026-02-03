@@ -1,4 +1,6 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.routing
+
+import in.rcard.yaes.http.server.params.path.{PathParams, NoParams, ::}
 
 /** Runtime container for path parameter values.
   *

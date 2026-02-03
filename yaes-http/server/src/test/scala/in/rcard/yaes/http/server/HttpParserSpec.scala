@@ -1,6 +1,7 @@
 package in.rcard.yaes.http.server
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.server.parsing.{HttpParser, HttpParseError}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

@@ -1,7 +1,7 @@
 package in.rcard.yaes.http.server
 
-
 import in.rcard.yaes.*
+import in.rcard.yaes.http.server.params.query.{Query, QueryParam, NoQueryParams}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

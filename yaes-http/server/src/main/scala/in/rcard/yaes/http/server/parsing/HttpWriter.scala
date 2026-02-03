@@ -1,5 +1,6 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.parsing
 
+import in.rcard.yaes.http.server.Response
 import java.io.OutputStream
 
 /** HTTP response writer.

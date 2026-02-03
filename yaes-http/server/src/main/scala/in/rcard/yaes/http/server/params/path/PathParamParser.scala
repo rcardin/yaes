@@ -1,7 +1,7 @@
-package in.rcard.yaes.http.server
-
+package in.rcard.yaes.http.server.params.path
 
 import in.rcard.yaes.*
+
 /** Typeclass for parsing path parameters from strings to typed values.
   *
   * PathParamParser provides type-safe conversion of path parameter strings to specific types. It

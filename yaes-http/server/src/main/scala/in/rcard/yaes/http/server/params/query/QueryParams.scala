@@ -1,4 +1,4 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.params.query
 
 /** Type-level encoding of query parameters using HList-style types.
   *

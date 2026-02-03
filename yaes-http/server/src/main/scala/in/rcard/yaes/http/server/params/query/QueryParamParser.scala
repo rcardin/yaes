@@ -1,7 +1,7 @@
-package in.rcard.yaes.http.server
-
+package in.rcard.yaes.http.server.params.query
 
 import in.rcard.yaes.*
+
 /** Typeclass for parsing query parameters from strings to typed values.
   *
   * QueryParamParser provides type-safe conversion of query parameter strings to specific types.

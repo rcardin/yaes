@@ -1,7 +1,10 @@
-package in.rcard.yaes.http.server
-
+package in.rcard.yaes.http.server.routing
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.server.{Request, Response, Method}
+import in.rcard.yaes.http.server.params.path.{PathParams, NoParams, ::, PathParamError}
+import in.rcard.yaes.http.server.params.query.{QueryParams, NoQueryParams, Query, QueryParamError}
+
 /** Type-safe HTTP route.
   *
   * Combines an HTTP method, a typed path pattern, and a handler function. The type parameters

@@ -1,7 +1,10 @@
-package in.rcard.yaes.http.server
-
+package in.rcard.yaes.http.server.routing
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.server.Request
+import in.rcard.yaes.http.server.params.path.{PathParams, PathSegment, End, Literal, Param, PathParamError}
+import in.rcard.yaes.http.server.params.query.{QueryParams, QueryParamSpec, EndOfQuery, SingleParam, Query, QueryParamError}
+
 /** Type-safe path pattern for route matching.
   *
   * Encodes the expected path structure and parameter types at compile time. When a request path
