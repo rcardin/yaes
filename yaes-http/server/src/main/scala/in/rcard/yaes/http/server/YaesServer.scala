@@ -1,7 +1,7 @@
 package in.rcard.yaes.http.server
 
 import in.rcard.yaes.*
-import in.rcard.yaes.Async.{Deadline, ShutdownTimedOut}
+import in.rcard.yaes.Async.Deadline
 import in.rcard.yaes.http.server.parsing.{HttpParser, HttpWriter}
 import in.rcard.yaes.http.server.routing.Route
 import java.net.{ServerSocket, Socket, SocketException}
@@ -34,15 +34,12 @@ case class ServerDef(routes: Routes) {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
-    * @param raise
-    *   Raise context for handling shutdown timeout errors
     * @return
     *   Unit after server stops
     */
   def run(config: ServerConfig)(using
       Log,
-      Shutdown,
-      Raise[ShutdownTimedOut]
+      Shutdown
   ): Unit = {
     YaesServer.run(this, config)
   }
@@ -61,15 +58,12 @@ case class ServerDef(routes: Routes) {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
-    * @param raise
-    *   Raise context for handling shutdown timeout errors
     * @return
     *   Unit after server stops
     */
   def run(port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
       Log,
-      Shutdown,
-      Raise[ShutdownTimedOut]
+      Shutdown
   ): Unit = {
     YaesServer.run(this, ServerConfig(port = port, deadline = deadline))
   }
@@ -147,7 +141,6 @@ object YaesServer {
     * **Effect Requirements:**
     *   - Requires [[Log]] context for lifecycle logging
     *   - Requires [[Shutdown]] context for graceful shutdown coordination with JVM signals
-    *   - Requires [[Raise]]`[`[[ShutdownTimedOut]]`]` context for handling shutdown timeout errors
     *
     * **Request Handling:**
     *   - Each request is handled in a forked fiber via [[Async.fork]]
@@ -169,7 +162,8 @@ object YaesServer {
     *   - New requests during shutdown receive 503 Service Unavailable
     *   - All in-flight requests (already accepted) complete before shutdown finishes
     *   - This is enforced by [[Async.withGracefulShutdown]] which coordinates with [[Shutdown]]
-    *   - If in-flight requests don't complete within the deadline, [[ShutdownTimedOut]] is raised
+    *   - If in-flight requests don't complete within the deadline, a warning is logged and shutdown
+    *     completes normally
     *   - Server resources are managed via [[Resource]] effect for automatic cleanup
     *
     * Example:
@@ -182,10 +176,8 @@ object YaesServer {
     * )
     *
     * Shutdown.run {
-    *   Raise.run {
-    *     Log.run {
-    *       server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
-    *     }
+    *   Log.run {
+    *     server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *   }
     * }
     * }}}
@@ -198,57 +190,61 @@ object YaesServer {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
-    * @param raise
-    *   Raise context for handling shutdown timeout errors
     * @return
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, config: ServerConfig)(using
       log: Log,
-      shutdown: Shutdown,
-      raise: Raise[ShutdownTimedOut]
+      shutdown: Shutdown
   ): Unit = {
     val logger = Log.getLogger("YaesServer")
-    Resource.run {
-      // Install server socket as a resource with automatic cleanup
-      Resource.install({
-        Async.withGracefulShutdown(config.deadline) {
-          logger.info(s"Starting server on port ${config.port}")
-          val serverSocket = new ServerSocket(config.port)
-          logger.info(s"Server ready, listening on port ${config.port}")
+    Raise.onError {
+      Resource.run {
+        // Install server socket as a resource with automatic cleanup
+        Resource.install({
+          Async.withGracefulShutdown(config.deadline) {
+            logger.info(s"Starting server on port ${config.port}")
+            val serverSocket = new ServerSocket(config.port)
+            logger.info(s"Server ready, listening on port ${config.port}")
 
-          // Accept loop - runs as main fiber in structured scope
-          // Each request is handled in a forked fiber
-          // Virtual thread interruption breaks accept() on shutdown
-          try {
-            while (!Shutdown.isShuttingDown()) {
-              try {
-                val socket = serverSocket.accept()
-                // Fork a fiber to handle this request
-                Async.fork {
-                  handleConnection(socket, serverDef.routes, config)
+            // Accept loop - runs as main fiber in structured scope
+            // Each request is handled in a forked fiber
+            // Virtual thread interruption breaks accept() on shutdown
+            try {
+              while (!Shutdown.isShuttingDown()) {
+                try {
+                  val socket = serverSocket.accept()
+                  // Fork a fiber to handle this request
+                  Async.fork {
+                    handleConnection(socket, serverDef.routes, config)
+                  }
+                } catch {
+                  case _: SocketException if Shutdown.isShuttingDown() =>
+                    // Expected during shutdown - ServerSocket was closed
+                    // Break out of the accept loop
+                    ()
+                  case ex: Exception =>
+                    // Log unexpected errors but continue accepting
+                    logger.error(s"Error accepting connection: ${ex.getMessage}")
                 }
-              } catch {
-                case _: SocketException if Shutdown.isShuttingDown() =>
-                  // Expected during shutdown - ServerSocket was closed
-                  // Break out of the accept loop
-                  ()
-                case ex: Exception =>
-                  // Log unexpected errors but continue accepting
-                  logger.error(s"Error accepting connection: ${ex.getMessage}")
               }
+            } finally {
+              logger.info("Server shutting down...")
             }
-          } finally {
-            logger.info("Server shutting down...")
-          }
 
-          serverSocket // Return the server socket for cleanup
+            serverSocket // Return the server socket for cleanup
+          }
+        }) { serverSocket =>
+          // Cleanup: close the server socket
+          serverSocket.close()
+          logger.info("Server stopped")
         }
-      }) { serverSocket =>
-        // Cleanup: close the server socket
-        serverSocket.close()
-        logger.info("Server stopped")
       }
+    } { (_: Async.ShutdownTimedOut) =>
+      // Shutdown deadline exceeded - log warning and complete normally
+      logger.warn(
+        s"Shutdown deadline (${config.deadline}) exceeded, some requests may not have completed"
+      )
     }
   }
 
@@ -264,15 +260,12 @@ object YaesServer {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
-    * @param raise
-    *   Raise context for handling shutdown timeout errors
     * @return
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, port: Int, deadline: Deadline)(using
       log: Log,
-      shutdown: Shutdown,
-      raise: Raise[ShutdownTimedOut]
+      shutdown: Shutdown
   ): Unit = {
     run(serverDef, ServerConfig(port = port, deadline = deadline))
   }

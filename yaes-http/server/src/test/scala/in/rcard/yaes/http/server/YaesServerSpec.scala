@@ -629,72 +629,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
       }
     }
   }
-
-  it should "enforce shutdown deadline and raise ShutdownTimedOut" in {
-    val port = findFreePort()
-
-    Shutdown.run {
-      // Use Raise.either to capture the ShutdownTimedOut error
-      val result = Raise.either {
-        Async.run {
-          Log.run {
-            val server = YaesServer.route(
-              GET(p"/very-slow") { req =>
-                // This request takes 500ms, longer than the 200ms deadline
-                Async.delay(500.millis)
-                Response.ok("Should not complete")
-              }
-            )
-
-            // Start server with short deadline (200ms)
-            val serverFiber = Async.fork("server") {
-              server.run(ServerConfig(port = port, deadline = Async.Deadline.after(200.millis)))
-            }
-
-            // Wait for server to be ready
-            waitForServer(port)
-
-            // Start a very slow request in a background fiber
-            val requestFiber = Async.fork("very-slow-request") {
-              try {
-                val request = HttpRequest
-                  .newBuilder()
-                  .uri(URI.create(s"http://localhost:$port/very-slow"))
-                  .GET()
-                  .build()
-
-                // This request may fail due to connection closed
-                client.send(request, HttpResponse.BodyHandlers.ofString())
-              } catch {
-                case _: Exception =>
-                  // Expected: connection may be closed during shutdown
-                  null
-              }
-            }
-
-            // Give the request time to start processing
-            Async.delay(50.millis)
-
-            // Initiate shutdown - this should timeout because request takes too long
-            Shutdown.initiateShutdown()
-
-            // Wait for server fiber - should raise ShutdownTimedOut
-            serverFiber.join()
-          }
-        }
-      }
-
-      // Verify that ShutdownTimedOut was raised
-      result match {
-        case Left(error: ShutdownTimedOut) =>
-          // Expected: shutdown deadline was exceeded
-          succeed
-        case Right(_) =>
-          fail("Expected ShutdownTimedOut error but server completed normally")
-      }
-    }
-  }
-
+  
   it should "clean up resources and allow port reuse after shutdown" in {
     // This test is already covered by "stop cleanly via Resource cleanup"
     // which verifies that the port can be reused after server shutdown.
