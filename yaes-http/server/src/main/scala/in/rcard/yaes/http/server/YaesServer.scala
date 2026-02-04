@@ -57,8 +57,6 @@ case class ServerDef(routes: Routes) {
     * @param deadline
     *   Maximum time to wait for in-flight requests after shutdown is initiated (default: 30
     *   seconds)
-    * @param async
-    *   Async context for structured concurrency and request handling
     * @param output
     *   Output context for lifecycle logging
     * @param shutdown
@@ -69,7 +67,6 @@ case class ServerDef(routes: Routes) {
     *   Unit after server stops
     */
   def run(port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
-      Async,
       Output,
       Shutdown,
       Raise[ShutdownTimedOut]
@@ -99,10 +96,8 @@ case class ServerDef(routes: Routes) {
   *
   * Shutdown.run {
   *   Raise.run {
-  *     Async.run {
-  *       Output.run {
-  *         server.run(ServerConfig(port = 8080))
-  *       }
+  *     Output.run {
+  *       server.run(ServerConfig(port = 8080))
   *     }
   *   }
   * }
