@@ -1,4 +1,4 @@
-package in.rcard.yaes.http.server.integration
+package in.rcard.yaes.http.server
 
 
 import in.rcard.yaes.*

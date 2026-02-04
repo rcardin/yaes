@@ -1,16 +1,19 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.integration
 
 import in.rcard.yaes.*
 import in.rcard.yaes.Async.ShutdownTimedOut
 import in.rcard.yaes.Log.given
+import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.server.PathBuilder.given
 import in.rcard.yaes.http.server.params.query.queryParam
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.net.ServerSocket
-import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import scala.concurrent.duration.*
 
 /** Integration tests for YaesServer lifecycle management.
@@ -42,8 +45,12 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     * @param delayBetweenRetries
     *   Time to wait between attempts
     */
-  private def waitForServer(port: Int, maxRetries: Int = 20, delayBetweenRetries: scala.concurrent.duration.FiniteDuration = 50.millis)(using Async): Unit = {
-    var retries = 0
+  private def waitForServer(
+      port: Int,
+      maxRetries: Int = 20,
+      delayBetweenRetries: scala.concurrent.duration.FiniteDuration = 50.millis
+  )(using Async): Unit = {
+    var retries   = 0
     var connected = false
 
     while (retries < maxRetries && !connected) {
@@ -492,7 +499,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               socket = new java.net.Socket("localhost", port)
               socket.setSoTimeout(2000) // 2 second timeout
               val out = socket.getOutputStream
-              val in = socket.getInputStream
+              val in  = socket.getInputStream
 
               // Send TRACE request
               out.write("TRACE /test HTTP/1.1\r\n".getBytes("UTF-8"))
@@ -501,9 +508,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               out.flush()
 
               // Read all available bytes from response
-              val buffer = new Array[Byte](4096)
+              val buffer    = new Array[Byte](4096)
               val bytesRead = in.read(buffer)
-              val response = new String(buffer, 0, bytesRead, "UTF-8")
+              val response  = new String(buffer, 0, bytesRead, "UTF-8")
 
               // Verify response (should be 501 Not Implemented)
               response should include("501")
@@ -629,7 +636,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
       }
     }
   }
-  
+
   it should "clean up resources and allow port reuse after shutdown" in {
     // This test is already covered by "stop cleanly via Resource cleanup"
     // which verifies that the port can be reused after server shutdown.
@@ -666,7 +673,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               socket = new java.net.Socket("localhost", port)
               socket.setSoTimeout(2000)
               val out = socket.getOutputStream
-              val in = socket.getInputStream
+              val in  = socket.getInputStream
 
               // Send malformed request line (only two parts instead of three)
               out.write("GET /test\r\n".getBytes("UTF-8"))
@@ -675,9 +682,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               out.flush()
 
               // Read response
-              val buffer = new Array[Byte](4096)
+              val buffer    = new Array[Byte](4096)
               val bytesRead = in.read(buffer)
-              val response = new String(buffer, 0, bytesRead, "UTF-8")
+              val response  = new String(buffer, 0, bytesRead, "UTF-8")
 
               // Verify 400 Bad Request
               response should include("400")
@@ -766,7 +773,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               socket = new java.net.Socket("localhost", port)
               socket.setSoTimeout(2000)
               val out = socket.getOutputStream
-              val in = socket.getInputStream
+              val in  = socket.getInputStream
 
               // Send request line
               out.write("GET /test HTTP/1.1\r\n".getBytes("UTF-8"))
@@ -783,9 +790,9 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               out.flush()
 
               // Read response
-              val buffer = new Array[Byte](4096)
+              val buffer    = new Array[Byte](4096)
               val bytesRead = in.read(buffer)
-              val response = new String(buffer, 0, bytesRead, "UTF-8")
+              val response  = new String(buffer, 0, bytesRead, "UTF-8")
 
               // Verify 400 Bad Request
               response should include("400")
