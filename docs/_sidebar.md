@@ -18,6 +18,10 @@
 * [Data Structures](data-structures.md)
 * [Communication Primitives](communication-primitives.md)
 * [YaesApp](yaes-app.md)
+
+* **HTTP**
+  * [HTTP Server](http/server.md)
+
 * [Examples](examples.md)
 * [Contributing](contributing.md)
 
