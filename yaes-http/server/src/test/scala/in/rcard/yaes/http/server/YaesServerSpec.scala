@@ -2,6 +2,7 @@ package in.rcard.yaes.http.server
 
 import in.rcard.yaes.*
 import in.rcard.yaes.Async.ShutdownTimedOut
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.PathBuilder.given
 import in.rcard.yaes.http.server.params.query.queryParam
 import org.scalatest.flatspec.AnyFlatSpec
@@ -71,7 +72,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test response")
@@ -114,7 +115,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/concurrent") { req =>
                 // Simulate some processing time
@@ -171,7 +172,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/cleanup") { req =>
                 Response.ok("Cleanup test")
@@ -211,7 +212,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server2 = YaesServer.route(
               GET(p"/reuse") { req =>
                 Response.ok("Port reused")
@@ -251,7 +252,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               POST(p"/echo") { req =>
                 Response.ok(s"Received: ${req.body}")
@@ -294,7 +295,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val userId = param[Int]("userId")
             val server = YaesServer.route(
               GET(p"/users" / userId) { (req, id: Int) =>
@@ -338,7 +339,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/search" ? queryParam[String]("q")) { req =>
                 // Note: In the current implementation, query parameters are extracted
@@ -384,7 +385,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/known") { req =>
                 Response.ok("Known route")
@@ -426,7 +427,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/error") { req =>
                 throw new RuntimeException("Handler failed")
@@ -468,7 +469,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test")
@@ -527,7 +528,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/slow") { req =>
                 // Simulate slow processing (reduced from 1s to 200ms for faster tests)
@@ -580,7 +581,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Normal response")
@@ -636,7 +637,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
       // Use Raise.either to capture the ShutdownTimedOut error
       val result = Raise.either {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/very-slow") { req =>
                 // This request takes 500ms, longer than the 200ms deadline
@@ -709,7 +710,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test")
@@ -764,7 +765,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               POST(p"/upload") { req =>
                 Response.ok(s"Received ${req.body.length} bytes")
@@ -809,7 +810,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Output.run {
+          Log.run {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test")

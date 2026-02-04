@@ -30,8 +30,8 @@ case class ServerDef(routes: Routes) {
     *
     * @param config
     *   Server configuration including port, deadline, and size limits
-    * @param output
-    *   Output context for lifecycle logging
+    * @param log
+    *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
     * @param raise
@@ -40,7 +40,7 @@ case class ServerDef(routes: Routes) {
     *   Unit after server stops
     */
   def run(config: ServerConfig)(using
-      Output,
+      Log,
       Shutdown,
       Raise[ShutdownTimedOut]
   ): Unit = {
@@ -57,8 +57,8 @@ case class ServerDef(routes: Routes) {
     * @param deadline
     *   Maximum time to wait for in-flight requests after shutdown is initiated (default: 30
     *   seconds)
-    * @param output
-    *   Output context for lifecycle logging
+    * @param log
+    *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
     * @param raise
@@ -67,7 +67,7 @@ case class ServerDef(routes: Routes) {
     *   Unit after server stops
     */
   def run(port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
-      Output,
+      Log,
       Shutdown,
       Raise[ShutdownTimedOut]
   ): Unit = {
@@ -145,7 +145,7 @@ object YaesServer {
     * fiber under YAES structured concurrency.
     *
     * **Effect Requirements:**
-    *   - Requires [[Output]] context for lifecycle logging
+    *   - Requires [[Log]] context for lifecycle logging
     *   - Requires [[Shutdown]] context for graceful shutdown coordination with JVM signals
     *   - Requires [[Raise]]`[`[[ShutdownTimedOut]]`]` context for handling shutdown timeout errors
     *
@@ -183,7 +183,7 @@ object YaesServer {
     *
     * Shutdown.run {
     *   Raise.run {
-    *     Output.run {
+    *     Log.run {
     *       server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *     }
     *   }
@@ -194,8 +194,8 @@ object YaesServer {
     *   Server configuration with routes
     * @param config
     *   Server configuration including port, deadline, and size limits
-    * @param output
-    *   Output context for lifecycle logging
+    * @param log
+    *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
     * @param raise
@@ -204,17 +204,18 @@ object YaesServer {
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, config: ServerConfig)(using
-      output: Output,
+      log: Log,
       shutdown: Shutdown,
       raise: Raise[ShutdownTimedOut]
   ): Unit = {
+    val logger = Log.getLogger("YaesServer")
     Resource.run {
       // Install server socket as a resource with automatic cleanup
       Resource.install({
         Async.withGracefulShutdown(config.deadline) {
-          Output.printLn(s"Starting server on port ${config.port}")
+          logger.info(s"Starting server on port ${config.port}")
           val serverSocket = new ServerSocket(config.port)
-          Output.printLn(s"Server ready, listening on port ${config.port}")
+          logger.info(s"Server ready, listening on port ${config.port}")
 
           // Accept loop - runs as main fiber in structured scope
           // Each request is handled in a forked fiber
@@ -234,11 +235,11 @@ object YaesServer {
                   ()
                 case ex: Exception =>
                   // Log unexpected errors but continue accepting
-                  Output.printLn(s"Error accepting connection: ${ex.getMessage}")
+                  logger.error(s"Error accepting connection: ${ex.getMessage}")
               }
             }
           } finally {
-            Output.printLn("Server shutting down...")
+            logger.info("Server shutting down...")
           }
 
           serverSocket // Return the server socket for cleanup
@@ -246,7 +247,7 @@ object YaesServer {
       }) { serverSocket =>
         // Cleanup: close the server socket
         serverSocket.close()
-        Output.printLn("Server stopped")
+        logger.info("Server stopped")
       }
     }
   }
@@ -259,8 +260,8 @@ object YaesServer {
     *   Port to bind to
     * @param deadline
     *   Maximum time to wait for in-flight requests after shutdown is initiated
-    * @param output
-    *   Output context for lifecycle logging
+    * @param log
+    *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
     * @param raise
@@ -269,7 +270,7 @@ object YaesServer {
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, port: Int, deadline: Deadline)(using
-      output: Output,
+      log: Log,
       shutdown: Shutdown,
       raise: Raise[ShutdownTimedOut]
   ): Unit = {

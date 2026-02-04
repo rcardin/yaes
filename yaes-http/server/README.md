@@ -31,10 +31,10 @@ val routes = Routes(
   }
 )
 
-// Server requires Async, Output, Shutdown, and Raise[ShutdownTimedOut] effects
+// Server requires Async, Log, Shutdown, and Raise[ShutdownTimedOut] effects
 Shutdown.run {
   Raise.run {
-    Output.run {
+    Log.run {
       val server = YaesServer.route(routes)
       server.run(port = 8080)
       // Server runs until Shutdown.initiateShutdown() is called
@@ -243,7 +243,7 @@ The server integrates with YAES's `Shutdown` effect for coordinated graceful shu
 ```scala
 Shutdown.run {
   Raise.run {
-    Output.run {
+    Log.run {
       val routes = Routes(
         GET(p"/work") { req =>
           Async.delay(5.seconds)  // Simulate long-running request
@@ -291,7 +291,7 @@ val server = YaesServer.route(routes)
 
 Shutdown.run {
   Raise.run {
-    Output.run {
+    Log.run {
       // Register cleanup hooks
       Shutdown.onShutdown {
         println("Cleaning up resources...")
@@ -383,7 +383,7 @@ object MyServer extends App {
 
   Shutdown.run {
     Raise.run {
-      Output.run {
+      Log.run {
         val server = YaesServer.route(routes)
         server.run(port = 8080)
       }
