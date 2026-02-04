@@ -23,15 +23,13 @@ case class ServerDef(routes: Routes) {
 
   /** Run the HTTP server.
     *
-    * Starts the server with the specified configuration. The server runs until shutdown() is
-    * called or the JVM shuts down.
+    * Starts the server with the specified configuration. The server runs until shutdown() is called
+    * or the JVM shuts down.
     *
     * This is a convenience method equivalent to YaesServer.run(this, config).
     *
     * @param config
     *   Server configuration including port, deadline, and size limits
-    * @param async
-    *   Async context for structured concurrency and request handling
     * @param output
     *   Output context for lifecycle logging
     * @param shutdown
@@ -42,7 +40,6 @@ case class ServerDef(routes: Routes) {
     *   Unit after server stops
     */
   def run(config: ServerConfig)(using
-      Async,
       Output,
       Shutdown,
       Raise[ShutdownTimedOut]
@@ -153,7 +150,6 @@ object YaesServer {
     * fiber under YAES structured concurrency.
     *
     * **Effect Requirements:**
-    *   - Requires [[Async]] context for structured concurrency and fiber-per-request handling
     *   - Requires [[Output]] context for lifecycle logging
     *   - Requires [[Shutdown]] context for graceful shutdown coordination with JVM signals
     *   - Requires [[Raise]]`[`[[ShutdownTimedOut]]`]` context for handling shutdown timeout errors
@@ -173,7 +169,8 @@ object YaesServer {
     *   - This ensures clean termination in containers (Kubernetes, Docker) and local development
     *
     * **Graceful Shutdown:**
-    *   - Shutdown can be triggered via JVM shutdown hook or by calling [[Shutdown.initiateShutdown]]
+    *   - Shutdown can be triggered via JVM shutdown hook or by calling
+    *     [[Shutdown.initiateShutdown]]
     *   - New requests during shutdown receive 503 Service Unavailable
     *   - All in-flight requests (already accepted) complete before shutdown finishes
     *   - This is enforced by [[Async.withGracefulShutdown]] which coordinates with [[Shutdown]]
@@ -191,10 +188,8 @@ object YaesServer {
     *
     * Shutdown.run {
     *   Raise.run {
-    *     Async.run {
-    *       Output.run {
-    *         server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
-    *       }
+    *     Output.run {
+    *       server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *     }
     *   }
     * }
@@ -204,8 +199,6 @@ object YaesServer {
     *   Server configuration with routes
     * @param config
     *   Server configuration including port, deadline, and size limits
-    * @param async
-    *   Async context for structured concurrency and request handling
     * @param output
     *   Output context for lifecycle logging
     * @param shutdown
@@ -216,7 +209,6 @@ object YaesServer {
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, config: ServerConfig)(using
-      async: Async,
       output: Output,
       shutdown: Shutdown,
       raise: Raise[ShutdownTimedOut]
@@ -272,8 +264,6 @@ object YaesServer {
     *   Port to bind to
     * @param deadline
     *   Maximum time to wait for in-flight requests after shutdown is initiated
-    * @param async
-    *   Async context for structured concurrency
     * @param output
     *   Output context for lifecycle logging
     * @param shutdown
@@ -284,7 +274,6 @@ object YaesServer {
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, port: Int, deadline: Deadline)(using
-      async: Async,
       output: Output,
       shutdown: Shutdown,
       raise: Raise[ShutdownTimedOut]
@@ -303,13 +292,10 @@ object YaesServer {
     *   The routes to match against
     * @param config
     *   Server configuration for size limits
-    * @param async
-    *   Async context for potential handler effects
     * @param shutdown
     *   Shutdown context to check if server is shutting down
     */
   private def handleConnection(socket: Socket, routes: Routes, config: ServerConfig)(using
-      async: Async,
       shutdown: Shutdown
   ): Unit = {
     Resource.run {

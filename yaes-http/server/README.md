@@ -34,12 +34,10 @@ val routes = Routes(
 // Server requires Async, Output, Shutdown, and Raise[ShutdownTimedOut] effects
 Shutdown.run {
   Raise.run {
-    Async.run {
-      Output.run {
-        val server = YaesServer.route(routes)
-        server.run(port = 8080)
-        // Server runs until Shutdown.initiateShutdown() is called
-      }
+    Output.run {
+      val server = YaesServer.route(routes)
+      server.run(port = 8080)
+      // Server runs until Shutdown.initiateShutdown() is called
     }
   }
 }
@@ -245,31 +243,29 @@ The server integrates with YAES's `Shutdown` effect for coordinated graceful shu
 ```scala
 Shutdown.run {
   Raise.run {
-    Async.run {
-      Output.run {
-        val routes = Routes(
-          GET(p"/work") { req =>
-            Async.delay(5.seconds)  // Simulate long-running request
-            Response.ok("Done")
-          }
-        )
-
-        val server = YaesServer.route(routes)
-
-        // Start server in background fiber
-        val serverFiber = Async.fork("server") {
-          server.run(port = 8080)
+    Output.run {
+      val routes = Routes(
+        GET(p"/work") { req =>
+          Async.delay(5.seconds)  // Simulate long-running request
+          Response.ok("Done")
         }
+      )
 
-        // Do other work...
-        Async.delay(10.seconds)
+      val server = YaesServer.route(routes)
 
-        // Initiate shutdown
-        Shutdown.initiateShutdown()
-
-        // Wait for server to finish
-        serverFiber.join()
+      // Start server in background fiber
+      val serverFiber = Async.fork("server") {
+        server.run(port = 8080)
       }
+
+      // Do other work...
+      Async.delay(10.seconds)
+
+      // Initiate shutdown
+      Shutdown.initiateShutdown()
+
+      // Wait for server to finish
+      serverFiber.join()
     }
   }
 }
@@ -295,15 +291,13 @@ val server = YaesServer.route(routes)
 
 Shutdown.run {
   Raise.run {
-    Async.run {
-      Output.run {
-        // Register cleanup hooks
-        Shutdown.onShutdown {
-          println("Cleaning up resources...")
-        }
-
-        server.run(port = 8080)
+    Output.run {
+      // Register cleanup hooks
+      Shutdown.onShutdown {
+        println("Cleaning up resources...")
       }
+
+      server.run(port = 8080)
     }
   }
 }
@@ -389,11 +383,9 @@ object MyServer extends App {
 
   Shutdown.run {
     Raise.run {
-      Async.run {
-        Output.run {
-          val server = YaesServer.route(routes)
-          server.run(port = 8080)
-        }
+      Output.run {
+        val server = YaesServer.route(routes)
+        server.run(port = 8080)
       }
     }
   }
