@@ -115,7 +115,7 @@ trait YaesApp {
     * Override this method to customize exit behavior (e.g., for testing or custom error handling).
     * 
     * The default implementation:
-    *   - On None: exits with code 0 (success)
+    *   - On None: returns normally, allowing the JVM to exit with code 0
     *   - On Some(exception): prints error message and stack trace, then exits with code 1
     *
     * @param error
