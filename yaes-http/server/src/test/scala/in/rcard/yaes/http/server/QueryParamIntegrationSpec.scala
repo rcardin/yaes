@@ -187,19 +187,75 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   }
 
   "Combined path and query parameters" should "work together" in {
-    // TODO: Test combining path params with query params
-    // Need to figure out operator precedence issue with: p"/users" / userId ? queryParam[Boolean]("expand")
-    pending
+    val userId = param[Int]("userId")
+    val routes = Routes(
+      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { query ?=> (req, id: Int) =>
+        val expand = query.get("expand")
+        if (expand) Response.ok(s"User $id (expanded)")
+        else Response.ok(s"User $id")
+      }
+    )
+
+    val expandedRequest = Request(
+      method = Method.GET,
+      path = "/users/123",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("expand" -> List("true"))
+    )
+    routes.handle(expandedRequest).body shouldBe "User 123 (expanded)"
+
+    val normalRequest = Request(
+      method = Method.GET,
+      path = "/users/123",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("expand" -> List("false"))
+    )
+    routes.handle(normalRequest).body shouldBe "User 123"
   }
 
   it should "return 400 for invalid path parameter" in {
-    // TODO: Test path param errors with query params
-    pending
+    val userId = param[Int]("userId")
+    val routes = Routes(
+      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { query ?=> (req, id: Int) =>
+        Response.ok(s"User $id")
+      }
+    )
+
+    val request = Request(
+      method = Method.GET,
+      path = "/users/invalid",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("expand" -> List("true"))
+    )
+
+    val response = routes.handle(request)
+    response.status shouldBe 400
+    response.body should include("Invalid path parameter")
   }
 
   it should "return 400 for invalid query parameter" in {
-    // TODO: Test query param errors with path params
-    pending
+    val userId = param[Int]("userId")
+    val routes = Routes(
+      GET((p"/users" / userId) ? queryParam[Int]("limit")) { query ?=> (req, id: Int) =>
+        val limit = query.get("limit")
+        Response.ok(s"User $id with limit $limit")
+      }
+    )
+
+    val request = Request(
+      method = Method.GET,
+      path = "/users/123",
+      headers = Map.empty,
+      body = "",
+      queryString = Map("limit" -> List("invalid"))
+    )
+
+    val response = routes.handle(request)
+    response.status shouldBe 400
+    response.body should include("Invalid query parameter 'limit'")
   }
 
   "Routes without query parameters" should "still work as before" in {
