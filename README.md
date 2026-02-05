@@ -86,19 +86,19 @@ The library is available on Maven Central. To use it, add the following dependen
 **For effects only** (Raise, Async, Sync, etc.):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.12.1"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.13.0"
 ```
 
 **For effects + data structures** (Flow, Channel, and reactive streams):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.12.1"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.13.0"
 ```
 
 **For Cats integration** (includes all effects and data structures):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.12.1"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.13.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
