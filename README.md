@@ -83,14 +83,28 @@ The above code shows how to handle only the `Random` effect. The `Raise` effect 
 
 The library is available on Maven Central. To use it, add the following dependency to your build.sbt files:
 
+**For effects only** (Raise, Async, Sync, etc.):
+
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.12.1"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.13.0"
 ```
 
-For Cats integration, add:
+**For effects + data structures** (Flow, Channel, and reactive streams):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.12.1"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.13.0"
+```
+
+**For Cats integration** (includes all effects and data structures):
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.13.0"
+```
+
+**For HTTP Server based on λÆS effects**:
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.

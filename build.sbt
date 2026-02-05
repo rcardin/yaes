@@ -23,6 +23,8 @@ scalacOptions += "-target:24"
 javacOptions ++= Seq("-source", "24", "-target", "24")
 
 lazy val `yaes-data` = project
+  .dependsOn(`yaes-core`)
+  .settings(commonSettings)
   .settings(
     name         := "yaes-data",
     scalaVersion := scala3Version,
@@ -30,7 +32,7 @@ lazy val `yaes-data` = project
   )
 
 lazy val `yaes-core` = project
-  .dependsOn(`yaes-data`)
+  .settings(commonSettings)
   .settings(
     name         := "yaes-core",
     scalaVersion := scala3Version,
@@ -38,17 +40,34 @@ lazy val `yaes-core` = project
   )
 
 lazy val `yaes-cats` = project
-  .dependsOn(`yaes-core`)
+  .dependsOn(`yaes-data`)
+  .settings(commonSettings)
   .settings(
     name         := "yaes-cats",
     scalaVersion := scala3Version,
     libraryDependencies ++= commonDependencies ++ catsDependencies
   )
 
-lazy val yaes = (project in file("."))
-  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`)
+lazy val `yaes-http` = project
+  .aggregate(server)
   .settings(
     scalaVersion := scala3Version
+  )
+
+lazy val server = project
+  .in(file("yaes-http/server"))
+  .dependsOn(`yaes-core`)
+  .settings(
+    name         := "yaes-http-server",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies
+  )
+
+lazy val yaes = (project in file("."))
+  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`, `yaes-http`)
+  .settings(
+    scalaVersion := scala3Version,
+    Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
   )
 
 lazy val dependencies =
@@ -66,6 +85,13 @@ lazy val dependencies =
 lazy val commonDependencies = Seq(
   dependencies.scalatest  % Test,
   dependencies.scalacheck % Test
+)
+
+lazy val commonSettings = Seq(
+  Test / logBuffered := false,
+  Test / parallelExecution := false,
+  Test / fork := true,
+  Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 )
 
 lazy val catsDependencies = Seq(

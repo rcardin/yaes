@@ -96,7 +96,7 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
 
   it should "emit values from forked fibers in arrival order" in {
     val result = scala.collection.mutable.ArrayBuffer[String]()
-    
+
     val flow = Channel.channelFlow[String] {
       Async.fork {
         Async.delay(50.millis)
@@ -116,9 +116,9 @@ class ChannelFlowSpec extends AnyFlatSpec with Matchers {
 
   it should "complete after all forked fibers complete" in {
     val result = scala.collection.mutable.ArrayBuffer[Int]()
-    
+
     val flow = Channel.channelFlow[Int] {
-      
+
         Async.fork {
           Async.delay(100.millis)
           Channel.Producer.send(1)
