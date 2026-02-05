@@ -101,6 +101,12 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.13.0"
 libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.13.0"
 ```
 
+**For HTTP Server based on λÆS effects**:
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
+```
+
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
 
 ### Requirements

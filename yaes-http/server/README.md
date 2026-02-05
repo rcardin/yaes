@@ -1,6 +1,21 @@
-# yaes-http-server
+![Made for Scala 3](https://img.shields.io/badge/Scala%203-%23de3423.svg?logo=scala&logoColor=white)
+![GitHub Workflow Status (with branch)](https://img.shields.io/github/actions/workflow/status/rcardin/yaes/scala.yml?branch=main)
+![Maven Central](https://img.shields.io/maven-central/v/in.rcard.yaes/yaes-http-server_3)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)
+[![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-http-server_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-http-server_3)
+<br/>
+
+# λÆS HTTP Server
 
 Type-safe HTTP/1.1 server built on YAES effects and virtual threads.
+
+## Installation
+
+Add the dependency to your `build.sbt`:
+
+```scala
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
+```
 
 ## Overview
 
