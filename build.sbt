@@ -48,8 +48,23 @@ lazy val `yaes-cats` = project
     libraryDependencies ++= commonDependencies ++ catsDependencies
   )
 
+lazy val `yaes-http` = project
+  .aggregate(server)
+  .settings(
+    scalaVersion := scala3Version
+  )
+
+lazy val server = project
+  .in(file("yaes-http/server"))
+  .dependsOn(`yaes-core`)
+  .settings(
+    name         := "yaes-http-server",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies
+  )
+
 lazy val yaes = (project in file("."))
-  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`)
+  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`, `yaes-http`)
   .settings(
     scalaVersion := scala3Version,
     Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
