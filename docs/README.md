@@ -19,6 +19,8 @@ Watch the talk from **Scalar 2025** about the main concepts behind the library:
 - **`yaes-core`**: The main effects of the λÆS library
 - **`yaes-data`**: Functional data structures that complement the λÆS effects system
 - **`yaes-cats`**: Cats Effect integration for seamless interoperability
+- **`yaes-http-server`**: HTTP server built on YAES effects and virtual threads
+
 
 ### λÆS Core
 The core module provides a comprehensive set of effects for functional programming:
@@ -39,6 +41,12 @@ The [Cats Effect integration](cats-effect.md) module provides seamless interoper
 - **Typed Error Handling**: Full integration with Raise[Throwable]
 - **Timeout Support**: Prevent indefinite blocking with configurable timeouts
 - **Fluent API**: Extension methods for natural chaining
+
+### λÆS HTTP Server
+The HTTP server module provides a simple and efficient way to build web applications using λÆS effects and virtual threads:
+- **Effectful Request Handling**: Define request handlers using λÆS effects
+- **Virtual Threads**: Leverage Java's virtual threads for efficient concurrency
+- **Type-Safe Routing DSL**: Compile-time verified routes with path and query parameters
 
 ## 🚀 Quick Start
 
