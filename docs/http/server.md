@@ -38,17 +38,15 @@ import in.rcard.yaes.*
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
 
-// Define routes
-val routes = Routes(
-  GET(p"/hello") { req =>
-    Response.ok("Hello, World!")
-  }
-)
-
 // Run server with required effect contexts
 Shutdown.run {
   Log.run {
-    val server = YaesServer.route(routes)
+    val server = YaesServer.route(
+      GET(p"/hello") { req =>
+        Response.ok("Hello, World!")
+      }
+    )
+
     server.run(port = 8080)
     // Server runs until Shutdown.initiateShutdown() is called
   }
@@ -318,11 +316,16 @@ POST(p"/users") { req =>
   )
 }
 
-// Using withHeader method
+// Adding custom headers
 GET(p"/download") { req =>
-  Response.ok("file content")
-    .withHeader("Content-Type" -> "application/octet-stream")
-    .withHeader("Content-Disposition" -> "attachment; filename=data.txt")
+  Response(
+    status = 200,
+    headers = Map(
+      "Content-Type" -> "application/octet-stream",
+      "Content-Disposition" -> "attachment; filename=data.txt"
+    ),
+    body = "file content"
+  )
 }
 ```
 
@@ -372,6 +375,7 @@ Implement the `BodyCodec[A]` trait for custom types:
 
 ```scala
 trait BodyCodec[A] {
+  def contentType: String  // Content-Type header value
   def encode(value: A): String
   def decode(body: String): A raises DecodingError
 }
@@ -389,28 +393,27 @@ case class User(id: Int, name: String)
 
 // Implement BodyCodec
 given userCodec: BodyCodec[User] with {
-  def encode(user: User): String = 
+  def contentType: String = "application/json"
+
+  def encode(user: User): String =
     user.asJson.noSpaces  // Using circe encoder
-  
-  def decode(body: String): User raises DecodingError = 
+
+  def decode(body: String): User raises DecodingError =
     decode[User](body).fold(
       error => Raise.raise(DecodingError(error.getMessage)),
       user => user
     )
 }
 
-// Use in routes
-val routes = Routes(
-  POST(p"/users") { req =>
-    Raise.fold {
-      val user = req.bodyAs[User]
-      Response.created(user)
-        .withHeader("Content-Type" -> "application/json")
-    } { case error: DecodingError =>
-      Response.badRequest(error.message)
-    }
+// Use in routes - Content-Type is automatically set from codec
+POST(p"/users") { req =>
+  Raise.fold {
+    val user = req.bodyAs[User]
+    Response.created(user)  // Content-Type: application/json set automatically
+  } { case error: DecodingError =>
+    Response.badRequest(error.message)
   }
-)
+}
 ```
 
 > **Note:** JSON codec libraries (circe, upickle, zio-json, etc.) are not included. Choose your preferred library and implement the `BodyCodec` trait.
@@ -497,7 +500,12 @@ The server requires the `Shutdown` effect context. This enables:
 Shutdown.run {
   Raise.run {
     Log.run {
-      val server = YaesServer.route(routes)
+      val server = YaesServer.route(
+        GET(p"/health") { req =>
+          Response.ok("OK")
+        }
+      )
+
       server.run(port = 8080)
     }
   }
@@ -510,14 +518,13 @@ Shutdown.run {
 Shutdown.run {
   Raise.run {
     Log.run {
-      val routes = Routes(
+      val server = YaesServer.route(
         GET(p"/shutdown") { req =>
           Shutdown.initiateShutdown()  // Trigger graceful shutdown
           Response.ok("Shutdown initiated")
         }
       )
-      
-      val server = YaesServer.route(routes)
+
       server.run(port = 8080)
     }
   }
@@ -565,7 +572,13 @@ If in-flight requests do not complete within the configured deadline, the server
 ```scala
 Shutdown.run {
   Log.run {
-    val server = YaesServer.route(routes)
+    val server = YaesServer.route(
+      GET(p"/slow") { req =>
+        Async.delay(10.seconds)  // Longer than deadline
+        Response.ok("Completed")
+      }
+    )
+
     server.run(ServerConfig(port = 8080, deadline = Deadline.after(5.seconds)))
   }
 }
@@ -685,7 +698,12 @@ The server requires the `Log` effect context for logging server lifecycle events
 Shutdown.run {
   Raise.run {
     Log.run {  // Provides logging context
-      val server = YaesServer.route(routes)
+      val server = YaesServer.route(
+        GET(p"/health") { req =>
+          Response.ok("OK")
+        }
+      )
+
       server.run(port = 8080)
     }
   }
@@ -780,66 +798,11 @@ import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
 
 object MyApiServer {
-  
+
   // Define path parameters
   val userId = param[Int]("userId")
   val postId = param[Long]("postId")
-  
-  // Define routes
-  val routes = Routes(
-    // Health check endpoint
-    GET(p"/health") { req =>
-      Response.ok("OK")
-    },
-    
-    // List all users
-    GET(p"/users") { req =>
-      val users = """[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]"""
-      Response.ok(users)
-        .withHeader("Content-Type" -> "application/json")
-    },
-    
-    // Get user by ID
-    GET(p"/users" / userId) { (req, id: Int) =>
-      Response.ok(s"""{"id": $id, "name": "User $id"}""")
-        .withHeader("Content-Type" -> "application/json")
-    },
-    
-    // Search users with query parameter
-    GET(p"/users/search" ? queryParam[String]("q")) { req =>
-      val query = req.queryParam("q").getOrElse("")
-      Response.ok(s"""{"query": "$query", "results": []}""")
-        .withHeader("Content-Type" -> "application/json")
-    },
-    
-    // Create new user
-    POST(p"/users") { req =>
-      // In real app, parse req.body and save to database
-      val newUserId = 123
-      Response.created(s"""{"id": $newUserId, "name": "New User"}""")
-        .withHeader("Content-Type" -> "application/json")
-        .withHeader("Location" -> s"/users/$newUserId")
-    },
-    
-    // Update user
-    PUT(p"/users" / userId) { (req, id: Int) =>
-      Response.ok(s"""{"id": $id, "name": "Updated User"}""")
-        .withHeader("Content-Type" -> "application/json")
-    },
-    
-    // Delete user
-    DELETE(p"/users" / userId) { (req, id: Int) =>
-      Response.noContent()  // 204 No Content
-    },
-    
-    // Get user posts with pagination
-    GET(p"/users" / userId / "posts" ? queryParam[Option[Int]]("page")) { (req, uid: Int) =>
-      val page = req.queryParam("page").flatMap(_.toIntOption).getOrElse(1)
-      Response.ok(s"""{"userId": $uid, "page": $page, "posts": []}""")
-        .withHeader("Content-Type" -> "application/json")
-    }
-  )
-  
+
   def main(args: Array[String]): Unit = {
     // Configure server with custom settings
     val config = ServerConfig(
@@ -848,13 +811,85 @@ object MyApiServer {
       maxBodySize = 5.megabytes,              // Allow up to 5 MB request bodies
       maxHeaderSize = 32.kilobytes            // Allow larger header sections
     )
-    
+
     // Run server with all required effects
     Shutdown.run {
       Raise.run {
         Log.run {
-          val server = YaesServer.route(routes)
-          
+          val server = YaesServer.route(
+            // Health check endpoint
+            GET(p"/health") { req =>
+              Response.ok("OK")
+            },
+
+            // List all users
+            GET(p"/users") { req =>
+              val users = """[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]"""
+              Response(
+                status = 200,
+                headers = Map("Content-Type" -> "application/json"),
+                body = users
+              )
+            },
+
+            // Get user by ID
+            GET(p"/users" / userId) { (req, id: Int) =>
+              Response(
+                status = 200,
+                headers = Map("Content-Type" -> "application/json"),
+                body = s"""{"id": $id, "name": "User $id"}"""
+              )
+            },
+
+            // Search users with query parameter
+            GET(p"/users/search" ? queryParam[String]("q")) { req =>
+              val query = req.queryParam("q").getOrElse("")
+              Response(
+                status = 200,
+                headers = Map("Content-Type" -> "application/json"),
+                body = s"""{"query": "$query", "results": []}"""
+              )
+            },
+
+            // Create new user
+            POST(p"/users") { req =>
+              // In real app, parse req.body and save to database
+              val newUserId = 123
+              Response(
+                status = 201,
+                headers = Map(
+                  "Content-Type" -> "application/json",
+                  "Location" -> s"/users/$newUserId"
+                ),
+                body = s"""{"id": $newUserId, "name": "New User"}"""
+              )
+            },
+
+            // Update user
+            PUT(p"/users" / userId) { (req, id: Int) =>
+              Response(
+                status = 200,
+                headers = Map("Content-Type" -> "application/json"),
+                body = s"""{"id": $id, "name": "Updated User"}"""
+              )
+            },
+
+            // Delete user
+            DELETE(p"/users" / userId) { (req, id: Int) =>
+              Response.noContent()  // 204 No Content
+            },
+
+            // Get user posts with pagination
+            GET(p"/users" / userId / "posts" ? queryParam[Option[Int]]("page")) { (req, uid: Int) =>
+              val page = req.queryParam("page").flatMap(_.toIntOption).getOrElse(1)
+              Response(
+                status = 200,
+                headers = Map("Content-Type" -> "application/json"),
+                body = s"""{"userId": $uid, "page": $page, "posts": []}"""
+              )
+            }
+          )
+
           // Server runs until shutdown signal received
           server.run(config)
         }
