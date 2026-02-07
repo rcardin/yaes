@@ -1,8 +1,10 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.params.path
 
 import in.rcard.yaes.*
-import in.rcard.yaes.http.server.routing.{NoParamValues, ParamValueCons}
+import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.server.params.path.PathParamError
+import in.rcard.yaes.http.server.routing.NoParamValues
+import in.rcard.yaes.http.server.routing.ParamValueCons
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -55,7 +57,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   "PathPattern (single parameter)" should "extract Int parameter" in {
-    val userId = param[Int]("userId")
+    val userId  = param[Int]("userId")
     val pattern = (p"/users" / userId).build
 
     val result = Raise.either {
@@ -71,7 +73,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "extract Long parameter" in {
-    val itemId = param[Long]("itemId")
+    val itemId  = param[Long]("itemId")
     val pattern = (p"/items" / itemId).build
 
     val result = Raise.either {
@@ -88,7 +90,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
 
   it should "extract String parameter" in {
     val username = param[String]("username")
-    val pattern = (p"/users" / username).build
+    val pattern  = (p"/users" / username).build
 
     val result = Raise.either {
       pattern.extract(req("/users/alice"))
@@ -103,7 +105,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "raise PathParamError for invalid Int" in {
-    val userId = param[Int]("userId")
+    val userId  = param[Int]("userId")
     val pattern = (p"/users" / userId).build
 
     val result = Raise.either {
@@ -117,7 +119,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "raise PathParamError for invalid Long" in {
-    val itemId = param[Long]("itemId")
+    val itemId  = param[Long]("itemId")
     val pattern = (p"/items" / itemId).build
 
     val result = Raise.either {
@@ -131,7 +133,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "return None for mismatched literal segments" in {
-    val userId = param[Int]("userId")
+    val userId  = param[Int]("userId")
     val pattern = (p"/users" / userId).build
 
     val result = Raise.either {
@@ -142,8 +144,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   "PathPattern (multiple parameters)" should "extract two Int parameters" in {
-    val userId = param[Int]("userId")
-    val postId = param[Int]("postId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Int]("postId")
     val pattern = (p"/users" / userId / "posts" / postId).build
 
     val result = Raise.either {
@@ -160,8 +162,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "extract mixed type parameters (Int and Long)" in {
-    val userId = param[Int]("userId")
-    val postId = param[Long]("postId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Long]("postId")
     val pattern = (p"/users" / userId / "posts" / postId).build
 
     val result = Raise.either {
@@ -178,9 +180,9 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "extract three parameters" in {
-    val orgId = param[Int]("orgId")
-    val userId = param[Int]("userId")
-    val postId = param[Long]("postId")
+    val orgId   = param[Int]("orgId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Long]("postId")
     val pattern = (p"/orgs" / orgId / "users" / userId / "posts" / postId).build
 
     val result = Raise.either {
@@ -188,7 +190,17 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(oid: Int, ParamValueCons(uid: Int, ParamValueCons(pid: Long, NoParamValues))), _))) =>
+      case Right(
+            Some(
+              (
+                ParamValueCons(
+                  oid: Int,
+                  ParamValueCons(uid: Int, ParamValueCons(pid: Long, NoParamValues))
+                ),
+                _
+              )
+            )
+          ) =>
         oid shouldBe 1
         uid shouldBe 42
         pid shouldBe 123L
@@ -198,8 +210,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "raise error if first parameter is invalid" in {
-    val userId = param[Int]("userId")
-    val postId = param[Int]("postId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Int]("postId")
     val pattern = (p"/users" / userId / "posts" / postId).build
 
     val result = Raise.either {
@@ -213,8 +225,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "raise error if second parameter is invalid" in {
-    val userId = param[Int]("userId")
-    val postId = param[Int]("postId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Int]("postId")
     val pattern = (p"/users" / userId / "posts" / postId).build
 
     val result = Raise.either {
@@ -233,14 +245,14 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "generate correct pattern string with single parameter" in {
-    val userId = param[Int]("userId")
+    val userId  = param[Int]("userId")
     val pattern = (p"/users" / userId).build
     pattern.toPattern shouldBe "/users/:userId"
   }
 
   it should "generate correct pattern string with multiple parameters" in {
-    val userId = param[Int]("userId")
-    val postId = param[Long]("postId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Long]("postId")
     val pattern = (p"/users" / userId / "posts" / postId).build
     pattern.toPattern shouldBe "/users/:userId/posts/:postId"
   }
@@ -256,7 +268,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "build mixed literal and parameter patterns" in {
-    val id = param[Int]("id")
+    val id      = param[Int]("id")
     val pattern = (p"/api" / "v1" / "users" / id).build
 
     val result = Raise.either {
@@ -272,7 +284,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   "PathPattern edge cases" should "not match paths with extra trailing segments" in {
-    val userId = param[Int]("userId")
+    val userId  = param[Int]("userId")
     val pattern = (p"/users" / userId).build
 
     val result = Raise.either {
@@ -283,8 +295,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "not match paths missing required segments" in {
-    val userId = param[Int]("userId")
-    val postId = param[Int]("postId")
+    val userId  = param[Int]("userId")
+    val postId  = param[Int]("postId")
     val pattern = (p"/users" / userId / "posts" / postId).build
 
     val result = Raise.either {

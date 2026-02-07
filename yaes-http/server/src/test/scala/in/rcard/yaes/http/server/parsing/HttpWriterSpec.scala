@@ -1,5 +1,6 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.parsing
 
+import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.server.parsing.HttpWriter
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -61,12 +62,12 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "return empty string for another unknown status code" in {
-    HttpWriter.reasonPhrase(418) shouldBe ""  // I'm a teapot
+    HttpWriter.reasonPhrase(418) shouldBe "" // I'm a teapot
   }
 
   "HttpWriter.writeResponse" should "write 200 OK response with body" in {
     val response = Response(200, body = "Hello, World!")
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 
@@ -76,7 +77,7 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
 
   it should "write 404 Not Found with message" in {
     val response = Response(404, body = "Not Found")
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 
@@ -86,7 +87,7 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
 
   it should "write 500 Internal Server Error" in {
     val response = Response(500, body = "Error")
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 
@@ -115,7 +116,7 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
 
   it should "write empty body (204 No Content)" in {
     val response = Response(204)
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 
@@ -125,11 +126,11 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
 
   it should "compute Content-Length correctly for UTF-8" in {
     val response = Response(200, body = "Hëllö, Wørld! 你好")
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 
-    val result = output.toString("UTF-8")
+    val result            = output.toString("UTF-8")
     val expectedBodyBytes = "Hëllö, Wørld! 你好".getBytes("UTF-8").length
     result should include(s"Content-Length: $expectedBodyBytes\r\n")
     result should endWith("\r\n\r\nHëllö, Wørld! 你好")
@@ -137,7 +138,7 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
 
   it should "write response with unknown status code" in {
     val response = Response(999, body = "Unknown")
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 
@@ -147,7 +148,7 @@ class HttpWriterSpec extends AnyFlatSpec with Matchers {
 
   it should "handle response with only Content-Length in headers" in {
     val response = Response(200, headers = Map("X-Test" -> "value"), body = "Body")
-    val output = new ByteArrayOutputStream()
+    val output   = new ByteArrayOutputStream()
 
     HttpWriter.writeResponse(output, response)
 

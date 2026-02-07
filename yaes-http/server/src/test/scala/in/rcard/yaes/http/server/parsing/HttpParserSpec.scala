@@ -1,12 +1,15 @@
-package in.rcard.yaes.http.server
+package in.rcard.yaes.http.server.parsing
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.server.parsing.{HttpParser, HttpParseError}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.ByteArrayInputStream
 import scala.util.{Failure, Success, Try}
+import in.rcard.yaes.http.server.ServerConfig
+import in.rcard.yaes.http.server.Request
 
 class HttpParserSpec extends AnyFlatSpec with Matchers {
 
