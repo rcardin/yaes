@@ -114,4 +114,61 @@ class BodyCodecSpec extends AnyFlatSpec with Matchers {
     result.isLeft shouldBe true
     result.left.get shouldBe a[DecodingError.ParseError]
   }
+
+  // Custom codec for testing
+  case class User(name: String, age: Int)
+
+  given BodyCodec[User] with {
+    def contentType: String = "application/json"
+
+    def encode(user: User): String =
+      s"""{"name":"${user.name}","age":${user.age}}"""
+
+    def decode(body: String): User raises DecodingError = {
+      // Simple JSON parser for testing
+      val namePattern = """"name":"([^"]+)"""".r
+      val agePattern = """"age":(\d+)""".r
+
+      val nameOpt = namePattern.findFirstMatchIn(body).map(_.group(1))
+      val ageOpt = agePattern.findFirstMatchIn(body).flatMap(m => m.group(1).toIntOption)
+
+      (nameOpt, ageOpt) match {
+        case (Some(name), Some(age)) => User(name, age)
+        case _ => Raise.raise(DecodingError.ParseError(s"Invalid User JSON: $body"))
+      }
+    }
+  }
+
+  "Custom BodyCodec[User]" should "encode user to JSON" in {
+    val codec = summon[BodyCodec[User]]
+    val user = User("Alice", 30)
+    codec.encode(user) shouldBe """{"name":"Alice","age":30}"""
+    codec.contentType shouldBe "application/json"
+  }
+
+  it should "decode valid JSON to User" in {
+    val codec = summon[BodyCodec[User]]
+    val result = Raise.either {
+      codec.decode("""{"name":"Bob","age":25}""")
+    }
+    result shouldBe Right(User("Bob", 25))
+  }
+
+  it should "raise DecodingError for invalid JSON" in {
+    val codec = summon[BodyCodec[User]]
+    val result = Raise.either {
+      codec.decode("""{"invalid":"json"}""")
+    }
+    result.isLeft shouldBe true
+    result.left.get shouldBe a[DecodingError.ParseError]
+  }
+
+  it should "raise DecodingError for malformed JSON" in {
+    val codec = summon[BodyCodec[User]]
+    val result = Raise.either {
+      codec.decode("not json at all")
+    }
+    result.isLeft shouldBe true
+    result.left.get shouldBe a[DecodingError.ParseError]
+  }
 }
