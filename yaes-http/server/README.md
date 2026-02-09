@@ -34,6 +34,7 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
 ## Quick Start
 
 ```scala
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
 

@@ -35,6 +35,7 @@ Here's a minimal HTTP server with a single route:
 
 ```scala
 import in.rcard.yaes.*
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
 

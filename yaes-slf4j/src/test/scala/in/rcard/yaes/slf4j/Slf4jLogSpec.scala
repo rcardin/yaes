@@ -1,6 +1,6 @@
 package in.rcard.yaes.slf4j
 
-import in.rcard.yaes.{Log, Logger}
+import in.rcard.yaes.Log
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
