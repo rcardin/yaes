@@ -168,6 +168,7 @@ object YaesServer {
     *
     * Example:
     * {{{
+    * import in.rcard.yaes.Log.given
     * import in.rcard.yaes.http.server.*
     * import scala.concurrent.duration.*
     *
