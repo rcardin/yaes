@@ -17,11 +17,6 @@ trait Logger {
 
   /** The name of this logger */
   val name: String
-
-  /** The minimum logging level enabled for this logger. Messages below this level will be ignored.
-    * Defaults to [[Log.Level.Debug]].
-    */
-  val level: Log.Level = Log.Level.Debug
   def trace(msg: => String)(using Log): Unit
   def debug(msg: => String)(using Log): Unit
   def info(msg: => String)(using Log): Unit
@@ -57,7 +52,7 @@ object Log {
   /** Internal console-based implementation of the [[Logger]] trait. */
   class ConsoleLogger private[Log] (
       override val name: String,
-      override val level: Level,
+      private val level: Level,
       private val clock: java.time.Clock
   ) extends Logger {
 
@@ -97,7 +92,7 @@ object Log {
     }
   }
 
-  /** Retrieves a logger instance with the specified name and default level (DEBUG).
+  /** Retrieves a logger instance with the specified name.
     *
     * @param name
     *   The name for the logger.
@@ -106,37 +101,26 @@ object Log {
     * @return
     *   A [[Logger]] instance.
     */
-  def getLogger(name: String)(using log: Log): Logger = log.unsafe.getLogger(name, Level.Debug)
+  def getLogger(name: String)(using log: Log): Logger = log.unsafe.getLogger(name)
 
-  /** Retrieves a logger instance with the specified name and level.
+  /** Runs a computation that requires the [[Log]] effect, using a provided level and clock.
     *
-    * @param name
-    *   The name for the logger.
-    * @param level
-    *   The minimum logging level for the logger.
-    * @param log
-    *   The Log effect provided through context parameters.
-    * @return
-    *   A [[Logger]] instance.
-    */
-  def getLogger(name: String, level: Level)(using log: Log): Logger =
-    log.unsafe.getLogger(name, level)
-
-  /** Runs a computation that requires the [[Log]] effect, using a provided clock.
-    *
-    * This handler provides the [[Log]] effect to the `block` of code. The default
-    * implementation uses a [[ConsoleLogger]].
+    * This handler provides the [[Log]] effect to the `block` of code. The default implementation
+    * uses a [[ConsoleLogger]]. The `level` parameter controls the minimum severity of messages that
+    * will be emitted &mdash; messages below this level are silently discarded.
     *
     * Example:
     * {{{
-    * Log.run {
+    * Log.run(Log.Level.Info) {
     *   val logger = Log.getLogger("MyLogger")
+    *   logger.debug("This will NOT be printed")
     *   logger.info("Starting computation...")
-    *   // ... computation logic ...
     *   logger.info("Computation finished.")
     * }
     * }}}
     *
+    * @param level
+    *   The minimum logging level. Defaults to [[Level.Debug]].
     * @param block
     *   The computation requiring the [[Log]] effect.
     * @param clock
@@ -146,20 +130,20 @@ object Log {
     * @return
     *   The result of the computation `block`.
     */
-  def run[A](block: Log ?=> A)(using clock: JClock): A =
+  def run[A](level: Level = Level.Debug)(block: Log ?=> A)(using clock: JClock): A =
     val handler = new Yaes.Handler[Log.Unsafe, A, A] {
       override def handle(program: Log ?=> A): A = program(using
-        Yaes(Log.unsafe(clock))
+        Yaes(Log.unsafe(clock, level))
       )
     }
     Yaes.handle(block)(using handler)
 
-  private def unsafe(clock: java.time.Clock) = new Unsafe {
-    override def getLogger(name: String, level: Level): Logger =
+  private def unsafe(clock: java.time.Clock, level: Level) = new Unsafe {
+    override def getLogger(name: String): Logger =
       new ConsoleLogger(name, level, clock)
   }
 
   trait Unsafe {
-    def getLogger(name: String, level: Level): Logger
+    def getLogger(name: String): Logger
   }
 }

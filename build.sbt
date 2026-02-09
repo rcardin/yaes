@@ -48,6 +48,15 @@ lazy val `yaes-cats` = project
     libraryDependencies ++= commonDependencies ++ catsDependencies
   )
 
+lazy val `yaes-slf4j` = project
+  .dependsOn(`yaes-core`)
+  .settings(commonSettings)
+  .settings(
+    name         := "yaes-slf4j",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies ++ slf4jDependencies
+  )
+
 lazy val `yaes-http` = project
   .aggregate(server)
   .settings(
@@ -64,7 +73,7 @@ lazy val server = project
   )
 
 lazy val yaes = (project in file("."))
-  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`, `yaes-http`)
+  .aggregate(`yaes-core`, `yaes-data`, `yaes-cats`, `yaes-slf4j`, `yaes-http`)
   .settings(
     scalaVersion := scala3Version,
     Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
@@ -80,6 +89,9 @@ lazy val dependencies =
     val catsCore          = "org.typelevel"     %% "cats-core"       % catsVersion
     val catsEffectVersion = "3.6.3"
     val catsEffect        = "org.typelevel"     %% "cats-effect"     % catsEffectVersion
+    val slf4jVersion      = "2.0.17"
+    val slf4jApi          = "org.slf4j"          % "slf4j-api"       % slf4jVersion
+    val slf4jSimple       = "org.slf4j"          % "slf4j-simple"    % slf4jVersion
   }
 
 lazy val commonDependencies = Seq(
@@ -97,4 +109,9 @@ lazy val commonSettings = Seq(
 lazy val catsDependencies = Seq(
   dependencies.catsCore,
   dependencies.catsEffect
+)
+
+lazy val slf4jDependencies = Seq(
+  dependencies.slf4jApi,
+  dependencies.slf4jSimple % Test
 )

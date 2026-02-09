@@ -21,8 +21,8 @@ class LogSpec extends AnyFlatSpec with Matchers {
   "The Log effect" should "log at TRACE level" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger = Log.getLogger("TestLogger", Log.Level.Trace)
+      Log.run(Log.Level.Trace) {
+        val logger = Log.getLogger("TestLogger")
 
         logger.trace("Trace message")
         logger.debug("Debug message")
@@ -48,8 +48,8 @@ class LogSpec extends AnyFlatSpec with Matchers {
   it should "log at DEBUG level" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger = Log.getLogger("TestLogger", Log.Level.Debug)
+      Log.run(Log.Level.Debug) {
+        val logger = Log.getLogger("TestLogger")
 
         logger.trace("Trace message")
         logger.debug("Debug message")
@@ -74,8 +74,8 @@ class LogSpec extends AnyFlatSpec with Matchers {
   it should "log at INFO level" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger = Log.getLogger("TestLogger", Log.Level.Info)
+      Log.run(Log.Level.Info) {
+        val logger = Log.getLogger("TestLogger")
 
         logger.trace("Trace message")
         logger.debug("Debug message")
@@ -99,8 +99,8 @@ class LogSpec extends AnyFlatSpec with Matchers {
   it should "log at WARN level" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger = Log.getLogger("TestLogger", Log.Level.Warn)
+      Log.run(Log.Level.Warn) {
+        val logger = Log.getLogger("TestLogger")
 
         logger.trace("Trace message")
         logger.debug("Debug message")
@@ -123,8 +123,8 @@ class LogSpec extends AnyFlatSpec with Matchers {
   it should "log at ERROR level" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger = Log.getLogger("TestLogger", Log.Level.Error)
+      Log.run(Log.Level.Error) {
+        val logger = Log.getLogger("TestLogger")
 
         logger.trace("Trace message")
         logger.debug("Debug message")
@@ -146,8 +146,8 @@ class LogSpec extends AnyFlatSpec with Matchers {
   it should "log at FATAL level" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger = Log.getLogger("TestLogger", Log.Level.Fatal)
+      Log.run(Log.Level.Fatal) {
+        val logger = Log.getLogger("TestLogger")
 
         logger.trace("Trace message")
         logger.debug("Debug message")
@@ -165,12 +165,33 @@ class LogSpec extends AnyFlatSpec with Matchers {
     )
   }
 
+  it should "default to DEBUG level when no level is specified" in {
+    val actualResult = new ByteArrayOutputStream()
+    Console.withOut(actualResult) {
+      Log.run() {
+        val logger = Log.getLogger("TestLogger")
+
+        logger.trace("Trace message")
+        logger.debug("Debug message")
+        logger.info("Info message")
+      }
+    }
+
+    val actualLoggedLines = actualResult.toString.split('\n')
+
+    actualLoggedLines should contain allOf (
+      "2025-04-22T19:55:59 - DEBUG - TestLogger - Debug message",
+      "2025-04-22T19:55:59 - INFO - TestLogger - Info message"
+    )
+    actualLoggedLines.mkString("\n") should not include "TRACE"
+  }
+
   it should "use different name for different instances of loggers" in {
     val actualResult = new ByteArrayOutputStream()
     Console.withOut(actualResult) {
-      Log.run {
-        val logger1 = Log.getLogger("TestLogger1", Log.Level.Trace)
-        val logger2 = Log.getLogger("TestLogger2", Log.Level.Trace)
+      Log.run(Log.Level.Trace) {
+        val logger1 = Log.getLogger("TestLogger1")
+        val logger2 = Log.getLogger("TestLogger2")
 
         logger1.trace("Trace message")
         logger2.debug("Debug message")

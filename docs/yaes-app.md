@@ -21,15 +21,12 @@ import in.rcard.yaes.*
 object MyApp extends YaesApp {
   override def run {
     Output.printLn("Hello, YAES!")
-    
+
     val currentTime = Clock.now
     Output.printLn(s"Current time: $currentTime")
-    
+
     val randomNumber = Random.nextInt
     Output.printLn(s"Random number: $randomNumber")
-    
-    val logger = Log.getLogger("MyApp")
-    logger.info("Application started successfully")
   }
 }
 ```
@@ -95,22 +92,6 @@ override def run {
 }
 ```
 
-### Log Effect
-Structured logging with different levels.
-
-```scala 3
-override def run {
-  val logger = Log.getLogger("MyApp", Log.Level.Info)
-  
-  logger.trace("Trace message")
-  logger.debug("Debug message")
-  logger.info("Info message")
-  logger.warn("Warning message")
-  logger.error("Error message")
-  logger.fatal("Fatal message")
-}
-```
-
 ## Exception Handling
 
 YaesApp automatically catches all exceptions thrown during execution via the `Sync` effect. The `Sync.runBlocking` method returns a `Try[A]`, ensuring that any unhandled exceptions are captured and passed to the `handleError` method.
@@ -167,10 +148,12 @@ YaesApp automatically applies effect handlers in the following order (from outer
 
 1. **Sync** - Handles side effects, async operations, and catches all exceptions
 2. **Output** - Console output
-3. **Random** - Random generation
-4. **Clock** - Time operations
-5. **System** - System properties/environment
-6. **Log** - Structured logging
+3. **Input** - Console input
+4. **Random** - Random generation
+5. **Clock** - Time operations
+6. **System** - System properties/environment
+
+Logging is intentionally excluded so that the application can choose its own logging backend (e.g., `Log.run` or `Slf4jLog.run`).
 
 This ordering ensures that:
 - All effects run within a Sync context
@@ -237,23 +220,6 @@ object CustomThreadPoolApp extends YaesApp {
 }
 ```
 
-### Custom Clock
-
-Override `logClock` for custom timestamp generation:
-
-```scala 3
-import java.time.{Clock => JClock}
-
-object CustomClockApp extends YaesApp {
-  override protected given logClock: JClock = JClock.systemUTC()
-  
-  override def run {
-    val logger = Log.getLogger("App")
-    logger.info("Using UTC timestamps")
-  }
-}
-```
-
 ### Custom Handle Error Behavior
 
 Override `handleError` to prevent actual system exit (useful for testing):
@@ -278,7 +244,7 @@ object NoExitApp extends YaesApp {
 1. **Single Responsibility**: Keep your `run` block focused and organized
 2. **Exception Handling**: Throw exceptions for unexpected errors - the IO effect will catch them automatically
 3. **Typed Error Handling**: Use `Raise[E]` explicitly when you need type-safe error handling for domain-specific errors (e.g., parsing, validation)
-4. **Logging**: Use structured logging instead of `Output.printLn` for production code
+4. **Logging**: Use the `Log` effect with your preferred handler (`Log.run` or `Slf4jLog.run`) inside the `run` block
 5. **Configuration**: Read configuration from environment variables and system properties, wrapping typed operations with `Raise.run`
 6. **Testing**: Override `handleError` for testing
 7. **Timeout**: Set appropriate timeouts for production applications
@@ -296,16 +262,14 @@ object ManualApp {
         Random.run {
           Clock.run {
             System.run {
-              Log.run {
-                // Application logic here
-                Output.printLn("Hello")
-              }
+              // Application logic here
+              Output.printLn("Hello")
             }
           }
         }
       }
     }
-    
+
     result match {
       case Success(_) => ()
       case Failure(ex) =>
@@ -335,4 +299,3 @@ Much cleaner and less error-prone!
 - [Sync Effect](effects/sync.md)
 - [Raise Effect](effects/raise.md)
 - [Output Effect](effects/io-effects.md)
-- [Log Effect](effects/log.md)

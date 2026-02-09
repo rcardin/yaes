@@ -79,7 +79,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test response")
@@ -122,7 +122,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/concurrent") { req =>
                 // Simulate some processing time
@@ -179,7 +179,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/cleanup") { req =>
                 Response.ok("Cleanup test")
@@ -219,7 +219,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info)  {
             val server2 = YaesServer.route(
               GET(p"/reuse") { req =>
                 Response.ok("Port reused")
@@ -259,7 +259,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               POST(p"/echo") { req =>
                 Response.ok(s"Received: ${req.body}")
@@ -302,7 +302,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val userId = param[Int]("userId")
             val server = YaesServer.route(
               GET(p"/users" / userId) { (req, id: Int) =>
@@ -346,7 +346,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info)  {
             val server = YaesServer.route(
               GET(p"/search" ? queryParam[String]("q")) { req =>
                 // Note: In the current implementation, query parameters are extracted
@@ -392,7 +392,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/known") { req =>
                 Response.ok("Known route")
@@ -434,7 +434,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info)  {
             val server = YaesServer.route(
               GET(p"/error") { req =>
                 throw new RuntimeException("Handler failed")
@@ -476,7 +476,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test")
@@ -535,7 +535,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info)  {
             val server = YaesServer.route(
               GET(p"/slow") { req =>
                 // Simulate slow processing (reduced from 1s to 200ms for faster tests)
@@ -588,7 +588,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info)  {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Normal response")
@@ -652,7 +652,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test")
@@ -707,7 +707,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               POST(p"/upload") { req =>
                 Response.ok(s"Received ${req.body.length} bytes")
@@ -752,7 +752,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run {
+          Log.run(level = Log.Level.Info) {
             val server = YaesServer.route(
               GET(p"/test") { req =>
                 Response.ok("Test")
