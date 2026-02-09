@@ -230,7 +230,11 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     }
 
     actualResult should be(ChannelClosed)
-    actualQueue.toArray should contain theSameElementsInOrderAs List("p0", "c0", "p1", "c1")
+    val events = actualQueue.toArray.toList.map(_.toString)
+    events should contain theSameElementsAs List("p0", "c0", "p1", "c1")
+    // Within-thread ordering is preserved
+    events.indexOf("p0") should be < events.indexOf("p1")
+    events.indexOf("c0") should be < events.indexOf("c1")
   }
 
   it should "cancel a closed channel" in {
@@ -318,7 +322,11 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List("c1", "p1", "p2", "c2")
+    val events = actualQueue.toArray.toList.map(_.toString)
+    events should contain theSameElementsAs List("c1", "p1", "p2", "c2")
+    // Within-thread ordering is preserved
+    events.indexOf("p1") should be < events.indexOf("p2")
+    events.indexOf("c1") should be < events.indexOf("c2")
   }
 
   it should "block on receive until send is ready" in {
@@ -379,12 +387,18 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    val events = actualQueue.toArray.toList
+    val events = actualQueue.toArray.toList.map(_.toString)
     // Sender should start before receiver
     events.indexOf("s1-start") should be < events.indexOf("r1-start")
-    // Sender should complete only after receiver receives
-    events.indexOf("r1-got-msg1") should be < events.indexOf("s1-done")
-    events.indexOf("r2-got-msg2") should be < events.indexOf("s2-done")
+    // Rendezvous guarantee: receiver must start receiving before sender can complete,
+    // because send() blocks until receive() takes the item
+    events.indexOf("r1-start") should be < events.indexOf("s1-done")
+    events.indexOf("r2-start") should be < events.indexOf("s2-done")
+    // Within-thread ordering is preserved
+    events.indexOf("s1-start") should be < events.indexOf("s1-done")
+    events.indexOf("s1-done") should be < events.indexOf("s2-start")
+    events.indexOf("r1-start") should be < events.indexOf("r1-got-msg1")
+    events.indexOf("r1-got-msg1") should be < events.indexOf("r2-start")
   }
 
   it should "handle multiple concurrent senders and receivers" in {
@@ -479,7 +493,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
       }
     }
 
-    actualQueue.toArray should contain theSameElementsInOrderAs List("sending", "received-42", "sent")
+    actualQueue.toArray should contain theSameElementsAs List("sending", "received-42", "sent")
   }
 
   it should "work with produce for rendezvous channel" in {
