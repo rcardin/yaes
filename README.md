@@ -20,6 +20,7 @@ Available modules are:
  * `yaes-core`: The main effects of the λÆS library.
  * `yaes-data`: A set of data structures that can be used with the λÆS library.
  * `yaes-cats`: Integration with Cats and Cats Effect, providing interoperability and typeclass instances.
+ * `yaes-slf4j`: SLF4J integration for the `Log` effect, enabling any SLF4J-compatible logging backend.
 
 What's new in λÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
 
@@ -101,6 +102,12 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.13.0"
 libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.13.0"
 ```
 
+**For SLF4J logging integration** (delegates `Log` effect to any SLF4J backend):
+
+```sbt
+libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.13.0"
+```
+
 **For HTTP Server based on λÆS effects**:
 
 ```sbt
@@ -142,15 +149,12 @@ import in.rcard.yaes.*
 object MyApp extends YaesApp {
   override def run {
     Output.printLn(s"Hello! Starting with args: ${args.mkString(", ")}")
-    
+
     val currentTime = Clock.now
     Output.printLn(s"Current time: $currentTime")
-    
+
     val randomNumber = Random.nextInt
     Output.printLn(s"Random number: $randomNumber")
-    
-    val logger = Log.getLogger("MyApp")
-    logger.info("Application started successfully")
   }
 }
 ```
@@ -160,7 +164,6 @@ object MyApp extends YaesApp {
 - **Random** - Random number generation
 - **Clock** - Time operations
 - **System** - System properties and environment variables
-- **Log** - Structured logging
 
 For more details, see the [YaesApp documentation](docs/yaes-app.md).
 
@@ -1115,30 +1118,29 @@ The `Log` effect provides the capability to log messages at different levels. Th
   - `ERROR`
   - `FATAL`
   
-We can log using a concrete implementation of the `in.rcard.yaes.Logger` interface. Each logger instance has a name and a log level associated with it. To create a logger, we can use the `Log.getLogger` method:
+We can log using a concrete implementation of the `in.rcard.yaes.Logger` interface. Each logger instance has a name. To create a logger, we can use the `Log.getLogger` method:
 
 ```scala 3
 import in.rcard.yaes.Log.*
 
-val logger: Log ?=> Logger = Log.getLogger("TestLogger", Log.Level.Trace)
+val logger: Log ?=> Logger = Log.getLogger("TestLogger")
 ```
 
-It's possible to create a new logger providing only the name. In this case, the logger will use the default log level, which is `Log.Level.Debug`.
-
-The only logger implementation available is the `ConsoleLogger`, which logs messages to the console. The message printed to the console has the following format:
+In `yaes-core`, the default logger implementation is the `ConsoleLogger`, which logs messages to the console. The message printed to the console has the following format:
 
 ```
 2025-04-22T19:55:59 - TRACE - TestLogger - Trace message
 ```
 
-To run the effectful computation, we can use the provided handlers:
+To run the effectful computation, we can use the provided handlers. The `Log.run` method accepts a `level` parameter that controls the minimum severity of messages that will be emitted. The default level is `Log.Level.Debug`:
 
 ```scala 3
 import in.rcard.yaes.Log.*
 
-val program = Log.run {
-  val logger = Log.getLogger("TestLogger", Log.Level.Trace)
+val program = Log.run(Log.Level.Info) {
+  val logger = Log.getLogger("TestLogger")
 
+  logger.debug("This will NOT be printed")
   logger.info("Info message")
 }
 ```
@@ -1151,6 +1153,22 @@ object Log {
   // ...
 }
 ```
+
+#### SLF4J Integration
+
+The `yaes-slf4j` module provides an alternative handler that delegates logging to any SLF4J-compatible backend (Logback, Log4j2, etc.). Simply replace `Log.run` with `Slf4jLog.run` — all existing application code remains unchanged:
+
+```scala 3
+import in.rcard.yaes.Log
+import in.rcard.yaes.slf4j.Slf4jLog
+
+Slf4jLog.run {
+  val logger = Log.getLogger("MyService")
+  logger.info("Hello from SLF4J!")
+}
+```
+
+Level filtering is controlled by the SLF4J backend configuration instead of a handler parameter. See the [yaes-slf4j README](yaes-slf4j/README.md) for full details.
 
 ## Communication Primitives
 

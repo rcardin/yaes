@@ -918,7 +918,7 @@ def randomDataProcessor(using Random, Output, Log): List[Int] = {
 }
 
 // Run with effects
-val result = Log.run {
+val result = Log.run() {
   Output.run {
     Random.run {
       randomDataProcessor

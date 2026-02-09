@@ -168,6 +168,7 @@ object YaesServer {
     *
     * Example:
     * {{{
+    * import in.rcard.yaes.Log.given
     * import in.rcard.yaes.http.server.*
     * import scala.concurrent.duration.*
     *
@@ -176,7 +177,7 @@ object YaesServer {
     * )
     *
     * Shutdown.run {
-    *   Log.run {
+    *   Log.run() {
     *     server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *   }
     * }

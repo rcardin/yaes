@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 λÆS (Yet Another Effect System) is an experimental effect system for Scala 3 inspired by Algebraic Effects. It uses Scala 3 context parameters and context functions to provide modular, composable effect management with deferred execution.
@@ -12,80 +8,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Execution is **deferred** until handlers run the effects
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
 
-**Current Version:** 0.13.0
 **Scala Version:** 3.7.4
 **Java Requirement:** Java 24+ (for Virtual Threads and Structured Concurrency)
 
 ## Common Development Commands
 
 ### Build and Compilation
-```bash
-# Compile all modules
-sbt compile
 
-# Compile specific module
-sbt yaes-core/compile
-sbt yaes-data/compile
-sbt yaes-cats/compile
-sbt server/compile
+Use SBT for building and testing the project. Use the `-batch --no-colors --error` flags during tests.
+Prefer testing a single class or module during development for faster feedback.
 
-# Clean build artifacts
-sbt clean
+Tests use ScalaTest with the following structure:
+```scala
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-# Continuous compilation (recompiles on file changes)
-sbt ~compile
-```
-
-### Testing
-```bash
-# Run all tests
-sbt -batch --no-colors test
-
-# Run tests for specific module
-sbt yaes-core/test
-sbt yaes-data/test
-
-# Run a single test class
-sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec"
-sbt "yaes-data/testOnly in.rcard.yaes.FlowSpec"
-
-# Run a single test within a class
-sbt "yaes-core/testOnly in.rcard.yaes.RaiseSpec -- -z \"should handle errors\""
-sbt "server/testOnly in.rcard.yaes.http.server.ServerShutdownSpec -- -z \"graceful shutdown\""
-
-# Continuous testing (runs tests on file changes)
-sbt ~test
-sbt ~yaes-core/test
-```
-
-### Publishing
-```bash
-# Publish locally
-sbt publishLocal
-
-# Publish to Maven Central (requires credentials)
-sbt publishSigned
-```
-
-### Documentation
-```bash
-# Generate Scaladoc
-sbt doc
-
-# Generate Scaladoc for specific module
-sbt yaes-core/doc
-sbt yaes-data/doc
-sbt yaes-cats/doc
-```
-
-### Running Examples
-```bash
-# The examples/ directory contains example applications demonstrating effect usage
-# Run an example with:
-sbt "runMain <fully-qualified-main-class-name>"
-
-# Example:
-# sbt "runMain FlowFromFileExample"
+class EffectNameSpec extends AnyFlatSpec with Matchers {
+  "EffectName" should "do something" in {
+    // Test implementation
+  }
+}
 ```
 
 ## Architecture
@@ -117,14 +59,6 @@ The project consists of several modules:
 
 ### Core Effect System Design
 
-**The `Yaes[F]` wrapper:**
-```scala
-class Yaes[+F](val unsafe: F)
-```
-- Wraps effect implementations in a type-safe container
-- The `unsafe` field contains the actual effect implementation
-- Should only be accessed through handlers
-
 **Effect Pattern:**
 ```scala
 type EffectName = Yaes[EffectName.Unsafe]
@@ -152,7 +86,7 @@ object EffectName {
 
 **Handler Order Matters:**
 - When composing multiple effects, handlers must be applied in the correct nesting order
-- Example in `YaesApp`: Sync (outermost) → Output → Input → Random → Clock → System → Log (innermost)
+- Example in `YaesApp`: Sync (outermost) → Output → Input → Random → Clock → System (innermost)
 - Each handler removes one effect from the context, unwrapping the computation step by step
 
 ### Key Implementation Details
@@ -210,7 +144,7 @@ object EffectName {
 - Exception handling in `handleComplete` captures only genuine failures, not interruptions after shutdown
 - Key invariant: Timeout enforcer's interruption when scope shuts down early is **not** treated as a failure
 
-**Channels (Communication Primitive):**
+**Channels (yaes-data):**
 - Based on `java.util.concurrent` blocking queues with suspending operations
 - Three types: Unbounded, Bounded (with overflow strategies), Rendezvous
 - Overflow strategies for bounded channels: SUSPEND (default), DROP_OLDEST, DROP_LATEST
@@ -226,45 +160,6 @@ object EffectName {
 - Operators: `map`, `filter`, `take`, `drop`, etc.
 - `buffer` operator enables concurrent producer/consumer via channels
 - `channelFlow` creates Flows with concurrent emission capabilities
-
-### Testing Conventions
-
-Tests are located in:
-- `yaes-core/src/test/scala/in/rcard/yaes/`
-- `yaes-data/src/test/scala/in/rcard/yaes/`
-- `yaes-cats/src/test/scala/in/rcard/yaes/` (with subdirectories for `instances/`)
-- `yaes-http/server/src/test/scala/in/rcard/yaes/http/server/`
-
-Tests use ScalaTest with the following structure:
-```scala
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers
-
-class EffectNameSpec extends AnyFlatSpec with Matchers {
-  "EffectName" should "do something" in {
-    // Test implementation
-  }
-}
-```
-
-**HTTP Server Testing:**
-- Integration tests use actual HTTP requests via `YaesServer.run`
-- Tests verify graceful shutdown, route matching, parameter parsing, and body encoding/decoding
-- Example test pattern:
-```scala
-import in.rcard.yaes.http.server.*
-
-"YaesServer" should "handle GET requests" in {
-  Async.run {
-    IO.run {
-      val routes = Routes(GET / "users" -> { req => Response.ok("Users list") })
-      val server = YaesServer(routes).run(port = 8080)
-      // Test request handling
-      server.shutdown()
-    }
-  }
-}
-```
 
 ## Important Constraints and Gotchas
 

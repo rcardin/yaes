@@ -35,12 +35,13 @@ Here's a minimal HTTP server with a single route:
 
 ```scala
 import in.rcard.yaes.*
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
 
 // Run server with required effect contexts
 Shutdown.run {
-  Log.run {
+  Log.run() {
     val server = YaesServer.route(
       GET(p"/hello") { req =>
         Response.ok("Hello, World!")
@@ -499,7 +500,7 @@ The server requires the `Shutdown` effect context. This enables:
 ```scala
 Shutdown.run {
   Raise.run {
-    Log.run {
+    Log.run() {
       val server = YaesServer.route(
         GET(p"/health") { req =>
           Response.ok("OK")
@@ -517,7 +518,7 @@ Shutdown.run {
 ```scala
 Shutdown.run {
   Raise.run {
-    Log.run {
+    Log.run() {
       val server = YaesServer.route(
         GET(p"/shutdown") { req =>
           Shutdown.initiateShutdown()  // Trigger graceful shutdown
@@ -571,7 +572,7 @@ If in-flight requests do not complete within the configured deadline, the server
 
 ```scala
 Shutdown.run {
-  Log.run {
+  Log.run() {
     val server = YaesServer.route(
       GET(p"/slow") { req =>
         Async.delay(10.seconds)  // Longer than deadline
@@ -697,7 +698,7 @@ The server requires the `Log` effect context for logging server lifecycle events
 ```scala
 Shutdown.run {
   Raise.run {
-    Log.run {  // Provides logging context
+    Log.run() {  // Provides logging context
       val server = YaesServer.route(
         GET(p"/health") { req =>
           Response.ok("OK")
@@ -815,7 +816,7 @@ object MyApiServer {
     // Run server with all required effects
     Shutdown.run {
       Raise.run {
-        Log.run {
+        Log.run() {
           val server = YaesServer.route(
             // Health check endpoint
             GET(p"/health") { req =>

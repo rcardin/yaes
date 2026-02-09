@@ -102,7 +102,7 @@ def scrapeUrls(urls: List[String])(using Async, IO, Log): List[String] = {
 }
 
 // Run concurrent scraping
-val results = Log.run {
+val results = Log.run() {
   IO.run {
     Async.run {
       scrapeUrls(List(
@@ -147,7 +147,7 @@ def loadConfig(using System, Raise[String], Log): AppConfig = {
 
 // Load configuration
 val config = Raise.either {
-  Log.run {
+  Log.run() {
     System.run {
       loadConfig
     }
@@ -257,7 +257,7 @@ def generateSensorReadings(using Random): List[SensorReading] = {
   }.toList
 }
 
-val alerts = Log.run {
+val alerts = Log.run() {
   Output.run {
     Random.run {
       val readings = generateSensorReadings
@@ -324,7 +324,7 @@ val sampleLogs = List(
   LogEntry(System.currentTimeMillis(), "TRACE", "Method entered")
 )
 
-val results = Log.run {
+val results = Log.run() {
   Async.run {
     processLogStream(sampleLogs)
   }

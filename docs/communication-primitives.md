@@ -600,7 +600,7 @@ def producerConsumerExample()(using Log): Unit = {
 }
 
 // Usage
-Log.run {
+Log.run() {
   producerConsumerExample()
 }
 ```
@@ -903,7 +903,7 @@ def effectfulChannelExample()(using Log, Random): Unit = {
 }
 
 // Usage
-Log.run {
+Log.run() {
   Random.run {
     effectfulChannelExample()
   }
