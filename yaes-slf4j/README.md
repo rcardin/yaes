@@ -10,7 +10,7 @@ The `yaes-slf4j` module provides an SLF4J-backed handler for the `Log` effect. I
 
 ## Requirements
 
-- **Java 24 or higher** is required to run λÆS SLF4J due to its use of modern Java features like Virtual Threads and Structured Concurrency.
+- **Java 24 or higher** is required by λÆS and its effect runtime.
 - An **SLF4J backend** on the classpath (e.g., Logback, Log4j2, or slf4j-simple).
 
 ## Quick Start
