@@ -242,7 +242,7 @@ object NoExitApp extends YaesApp {
 ## Best Practices
 
 1. **Single Responsibility**: Keep your `run` block focused and organized
-2. **Exception Handling**: Throw exceptions for unexpected errors - the IO effect will catch them automatically
+2. **Exception Handling**: Throw exceptions for unexpected errors - the Sync effect (via `Sync.runBlocking` in `YaesApp`) will catch them automatically
 3. **Typed Error Handling**: Use `Raise[E]` explicitly when you need type-safe error handling for domain-specific errors (e.g., parsing, validation)
 4. **Logging**: Use the `Log` effect with your preferred handler (`Log.run` or `Slf4jLog.run`) inside the `run` block
 5. **Configuration**: Read configuration from environment variables and system properties, wrapping typed operations with `Raise.run`

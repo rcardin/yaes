@@ -50,8 +50,8 @@ trait YaesApp {
     *   - Clock: for time operations
     *   - System: for system properties and environment variables
     *
-    * Note: Exceptions thrown during execution will be caught by the IO effect and handled
-    * by the handleError method.
+    * Note: Exceptions thrown during execution will be caught by the outer Sync effect
+    * (via `Sync.runBlocking`) and then passed to the `handleError` method.
     *
     * Override this method to define your application logic.
     *

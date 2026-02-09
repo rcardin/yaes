@@ -219,7 +219,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     Shutdown.run {
       Raise.run {
         Async.run {
-          Log.run(level = Log.Level.Info)  {
+          Log.run(level = Log.Level.Info) {
             val server2 = YaesServer.route(
               GET(p"/reuse") { req =>
                 Response.ok("Port reused")
