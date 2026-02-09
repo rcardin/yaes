@@ -1126,7 +1126,7 @@ import in.rcard.yaes.Log.*
 val logger: Log ?=> Logger = Log.getLogger("TestLogger")
 ```
 
-The only logger implementation available is the `ConsoleLogger`, which logs messages to the console. The message printed to the console has the following format:
+In `yaes-core`, the default logger implementation is the `ConsoleLogger`, which logs messages to the console. The message printed to the console has the following format:
 
 ```
 2025-04-22T19:55:59 - TRACE - TestLogger - Trace message
