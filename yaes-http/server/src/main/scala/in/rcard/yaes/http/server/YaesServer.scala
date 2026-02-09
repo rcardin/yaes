@@ -176,7 +176,7 @@ object YaesServer {
     * )
     *
     * Shutdown.run {
-    *   Log.run {
+    *   Log.run() {
     *     server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *   }
     * }

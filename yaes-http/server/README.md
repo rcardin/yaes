@@ -39,7 +39,7 @@ import scala.concurrent.duration.*
 
 // Server requires Log and Shutdown effects
 Shutdown.run {
-  Log.run {
+  Log.run() {
     val server = YaesServer.route(
       GET(p"/hello") { req =>
         Response.ok("Hello, World!")
@@ -253,7 +253,7 @@ The server integrates with YAES's `Shutdown` effect for coordinated graceful shu
 
 ```scala
 Shutdown.run {
-  Log.run {
+  Log.run() {
     val server = YaesServer.route(
       GET(p"/work") { req =>
         Async.delay(5.seconds)  // Simulate long-running request
@@ -295,7 +295,7 @@ Register callbacks to run when shutdown begins:
 
 ```scala
 Shutdown.run {
-  Log.run {
+  Log.run() {
     // Register cleanup hooks
     Shutdown.onShutdown {
       println("Cleaning up resources...")
@@ -390,7 +390,7 @@ object MyServer extends App {
   val userId = param[Int]("userId")
 
   Shutdown.run {
-    Log.run {
+    Log.run() {
       val server = YaesServer.route(
         // Health check
         GET(p"/health") { req =>
