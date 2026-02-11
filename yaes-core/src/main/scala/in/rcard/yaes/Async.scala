@@ -8,7 +8,6 @@ import ju.concurrent.CompletableFuture
 import ju.concurrent.ExecutionException
 import ju.concurrent.Future
 import ju.concurrent.StructuredTaskScope
-import ju.concurrent.StructuredTaskScope.ShutdownOnFailure
 import ju.concurrent.StructuredTaskScope.Subtask
 import ju.concurrent.ThreadFactory
 import ju.function.Consumer
@@ -17,6 +16,7 @@ import ju.concurrent.CountDownLatch
 import ju.concurrent.Callable
 import ju.concurrent.atomic.AtomicBoolean
 import ju.concurrent.locks.ReentrantLock
+import ju.concurrent.StructuredTaskScope.Joiner
 
 type Async = Yaes[Async.Unsafe]
 
@@ -155,7 +155,8 @@ class JvmAsync extends Async.Unsafe {
     JvmAsync.scope
       .get()
       .fork(() => {
-        val innerScope = new ShutdownOnFailure(name, JvmAsync.namedThreadFactory(name))
+        val innerScope = StructuredTaskScope
+          .open[A, Void](Joiner.awaitAllSuccessfulOrThrow(), configure => configure.withName(name))
         forkedThread.complete(Thread.currentThread())
         try {
           val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
@@ -186,8 +187,9 @@ class JvmAsync extends Async.Unsafe {
 }
 object JvmAsync {
 
-  private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any]] = new ThreadLocal()
+  private[yaes] def scope[A]: ThreadLocal[StructuredTaskScope[A, Void]] = new ThreadLocal()
 
+  // TODO Remove?
   private[yaes] def namedThreadFactory(name: String): ThreadFactory = {
     Thread.ofVirtual().name(name).factory()
   }
@@ -573,9 +575,9 @@ object Async {
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
         val async     = new JvmAsync()
-        val loomScope = new ShutdownOnFailure(
-          "yaes-async-handler",
-          JvmAsync.namedThreadFactory("yaes-async-handler")
+        val loomScope = StructuredTaskScope.open[A, Void](
+          Joiner.awaitAllSuccessfulOrThrow(),
+          configure => configure.withName("yaes-async-handler")
         )
         try {
           val mainTask = loomScope.fork(() => {
@@ -586,7 +588,7 @@ object Async {
               JvmAsync.scope.remove()
             }
           })
-          loomScope.join().throwIfFailed(identity)
+          loomScope.join()
           mainTask.get()
         } finally {
           loomScope.close()
@@ -659,13 +661,14 @@ object Async {
     *      [[ShutdownTimedOut]] is raised
     *   1. `scope.join()` completes when all fibers finish (or are cancelled)
     *
-    * **Integration with Shutdown Effect:** This method returns `(Shutdown, Raise[ShutdownTimedOut]) ?=> A`,
-    * meaning it requires both a Shutdown context and a Raise[ShutdownTimedOut] context. It automatically
-    * registers a hook with `Shutdown.onShutdown` to trigger graceful shutdown when the Shutdown effect
-    * transitions to shutting down state.
+    * **Integration with Shutdown Effect:** This method returns
+    * `(Shutdown, Raise[ShutdownTimedOut]) ?=> A`, meaning it requires both a Shutdown context and a
+    * Raise[ShutdownTimedOut] context. It automatically registers a hook with `Shutdown.onShutdown`
+    * to trigger graceful shutdown when the Shutdown effect transitions to shutting down state.
     *
-    * **Error Handling:** When the deadline expires before the main task completes, the method raises
-    * [[ShutdownTimedOut]]. Handle this error using `Raise.either`, `Raise.run`, or other Raise handlers.
+    * **Error Handling:** When the deadline expires before the main task completes, the method
+    * raises [[ShutdownTimedOut]]. Handle this error using `Raise.either`, `Raise.run`, or other
+    * Raise handlers.
     *
     * Example:
     * {{{

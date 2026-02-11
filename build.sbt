@@ -19,8 +19,8 @@ name := "yaes"
 val scala3Version = "3.8.1"
 scalaVersion := scala3Version
 
-scalacOptions += "-target:24"
-javacOptions ++= Seq("-source", "24", "-target", "24")
+scalacOptions += "-target:25"
+javacOptions ++= Seq("-source", "25", "-target", "25")
 
 lazy val `yaes-data` = project
   .dependsOn(`yaes-core`)
