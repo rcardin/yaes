@@ -160,7 +160,7 @@ class JvmAsync extends Async.Unsafe {
         forkedThread.complete(Thread.currentThread())
         try {
           val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-            JvmAsync.scope.set(innerScope)
+            JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
             block
           })
           innerScope.join()
@@ -187,12 +187,7 @@ class JvmAsync extends Async.Unsafe {
 }
 object JvmAsync {
 
-  private[yaes] def scope[A]: ThreadLocal[StructuredTaskScope[A, Void]] = new ThreadLocal()
-
-  // TODO Remove?
-  private[yaes] def namedThreadFactory(name: String): ThreadFactory = {
-    Thread.ofVirtual().name(name).factory()
-  }
+  private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any, Any]] = new ThreadLocal()
 }
 
 /** A StructuredTaskScope that supports graceful shutdown with timeout enforcement.
@@ -221,92 +216,48 @@ object JvmAsync {
   * @param inFlightTasksCompletionTimeout
   *   the maximum time to wait for the main task to complete after shutdown is initiated
   */
-private class GracefulShutdownScope(
-    name: String,
-    factory: ThreadFactory,
-    private val inFlightTasksCompletionTimeout: Duration
-) extends StructuredTaskScope[Any](name, factory) {
+private class AllSuccessfulOrThrowWithGracefulShutdown[T](timeoutExpired: AtomicBoolean)
+    extends Joiner[T, Unit] {
 
-  private val shutdownInitiated = new AtomicBoolean(false)
-  private val timeoutExpired    = new AtomicBoolean(false)
-  private val shutdownLatch     = new CountDownLatch(1)
-
+  private val mainTaskLock              = new ReentrantLock()
+  private var mainTask: Subtask[?]      = null
   private val exceptionLock             = new ReentrantLock()
   private var firstException: Throwable = null
 
-  @volatile private var mainTask: Subtask[?] = null
-
-  // Fork the fiber that enforces the timeout after shutdown is initiated
-  private val timeoutEnforcer = super.fork(() => {
-    shutdownLatch.await()
-    Thread.sleep(
-      inFlightTasksCompletionTimeout.toMillis
-    )
-    timeoutExpired.set(true)
-  })
-
-  def isTimeoutExpired: Boolean = timeoutExpired.get()
-
-  /** Signals that graceful shutdown should begin.
-    *
-    * Called from the Shutdown effect hook when `Shutdown.initiateShutdown()` is invoked. This
-    * method is thread-safe and idempotent. It sets `shutdownInitiated` to true and counts down the
-    * latch to wake up the timeout enforcer.
-    */
-  def initiateGracefulShutdown(): Unit = {
-    if (shutdownInitiated.compareAndSet(false, true)) {
-      shutdownLatch.countDown()
-    }
+  override def onFork(subtask: Subtask[? <: T]): Boolean = {
+    mainTaskLock.lock()
+    try {
+      if (mainTask == null) {
+        mainTask = subtask
+      }
+    } finally { mainTaskLock.unlock() }
+    false
   }
 
-  /** Forks the main task and stores reference for completion tracking.
-    *
-    * @param task
-    *   the task to fork
-    * @return
-    *   the subtask representing the forked computation
-    */
-  def forkMainTask[U](task: Callable[? <: U]): Subtask[U] = {
-    val subtask = super.fork(task)
-    mainTask = subtask
-    subtask
-  }
-
-  /** Handles task completion with graceful shutdown support.
-    *
-    * Called by the StructuredTaskScope when a subtask finishes.
-    */
-  override protected def handleComplete(subtask: Subtask[?]): Unit = {
+  override def onComplete(subtask: Subtask[? <: T]): Boolean = {
     exceptionLock.lock()
     try {
       if (subtask.state() == Subtask.State.FAILED && firstException == null) {
         firstException = subtask.exception()
-        this.shutdown()
+        true
       } else if (timeoutExpired.get()) {
-        this.shutdown()
+        true
       } else if ((subtask eq mainTask)) {
         // Main task completed after shutdown initiated - all work is done
-        this.shutdown()
+        true
       } else {
-        super.handleComplete(subtask)
+        super.onComplete(subtask)
       }
     } finally {
       exceptionLock.unlock()
     }
   }
 
-  def throwIfFailed[X <: Throwable](esf: Throwable => X): Unit = {
-    ensureOwnerAndJoined()
+  override def result(): Unit = {
     val exception: Throwable = firstException
     if (exception != null) {
-      val ex: X = esf(exception)
-      throw ex
+      throw exception
     }
-  }
-
-  override def join(): GracefulShutdownScope = {
-    super.join()
-    this
   }
 }
 
@@ -582,7 +533,7 @@ object Async {
         try {
           val mainTask = loomScope.fork(() => {
             try {
-              JvmAsync.scope.set(loomScope)
+              JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
               program(using new Yaes(async))
             } finally {
               JvmAsync.scope.remove()
@@ -606,25 +557,48 @@ object Async {
   )(using Shutdown, Raise[ShutdownTimedOut]): Yaes.Handler[Async.Unsafe, A, A] =
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-        val async     = new JvmAsync()
-        val loomScope = new GracefulShutdownScope(
-          "yaes-async-with-graceful-shutdown",
-          JvmAsync.namedThreadFactory("yaes-async-with-graceful-shutdown"),
-          inFlightTasksCompletionTimeout = deadline
+        val async = new JvmAsync()
+
+        val shutdownInitiated = new AtomicBoolean(false)
+        val timeoutExpired    = new AtomicBoolean(false)
+        val shutdownLatch     = new CountDownLatch(1)
+
+        val loomScope = StructuredTaskScope.open[A, Unit](
+          AllSuccessfulOrThrowWithGracefulShutdown(timeoutExpired),
+          configure => configure.withName("yaes-async-with-graceful-shutdown")
         )
+
+        val timeoutEnforcer = loomScope.fork(() => {
+          shutdownLatch.await()
+          Thread.sleep(
+            deadline.toMillis
+          )
+          timeoutExpired.set(true)
+        })
+
+        def initiateGracefulShutdown(): Unit = {
+          if (shutdownInitiated.compareAndSet(false, true)) {
+            shutdownLatch.countDown()
+          }
+        }
+
+        def isTimeoutExpired: Boolean = timeoutExpired.get()
+
         try {
 
           Shutdown.onShutdown {
-            loomScope.initiateGracefulShutdown()
+            initiateGracefulShutdown()
           }
 
-          val mainTask = loomScope.forkMainTask(() => {
+          val mainTask = loomScope.fork(() => {
             Async.run {
               program
             }
           })
-          loomScope.join().throwIfFailed(identity)
-          if (loomScope.isTimeoutExpired) {
+
+          loomScope.join()
+
+          if (isTimeoutExpired) {
             Raise.raise(ShutdownTimedOut)
           }
           mainTask.get()
