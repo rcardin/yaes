@@ -84,7 +84,7 @@ trait Fiber[A] {
     */
   def cancel()(using async: Async): Unit
 
-  /** Registers a callback to be executed when the computation completes.
+  /** Registers a callback to be executed when the computation completes successfully.
     *
     * @param result
     *   the callback function
@@ -92,6 +92,15 @@ trait Fiber[A] {
     *   the async context
     */
   def onComplete(result: A => Unit)(using async: Async): Unit
+
+  /** Registers a callback to be executed when the computation fails with an exception.
+    *
+    * @param handler
+    *   the callback function receiving the exception
+    * @param async
+    *   the async context
+    */
+  def onFailure(handler: Throwable => Unit)(using async: Async): Unit
 
   private[yaes] def unsafeValue(using async: Async): A
 }
@@ -120,6 +129,14 @@ class JvmFiber[A](
     promise.thenAccept(result => fn(result))
   }
 
+  override def onFailure(handler: Throwable => Unit)(using async: Async): Unit = {
+    promise.whenComplete { (_, ex) =>
+      if (ex != null) {
+        handler(ex)
+      }
+    }
+  }
+
   override def value(using async: Async): Raise[Async.Cancelled] ?=> A = try {
     unsafeValue
   } catch {
@@ -131,6 +148,7 @@ class JvmFiber[A](
       promise.get()
     } catch {
       case cancellationEx: CancellationException => ()
+      case ee: ExecutionException                => throw ee.getCause
     }
 
   override def cancel()(using async: Async): Unit = {
@@ -156,12 +174,11 @@ class JvmAsync extends Async.Unsafe {
     JvmAsync.scope
       .get()
       .fork(() => {
+        Thread.currentThread().setName(name)
         val innerScope = StructuredTaskScope
-          .open[A, Void](Joiner.awaitAllSuccessfulOrThrow(), configure => configure.withName(name))
+          .open[A, Void](
+            Joiner.awaitAllSuccessfulOrThrow())
         forkedThread.complete(Thread.currentThread())
-        // Run block directly on this thread (the owner of innerScope) so that
-        // nested Async.fork calls can fork on innerScope. In JDK 25, only the
-        // scope owner thread can call fork().
         JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
         try {
           val result = block
@@ -173,15 +190,17 @@ class JvmAsync extends Async.Unsafe {
             // In JDK 25, close() requires join() to have been called first.
             // If the block threw before join(), we must still call it.
             Thread.currentThread().interrupt()
-            try { innerScope.join() } catch { case _: Throwable => () }
-            Thread.interrupted()
+            try { innerScope.join() }
+            catch { case _: Throwable => () }
           case fe: FailedException =>
+            promise.completeExceptionally(fe.getCause)
             throw fe.getCause
           case t: Throwable =>
             // In JDK 25, close() requires join() to have been called first.
-            Thread.currentThread().interrupt()
-            try { innerScope.join() } catch { case _: Throwable => () }
-            Thread.interrupted()
+            // Thread.currentThread().interrupt()
+            try { innerScope.join() }
+            catch { case _: Throwable => () }
+            promise.completeExceptionally(t)
             throw t
         } finally {
           JvmAsync.scope.remove()
@@ -494,17 +513,27 @@ object Async {
       async: Async
   ): Either[(R1, Fiber[R2]), (Fiber[R1], R2)] = {
     val promise = CompletableFuture[Either[(R1, Fiber[R2]), (Fiber[R1], R2)]]
-    val fiber1  = fork(block1)
-    val fiber2  = fork(block2)
+    val fiber1  = fork("fiber1")(block1)
+    val fiber2  = fork("fiber2")(block2)
 
     fiber1.onComplete { result1 =>
       promise.complete(Left((result1, fiber2)))
     }
+    fiber1.onFailure { ex =>
+      promise.completeExceptionally(ex)
+    }
     fiber2.onComplete { result2 =>
       promise.complete(Right((fiber1, result2)))
     }
+    fiber2.onFailure { ex =>
+      promise.completeExceptionally(ex)
+    }
 
-    promise.get()
+    try {
+      promise.get()
+    } catch {
+      case ee: ExecutionException => throw ee.getCause
+    }
   }
 
   /** Runs an asynchronous computation.
@@ -553,7 +582,8 @@ object Async {
             // returns immediately with InterruptedException, and close() will
             // then cancel all remaining fibers.
             Thread.currentThread().interrupt()
-            try { loomScope.join() } catch { case _: Throwable => () }
+            try { loomScope.join() }
+            catch { case _: Throwable => () }
             Thread.interrupted()
             throw t
         } finally {
