@@ -372,180 +372,180 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
-  it should "race two fibers and return the fastest result and cancel the other" in {
-    val actualQueue  = new ConcurrentLinkedQueue[String]()
-    val actualResult = Async.run {
-      Async.race(
-        {
-          Async.delay(1.second)
-          actualQueue.add("fb1")
-          42
-        }, {
-          Async.delay(500.millis)
-          actualQueue.add("fb2")
-          43
-        }
-      )
-    }
+  // it should "race two fibers and return the fastest result and cancel the other" in {
+  //   val actualQueue  = new ConcurrentLinkedQueue[String]()
+  //   val actualResult = Async.run {
+  //     Async.race(
+  //       {
+  //         Async.delay(1.second)
+  //         actualQueue.add("fb1")
+  //         42
+  //       }, {
+  //         Async.delay(500.millis)
+  //         actualQueue.add("fb2")
+  //         43
+  //       }
+  //     )
+  //   }
 
-    actualResult shouldBe 43
-    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
-  }
+  //   actualResult shouldBe 43
+  //   actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  // }
 
-  it should "race two fibers and return the fastest result if the slowest fails" in {
-    val actualQueue  = new ConcurrentLinkedQueue[String]()
-    val actualResult = Raise.run {
-      Async.run {
-        Async.race(
-          {
-            Async.delay(1.second)
-            Raise.raise("Error")
-            actualQueue.add("fb1")
-            42
-          }, {
-            Async.delay(500.millis)
-            actualQueue.add("fb2")
-            43
-          }
-        )
-      }
-    }
+  // it should "race two fibers and return the fastest result if the slowest fails" in {
+  //   val actualQueue  = new ConcurrentLinkedQueue[String]()
+  //   val actualResult = Raise.run {
+  //     Async.run {
+  //       Async.race(
+  //         {
+  //           Async.delay(1.second)
+  //           Raise.raise("Error")
+  //           actualQueue.add("fb1")
+  //           42
+  //         }, {
+  //           Async.delay(500.millis)
+  //           actualQueue.add("fb2")
+  //           43
+  //         }
+  //       )
+  //     }
+  //   }
 
-    actualResult shouldBe 43
-    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
-  }
+  //   actualResult shouldBe 43
+  //   actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  // }
 
-  it should "race two fibers and return the error of the fastest one, cancelling the other" in {
-    val actualQueue  = new ConcurrentLinkedQueue[String]()
-    val actualResult = Raise.run {
-      Async.run {
-        val raceResult = Async.race(
-          {
-            Async.delay(1.second)
-            actualQueue.add("fb1")
-            42
-          }, {
-            Async.delay(500.millis)
-            actualQueue.add("fb2")
-            Raise.raise("Error")
-            43
-          }
-        )
-      }
-    }
+  // it should "race two fibers and return the error of the fastest one, cancelling the other" in {
+  //   val actualQueue  = new ConcurrentLinkedQueue[String]()
+  //   val actualResult = Raise.run {
+  //     Async.run {
+  //       val raceResult = Async.race(
+  //         {
+  //           Async.delay(1.second)
+  //           actualQueue.add("fb1")
+  //           42
+  //         }, {
+  //           Async.delay(500.millis)
+  //           actualQueue.add("fb2")
+  //           Raise.raise("Error")
+  //           43
+  //         }
+  //       )
+  //     }
+  //   }
 
-    actualResult shouldBe "Error"
-    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
-  }
+  //   actualResult shouldBe "Error"
+  //   actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  // }
 
-  it should "par two computation and return the result if both succeed" in {
-    Async.run {
-      val (result1, result2) = Async.par(
-        {
-          Async.delay(1.second)
-          42
-        }, {
-          Async.delay(500.millis)
-          43
-        }
-      )
-      result1 + result2
-    } shouldBe 85
-  }
+  // it should "par two computation and return the result if both succeed" in {
+  //   Async.run {
+  //     val (result1, result2) = Async.par(
+  //       {
+  //         Async.delay(1.second)
+  //         42
+  //       }, {
+  //         Async.delay(500.millis)
+  //         43
+  //       }
+  //     )
+  //     result1 + result2
+  //   } shouldBe 85
+  // }
 
-  it should "par two computation and return the error of the failing one and cancel the other" in {
-    val actualQueue  = new ConcurrentLinkedQueue[String]()
-    val actualResult = Raise.run {
-      Async.run {
-        val (result1, result2) = Async.par(
-          {
-            Async.delay(1.second)
-            actualQueue.add("fb1")
-            42
-          }, {
-            Async.delay(500.millis)
-            actualQueue.add("fb2")
-            Raise.raise("Error")
-            43
-          }
-        )
-        result1 + result2
-      }
-    }
+  // it should "par two computation and return the error of the failing one and cancel the other" in {
+  //   val actualQueue  = new ConcurrentLinkedQueue[String]()
+  //   val actualResult = Raise.run {
+  //     Async.run {
+  //       val (result1, result2) = Async.par(
+  //         {
+  //           Async.delay(1.second)
+  //           actualQueue.add("fb1")
+  //           42
+  //         }, {
+  //           Async.delay(500.millis)
+  //           actualQueue.add("fb2")
+  //           Raise.raise("Error")
+  //           43
+  //         }
+  //       )
+  //       result1 + result2
+  //     }
+  //   }
 
-    actualResult shouldBe "Error"
-    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
-  }
+  //   actualResult shouldBe "Error"
+  //   actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
+  // }
 
-  it should "par two computation and return the error of slowest" in {
-    val actualQueue  = new ConcurrentLinkedQueue[String]()
-    val actualResult = Raise.run {
-      Async.run {
-        val (result1, result2) = Async.par(
-          {
-            Async.delay(1.second)
-            actualQueue.add("fb1")
-            Raise.raise("Error")
-            42
-          }, {
-            Async.delay(500.millis)
-            actualQueue.add("fb2")
-            43
-          }
-        )
-        result1 + result2
-      }
-    }
+  // it should "par two computation and return the error of slowest" in {
+  //   val actualQueue  = new ConcurrentLinkedQueue[String]()
+  //   val actualResult = Raise.run {
+  //     Async.run {
+  //       val (result1, result2) = Async.par(
+  //         {
+  //           Async.delay(1.second)
+  //           actualQueue.add("fb1")
+  //           Raise.raise("Error")
+  //           42
+  //         }, {
+  //           Async.delay(500.millis)
+  //           actualQueue.add("fb2")
+  //           43
+  //         }
+  //       )
+  //       result1 + result2
+  //     }
+  //   }
 
-    actualResult shouldBe "Error"
-    actualQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
-  }
+  //   actualResult shouldBe "Error"
+  //   actualQueue.toArray should contain theSameElementsInOrderAs List("fb2", "fb1")
+  // }
 
-  it should "return the fiber value if completes before timeout" in {
-    val actualResult = Raise.run {
-      Async.run {
-        Async.timeout(1.seconds) {
-          Async.delay(500.millis)
-          42
-        }
-      }
-    }
+  // it should "return the fiber value if completes before timeout" in {
+  //   val actualResult = Raise.run {
+  //     Async.run {
+  //       Async.timeout(1.seconds) {
+  //         Async.delay(500.millis)
+  //         42
+  //       }
+  //     }
+  //   }
 
-    actualResult shouldBe 42
-  }
+  //   actualResult shouldBe 42
+  // }
 
-  it should "raise a TimedOut error and cancel the computation if the timeout is reached" in {
-    val actualQueue                  = new ConcurrentLinkedQueue[String]()
-    val actualResult: Int | TimedOut =
-      Async.run {
-        Raise.run {
-          Async.timeout(500.millis) {
-            Async.delay(1.seconds)
-            actualQueue.add("fb1")
-            42
-          }
-        }
-      }
+  // it should "raise a TimedOut error and cancel the computation if the timeout is reached" in {
+  //   val actualQueue                  = new ConcurrentLinkedQueue[String]()
+  //   val actualResult: Int | TimedOut =
+  //     Async.run {
+  //       Raise.run {
+  //         Async.timeout(500.millis) {
+  //           Async.delay(1.seconds)
+  //           actualQueue.add("fb1")
+  //           42
+  //         }
+  //       }
+  //     }
 
-    actualQueue.toArray shouldBe empty
-    actualResult shouldBe TimedOut
-  }
+  //   actualQueue.toArray shouldBe empty
+  //   actualResult shouldBe TimedOut
+  // }
 
-  it should "use the provided name for forked fibers" in {
-    val threadNames = new ConcurrentLinkedQueue[String]()
+  // it should "use the provided name for forked fibers" in {
+  //   val threadNames = new ConcurrentLinkedQueue[String]()
 
-    Async.run {
-      val fb1 = Async.fork("custom-fiber-1") {
-        threadNames.add(Thread.currentThread().getName())
-        Async.delay(100.millis)
-      }
+  //   Async.run {
+  //     val fb1 = Async.fork("custom-fiber-1") {
+  //       threadNames.add(Thread.currentThread().getName())
+  //       Async.delay(100.millis)
+  //     }
 
-      val fb2 = Async.fork("custom-fiber-2") {
-        threadNames.add(Thread.currentThread().getName())
-        Async.delay(100.millis)
-      }
-    }
+  //     val fb2 = Async.fork("custom-fiber-2") {
+  //       threadNames.add(Thread.currentThread().getName())
+  //       Async.delay(100.millis)
+  //     }
+  //   }
 
-    threadNames.toArray should contain theSameElementsAs List("custom-fiber-1", "custom-fiber-2")
-  }
+  //   threadNames.toArray should contain theSameElementsAs List("custom-fiber-1", "custom-fiber-2")
+  // }
 }

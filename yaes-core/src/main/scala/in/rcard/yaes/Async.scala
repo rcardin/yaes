@@ -17,6 +17,7 @@ import ju.concurrent.Callable
 import ju.concurrent.atomic.AtomicBoolean
 import ju.concurrent.locks.ReentrantLock
 import ju.concurrent.StructuredTaskScope.Joiner
+import ju.concurrent.StructuredTaskScope.FailedException
 
 type Async = Yaes[Async.Unsafe]
 
@@ -158,25 +159,30 @@ class JvmAsync extends Async.Unsafe {
         val innerScope = StructuredTaskScope
           .open[A, Void](Joiner.awaitAllSuccessfulOrThrow(), configure => configure.withName(name))
         forkedThread.complete(Thread.currentThread())
+        // Run block directly on this thread (the owner of innerScope) so that
+        // nested Async.fork calls can fork on innerScope. In JDK 25, only the
+        // scope owner thread can call fork().
+        JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
         try {
-          val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-            JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
-            block
-          })
+          val result = block
           innerScope.join()
-          if (innerTask.state() != Subtask.State.SUCCESS) {
-            innerTask.exception() match {
-              case ie: InterruptedException =>
-                promise.cancel(true)
-              case exex: ExecutionException => throw exex.getCause
-              case throwable                => throw throwable
-            }
-          } else {
-            promise.complete(innerTask.get())
-          }
+          promise.complete(result)
         } catch {
           case ie: InterruptedException =>
             promise.cancel(true)
+            // In JDK 25, close() requires join() to have been called first.
+            // If the block threw before join(), we must still call it.
+            Thread.currentThread().interrupt()
+            try { innerScope.join() } catch { case _: Throwable => () }
+            Thread.interrupted()
+          case fe: FailedException =>
+            throw fe.getCause
+          case t: Throwable =>
+            // In JDK 25, close() requires join() to have been called first.
+            Thread.currentThread().interrupt()
+            try { innerScope.join() } catch { case _: Throwable => () }
+            Thread.interrupted()
+            throw t
         } finally {
           JvmAsync.scope.remove()
           innerScope.close()
@@ -530,18 +536,28 @@ object Async {
           Joiner.awaitAllSuccessfulOrThrow(),
           configure => configure.withName("yaes-async-handler")
         )
+        // In JDK 25, fork() can only be called by the scope owner. Run program directly on
+        // the calling thread so it is the owner and can fork child fibers on loomScope.
+        JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
         try {
-          val mainTask = loomScope.fork(() => {
-            try {
-              JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
-              program(using new Yaes(async))
-            } finally {
-              JvmAsync.scope.remove()
-            }
-          })
+          val result = program(using new Yaes(async))
           loomScope.join()
-          mainTask.get()
+          result
+        } catch {
+          case fe: FailedException =>
+            throw fe.getCause
+          case t: Throwable =>
+            // In JDK 25, close() requires join() to have been called first.
+            // When the program block throws before join(), we must still call
+            // join() before close(). Setting the interrupt flag ensures join()
+            // returns immediately with InterruptedException, and close() will
+            // then cancel all remaining fibers.
+            Thread.currentThread().interrupt()
+            try { loomScope.join() } catch { case _: Throwable => () }
+            Thread.interrupted()
+            throw t
         } finally {
+          JvmAsync.scope.remove()
           loomScope.close()
         }
       }
