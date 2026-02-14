@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 25.0.2+10-LTS
+          java-version: 25.0.2+10.0.LTS
           cache: sbt
       - run: sbt ci-release
         env:
