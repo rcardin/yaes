@@ -604,9 +604,7 @@ object Async {
       Async.race(
         {
           shutdownLatch.await()
-          Thread.sleep(
-            deadline.toMillis
-          )
+          Async.delay(deadline)
           Raise.raise(ShutdownTimedOut)
         }, {
           block
