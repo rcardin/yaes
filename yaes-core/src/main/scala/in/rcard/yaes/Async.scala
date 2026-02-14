@@ -8,14 +8,7 @@ import ju.concurrent.CompletableFuture
 import ju.concurrent.ExecutionException
 import ju.concurrent.Future
 import ju.concurrent.StructuredTaskScope
-import ju.concurrent.StructuredTaskScope.Subtask
-import ju.concurrent.ThreadFactory
-import ju.function.Consumer
-import ju.concurrent.ConcurrentHashMap
 import ju.concurrent.CountDownLatch
-import ju.concurrent.Callable
-import ju.concurrent.atomic.AtomicBoolean
-import ju.concurrent.locks.ReentrantLock
 import ju.concurrent.StructuredTaskScope.Joiner
 import ju.concurrent.StructuredTaskScope.FailedException
 
@@ -184,21 +177,14 @@ class JvmAsync extends Async.Unsafe {
           innerScope.join()
           promise.complete(result)
         } catch {
-          case ie: InterruptedException =>
+          case _: InterruptedException =>
             promise.cancel(true)
-            // In JDK 25, close() requires join() to have been called first.
-            // If the block threw before join(), we must still call it.
-            Thread.currentThread().interrupt()
-            try { innerScope.join() }
-            catch { case _: Throwable => () }
+            JvmAsync.ensureJoined(innerScope)
           case fe: FailedException =>
             promise.completeExceptionally(fe.getCause)
             throw fe.getCause
           case t: Throwable =>
-            // In JDK 25, close() requires join() to have been called first.
-            // Thread.currentThread().interrupt()
-            try { innerScope.join() }
-            catch { case _: Throwable => () }
+            JvmAsync.ensureJoined(innerScope)
             promise.completeExceptionally(t)
             throw t
         } finally {
@@ -212,6 +198,18 @@ class JvmAsync extends Async.Unsafe {
 object JvmAsync {
 
   private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any, Any]] = new ThreadLocal()
+
+  /** Ensures that `join()` has been called on the given scope before `close()`.
+    *
+    * In JDK 25, `close()` requires `join()` to have been called first. When the block throws before
+    * reaching `join()`, we must still call it. Setting the interrupt flag ensures `join()` returns
+    * immediately, and `close()` will then cancel all remaining fibers.
+    */
+  private[yaes] def ensureJoined(scope: StructuredTaskScope[?, ?]): Unit = {
+    Thread.currentThread().interrupt()
+    try { scope.join() }
+    catch { case _: Throwable => () }
+  }
 }
 
 /** Companion object for [[Async]] providing utility methods and constructors.
@@ -504,14 +502,7 @@ object Async {
           case fe: FailedException =>
             throw fe.getCause
           case t: Throwable =>
-            // In JDK 25, close() requires join() to have been called first.
-            // When the program block throws before join(), we must still call
-            // join() before close(). Setting the interrupt flag ensures join()
-            // returns immediately with InterruptedException, and close() will
-            // then cancel all remaining fibers.
-            Thread.currentThread().interrupt()
-            try { loomScope.join() }
-            catch { case _: Throwable => () }
+            JvmAsync.ensureJoined(loomScope)
             Thread.interrupted()
             throw t
         } finally {
@@ -600,16 +591,21 @@ object Async {
       shutdownLatch.countDown()
     }
 
-    Async.run {
+    val raceResult: Either[ShutdownTimedOut, A] = Async.run {
       Async.race(
         {
           shutdownLatch.await()
           Async.delay(deadline)
-          Raise.raise(ShutdownTimedOut)
+          Left(ShutdownTimedOut)
         }, {
-          block
+          Right(block)
         }
       )
+    }
+
+    raceResult match {
+      case Right(result) => result
+      case Left(timeout) => Raise.raise(timeout)
     }
   }
 
