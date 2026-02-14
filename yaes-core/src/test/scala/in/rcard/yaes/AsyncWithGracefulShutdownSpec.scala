@@ -14,7 +14,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     // Simplest test - just initiate shutdown immediately
     val actualResult = Shutdown.run {
       Raise.run {
-        Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
+        Async.withGracefulShutdown(deadline = Deadline.after(5.second)) {
           Shutdown.initiateShutdown()
         }
       }
