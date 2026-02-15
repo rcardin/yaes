@@ -103,14 +103,14 @@ object EffectName {
 - Hooks registered after shutdown has started are silently ignored
 - Particularly useful with `Async` for daemon processes
 
-**GracefulShutdownScope (Async + Shutdown Integration):**
-- Used by `Async.withGracefulShutdown` to coordinate shutdown with timeout enforcement
-- Creates a timeout enforcer fiber that waits for shutdown signal, then enforces deadline
-- When main task completes after shutdown, scope shuts down immediately and cancels remaining fibers
-- **JDK Protection Against Spurious Exceptions:** The JDK's `SubtaskImpl` checks `isShutdown()` after catching exceptions. If the scope is already shutdown when a fiber throws an exception (like the timeout enforcer's `InterruptedException`), the JDK **does not call** `handleComplete`, preventing spurious failure propagation
-- This design relies on JDK's structured concurrency implementation details for correct exception handling
-- Exception handling in `handleComplete` captures only genuine failures, not interruptions after shutdown
-- Key invariant: Timeout enforcer's interruption when scope shuts down early is **not** treated as a failure
+**Graceful shutdown (Async + Shutdown integration):**
+- `Async.withGracefulShutdown` coordinates graceful shutdown by racing the main block against a timeout fiber using `Async.race()`
+- The main branch of the race runs the user-provided block; the competing branch is a timeout fiber that waits for shutdown to begin and then enforces the configured deadline
+- Shutdown coordination is handled via `Shutdown.onShutdown()` hooks, which signal the timeout logic when a shutdown is initiated
+- A `CountDownLatch` is used to track completion of the graceful shutdown sequence and to ensure that the timeout logic is only applied once, even if multiple shutdown signals occur
+- On normal completion of the main block before shutdown, the latch is released and the timeout fiber observes completion without treating it as a failure
+- If shutdown is initiated, the timeout fiber waits up to the configured deadline; if the main block does not finish in time, the timeout branch wins the race and triggers cancellation/enforcement of the timeout
+- The latch is checked up front to handle pre-initiated shutdowns: if shutdown has already started before entering `withGracefulShutdown`, the timeout behavior is applied immediately according to the same deadline logic
 
 **Channels (yaes-data):**
 - Based on `java.util.concurrent` blocking queues with suspending operations
