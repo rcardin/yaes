@@ -273,6 +273,10 @@ private class GracefulShutdownScope(
     * Called by the StructuredTaskScope when a subtask finishes. The main task is identified by
     * exclusion (any subtask that is not the timeout enforcer), which avoids a race condition where
     * the main task could complete before a stored reference is set.
+    *
+    * All branches call `shutdown()` because completion of any subtask means the scope should
+    * terminate. The branches are distinct because the failure case also captures the exception
+    * for later propagation via [[throwIfFailed]].
     */
   override protected def handleComplete(subtask: Subtask[?]): Unit = {
     exceptionLock.lock()
@@ -281,7 +285,7 @@ private class GracefulShutdownScope(
         firstException = subtask.exception()
         this.shutdown()
       } else if (subtask eq timeoutEnforcer) {
-        // Timeout enforcer completed successfully - timeout has expired
+        // Timeout enforcer completed after its sleep period elapsed following shutdown
         this.shutdown()
       } else {
         // Main task completed - all work is done, shutdown
