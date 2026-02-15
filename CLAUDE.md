@@ -8,7 +8,7 @@
 - Execution is **deferred** until handlers run the effects
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
 
-**Scala Version:** 3.7.4
+**Scala Version:** 3.8.1
 **Java Requirement:** Java 25+ (for Virtual Threads and Structured Concurrency)
 
 ## Common Development Commands
