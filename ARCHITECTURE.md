@@ -1,6 +1,6 @@
 ## Architecture
 
-Always prefer readability and maintainabilty to smartness. Keep It Simple, Stupid (KISS) MUST be your mantra.
+Always prefer readability and maintainability to smartness. Keep It Simple, Stupid (KISS) MUST be your mantra.
 
 ### Module Structure
 
@@ -192,8 +192,8 @@ Canceling a fiber via `fiber.cancel()` does not immediately terminate it. The fi
 ### Handler Execution Breaks Referential Transparency
 Running handlers (`Sync.run`, `Raise.run`, etc.) executes effects and breaks referential transparency. Handlers should only be used at the edges of the application (e.g., in `main` or `YaesApp`).
 
-### Java 24 Requirement
-The library requires Java 24+ for Virtual Threads and Structured Concurrency features. Ensure your development environment has Java 24 or higher.
+### Java 25 Requirement
+The library requires Java 25+ for Virtual Threads and Structured Concurrency features. Ensure your development environment has Java 25 or higher.
 
 ### HTTP Server Shutdown Behavior
 The HTTP server provides graceful shutdown with the following guarantees:
