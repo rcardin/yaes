@@ -333,6 +333,27 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe ()
   }
 
+  it should "enforce deadline when shutdown is already in progress before entering withGracefulShutdown" in {
+    val actualResult = Shutdown.run {
+      // Initiate shutdown BEFORE entering withGracefulShutdown
+      Shutdown.initiateShutdown()
+
+      Raise.run {
+        Async.withGracefulShutdown(deadline = Deadline.after(500.millis)) {
+          Async.fork("long-task") {
+            Async.delay(10.seconds) // Will be cancelled by timeout
+          }
+
+          // Block main task long enough that the deadline should fire
+          Async.delay(10.seconds)
+        }
+      }
+    }
+
+    // Should not hang — the deadline must be enforced even though shutdown was already in progress
+    actualResult shouldBe Async.ShutdownTimedOut
+  }
+
   it should "shutdown cleanly even if no initiateShutdown is called" in {
     val completed = new AtomicBoolean(false)
 

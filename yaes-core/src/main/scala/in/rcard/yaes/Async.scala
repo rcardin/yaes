@@ -591,6 +591,13 @@ object Async {
       shutdownLatch.countDown()
     }
 
+    // If shutdown was already in progress before we registered the hook,
+    // the hook will have been silently ignored. Count down immediately
+    // so the deadline is still enforced.
+    if (Shutdown.isShuttingDown()) {
+      shutdownLatch.countDown()
+    }
+
     val raceResult: Either[ShutdownTimedOut, A] = Async.run {
       Async.race(
         {
