@@ -95,3 +95,4 @@ project/project/*
 project/metals.sbt
 
 .claude/*
+cs
