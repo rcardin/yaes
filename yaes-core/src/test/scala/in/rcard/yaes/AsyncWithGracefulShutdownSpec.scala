@@ -349,4 +349,24 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe ()
     completed.get() shouldBe true
   }
+
+  it should "not hang when main task completes instantly without shutdown" in {
+    // This test exercises the race condition where the main task completes so fast
+    // that handleComplete is called before the mainTask reference could be stored.
+    // Without the fix, this would hang indefinitely because handleComplete would miss
+    // the main task, never call shutdown(), and the timeout enforcer would wait on
+    // the latch forever.
+    for (_ <- 1 to 50) {
+      val actualResult = Shutdown.run {
+        Raise.run {
+          Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
+            // Intentionally fast - no delay, no forked fibers, no shutdown
+            42
+          }
+        }
+      }
+
+      actualResult shouldBe 42
+    }
+  }
 }

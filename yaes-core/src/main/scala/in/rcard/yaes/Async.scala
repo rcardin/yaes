@@ -232,10 +232,8 @@ private class GracefulShutdownScope(
   private val exceptionLock             = new ReentrantLock()
   private var firstException: Throwable = null
 
-  @volatile private var mainTask: Subtask[?] = null
-
   // Fork the fiber that enforces the timeout after shutdown is initiated
-  private val timeoutEnforcer = super.fork(() => {
+  private val timeoutEnforcer: Subtask[?] = super.fork(() => {
     shutdownLatch.await()
     Thread.sleep(
       inFlightTasksCompletionTimeout.toMillis
@@ -257,7 +255,9 @@ private class GracefulShutdownScope(
     }
   }
 
-  /** Forks the main task and stores reference for completion tracking.
+  /** Forks the main task. The main task is identified by exclusion in [[handleComplete]] as the
+    * subtask that is not the timeout enforcer, avoiding a race condition where the task could
+    * complete before a reference to it is stored.
     *
     * @param task
     *   the task to fork
@@ -265,14 +265,14 @@ private class GracefulShutdownScope(
     *   the subtask representing the forked computation
     */
   def forkMainTask[U](task: Callable[? <: U]): Subtask[U] = {
-    val subtask = super.fork(task)
-    mainTask = subtask
-    subtask
+    super.fork(task)
   }
 
   /** Handles task completion with graceful shutdown support.
     *
-    * Called by the StructuredTaskScope when a subtask finishes.
+    * Called by the StructuredTaskScope when a subtask finishes. The main task is identified by
+    * exclusion (any subtask that is not the timeout enforcer), which avoids a race condition where
+    * the main task could complete before a stored reference is set.
     */
   override protected def handleComplete(subtask: Subtask[?]): Unit = {
     exceptionLock.lock()
@@ -280,13 +280,12 @@ private class GracefulShutdownScope(
       if (subtask.state() == Subtask.State.FAILED && firstException == null) {
         firstException = subtask.exception()
         this.shutdown()
-      } else if (timeoutExpired.get()) {
-        this.shutdown()
-      } else if ((subtask eq mainTask)) {
-        // Main task completed after shutdown initiated - all work is done
+      } else if (subtask eq timeoutEnforcer) {
+        // Timeout enforcer completed successfully - timeout has expired
         this.shutdown()
       } else {
-        super.handleComplete(subtask)
+        // Main task completed - all work is done, shutdown
+        this.shutdown()
       }
     } finally {
       exceptionLock.unlock()
