@@ -19,6 +19,8 @@ class Slf4jLogSpec extends AnyFlatSpec with Matchers {
     } finally {
       System.err.flush()
       System.setErr(original)
+      capStream.close()
+      buffer.close()
     }
     buffer.toString("UTF-8")
   }
