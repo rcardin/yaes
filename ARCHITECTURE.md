@@ -1,6 +1,6 @@
 ## Architecture
 
-Always prefer readability and maintainabilty to smartness. Keep It Simple, Stupid (KISS) MUST be your mantra.
+Always prefer readability and maintainability to smartness. Keep It Simple, Stupid (KISS) MUST be your mantra.
 
 ### Module Structure
 
