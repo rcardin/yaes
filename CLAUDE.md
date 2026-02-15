@@ -9,7 +9,7 @@
 - Effects can be handled **one at a time** in any order, allowing fine-grained control
 
 **Scala Version:** 3.7.4
-**Java Requirement:** Java 24+ (for Virtual Threads and Structured Concurrency)
+**Java Requirement:** Java 25+ (for Virtual Threads and Structured Concurrency)
 
 ## Common Development Commands
 
