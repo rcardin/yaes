@@ -536,13 +536,13 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
     Async.run {
       val fb1 = Async.fork("custom-fiber-1") {
+        Async.delay(50.millis)
         threadNames.add(Thread.currentThread().getName())
-        Async.delay(100.millis)
       }
 
       val fb2 = Async.fork("custom-fiber-2") {
-        threadNames.add(Thread.currentThread().getName())
         Async.delay(100.millis)
+        threadNames.add(Thread.currentThread().getName())
       }
     }
 
