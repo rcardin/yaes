@@ -252,6 +252,7 @@ Since the log level is a handler concern, configure it at the application entry 
 
 ```scala
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.System.*
 
 def runWithEnvLevel(block: Log ?=> Unit)(using System): Unit = {

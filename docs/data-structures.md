@@ -886,6 +886,7 @@ import in.rcard.yaes.Flow
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Output.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 
 def randomDataProcessor(using Random, Output, Log): List[Int] = {
   val logger = Log.getLogger("RandomProcessor")

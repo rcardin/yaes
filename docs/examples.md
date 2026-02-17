@@ -81,6 +81,7 @@ Resource.run {
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.IO.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 
 def fetchUrl(url: String)(using IO, Log): String = {
   val logger = Log.getLogger("WebScraper")
@@ -121,6 +122,7 @@ val results = Log.run() {
 import in.rcard.yaes.System.*
 import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 
 case class AppConfig(
   host: String,
@@ -217,6 +219,7 @@ import in.rcard.yaes.Flow
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Output.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 
 case class SensorReading(id: Int, temperature: Double, humidity: Double)
 
@@ -277,6 +280,7 @@ Combining Flow with async processing:
 import in.rcard.yaes.Flow
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 
 case class LogEntry(timestamp: Long, level: String, message: String)
 
