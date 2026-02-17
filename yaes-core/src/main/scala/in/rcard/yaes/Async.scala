@@ -184,9 +184,10 @@ class JvmAsync extends Async.Unsafe {
             promise.completeExceptionally(fe.getCause)
             throw fe.getCause
           case t: Throwable =>
+            val wasCancelled = Thread.currentThread().isInterrupted()
             JvmAsync.ensureJoined(innerScope)
             promise.completeExceptionally(t)
-            throw t
+            if (!wasCancelled) throw t
         } finally {
           JvmAsync.scope.remove()
           innerScope.close()
