@@ -14,7 +14,7 @@ Type-safe HTTP/1.1 server built on YAES effects and virtual threads.
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.14.0"
 ```
 
 ## Overview
