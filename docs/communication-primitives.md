@@ -562,6 +562,7 @@ import in.rcard.yaes.Channel
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 import scala.concurrent.duration.*
 
 case class Task(id: Int, data: String)
@@ -600,7 +601,7 @@ def producerConsumerExample()(using Log): Unit = {
 }
 
 // Usage
-Log.run {
+Log.run() {
   producerConsumerExample()
 }
 ```
@@ -870,6 +871,7 @@ import in.rcard.yaes.Channel.Producer
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.Random.*
 
 def effectfulChannelExample()(using Log, Random): Unit = {
@@ -903,7 +905,7 @@ def effectfulChannelExample()(using Log, Random): Unit = {
 }
 
 // Usage
-Log.run {
+Log.run() {
   Random.run {
     effectfulChannelExample()
   }

@@ -14,7 +14,7 @@ Type-safe HTTP/1.1 server built on YAES effects and virtual threads.
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.14.0"
 ```
 
 ## Overview
@@ -34,12 +34,13 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.13.0"
 ## Quick Start
 
 ```scala
+import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
 
 // Server requires Log and Shutdown effects
 Shutdown.run {
-  Log.run {
+  Log.run() {
     val server = YaesServer.route(
       GET(p"/hello") { req =>
         Response.ok("Hello, World!")
@@ -253,7 +254,7 @@ The server integrates with YAES's `Shutdown` effect for coordinated graceful shu
 
 ```scala
 Shutdown.run {
-  Log.run {
+  Log.run() {
     val server = YaesServer.route(
       GET(p"/work") { req =>
         Async.delay(5.seconds)  // Simulate long-running request
@@ -295,7 +296,7 @@ Register callbacks to run when shutdown begins:
 
 ```scala
 Shutdown.run {
-  Log.run {
+  Log.run() {
     // Register cleanup hooks
     Shutdown.onShutdown {
       println("Cleaning up resources...")
@@ -390,7 +391,7 @@ object MyServer extends App {
   val userId = param[Int]("userId")
 
   Shutdown.run {
-    Log.run {
+    Log.run() {
       val server = YaesServer.route(
         // Health check
         GET(p"/health") { req =>

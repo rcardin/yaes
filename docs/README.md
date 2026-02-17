@@ -60,8 +60,8 @@ Add the dependencies to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "in.rcard.yaes" %% "yaes-core" % "0.13.0",
-  "in.rcard.yaes" %% "yaes-data" % "0.13.0"  // Optional: for Flow and other data structures
+  "in.rcard.yaes" %% "yaes-core" % "0.14.0",
+  "in.rcard.yaes" %% "yaes-data" % "0.14.0"  // Optional: for Flow and other data structures
 )
 ```
 

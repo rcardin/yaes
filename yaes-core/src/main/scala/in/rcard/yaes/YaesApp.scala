@@ -1,29 +1,28 @@
 package in.rcard.yaes
 
 import java.lang.{System => JSystem}
-import java.time.{Clock => JClock}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
 /** An abstract base class for YAES applications providing a common entry point.
   *
   * This trait provides a foundation for building applications using the YAES framework, with
-  * built-in support for common effects like Output, Random, Clock, System, and Log.
+  * built-in support for common effects like Output, Input, Random, Clock, and System.
+  *
+  * Logging is intentionally excluded from the automatic effect stack so that the application
+  * can choose its own logging backend (e.g., `Log.run` or `Slf4jLog.run`).
   *
   * Example usage:
   * {{{
   * object MyApp extends YaesApp:
   *   def run: Unit = {
   *     Output.printLn(s"Starting application with args: ${args.mkString(", ")}")
-  *     
+  *
   *     val currentTime = Clock.now
   *     Output.printLn(s"Current time: $currentTime")
-  *     
+  *
   *     val randomNumber = Random.nextInt
   *     Output.printLn(s"Random number: $randomNumber")
-  *     
-  *     val logger = Log.getLogger("MyApp")
-  *     logger.info("Application started successfully")
   *   }
   * }}}
   */
@@ -39,9 +38,6 @@ trait YaesApp {
   /** The execution context used for async operations. Can be overridden. */
   protected given executionContext: ExecutionContext = ExecutionContext.global
 
-  /** The clock used for logging. Can be overridden. */
-  protected given logClock: JClock = JClock.systemDefaultZone()
-
   /** The timeout for blocking IO operations. Can be overridden. */
   protected def runTimeout: Duration = Duration.Inf
 
@@ -53,10 +49,9 @@ trait YaesApp {
     *   - Random: for random number generation
     *   - Clock: for time operations
     *   - System: for system properties and environment variables
-    *   - Log: for structured logging
     *
-    * Note: Exceptions thrown during execution will be caught by the IO effect and handled
-    * by the handleError method.
+    * Note: Exceptions thrown during execution will be caught by the outer Sync effect
+    * (via `Sync.runBlocking`) and then passed to the `handleError` method.
     *
     * Override this method to define your application logic.
     *
@@ -64,9 +59,9 @@ trait YaesApp {
     * {{{
     * object MyApp extends YaesApp:
     *   def run: Unit = {
-    *     val logger = Log.getLogger("MyApp")
-    *     logger.info("Application started")
     *     Output.printLn("Hello, YAES!")
+    *     val now = Clock.now
+    *     Output.printLn(s"Current time: $now")
     *   }
     * }}}
     */
@@ -75,8 +70,7 @@ trait YaesApp {
       Input,
       Random,
       Clock,
-      System,
-      Log
+      System
   ) ?=> Unit
 
   /** Executes the run method with all the effect handlers in the correct order.
@@ -87,8 +81,7 @@ trait YaesApp {
     *   3. Input - console input
     *   4. Random - random number generation
     *   5. Clock - time operations
-    *   6. System - system properties/env vars
-    *   7. Log (innermost) - structured logging
+    *   6. System (innermost) - system properties/env vars
     */
   private def executeRun(): Unit = {
     val result = Sync.runBlocking(runTimeout) {
@@ -97,9 +90,7 @@ trait YaesApp {
           Random.run {
             Clock.run {
               System.run {
-                Log.run {
-                  run
-                }
+                run
               }
             }
           }
@@ -167,8 +158,7 @@ object YaesApp {
           Input,
           Random,
           Clock,
-          System,
-          Log
+          System
       ) ?=> Unit
   ): YaesApp = new YaesApp {
     def run: (
@@ -176,8 +166,7 @@ object YaesApp {
         Input,
         Random,
         Clock,
-        System,
-        Log
+        System
     ) ?=> Unit = block
   }
 }

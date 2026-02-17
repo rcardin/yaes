@@ -438,6 +438,35 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fb2")
   }
 
+  it should "race two fibers and return the winner when the loser fails independently" in {
+    // Regression: when the winner completes first and cancel() is called on the loser,
+    // but the loser fails through non-interruptible code before cancel() can interrupt it,
+    // the race should still return the winner's result. The loser's exception should not
+    // leak through loomScope.join().
+    val winnerDone = new java.util.concurrent.CountDownLatch(1)
+    val actualResult = Async.run {
+      Async.race(
+        {
+          winnerDone.countDown() // signal that the winner has completed
+          42
+        },
+        {
+          // Wait for fiber1 to complete, ensuring it wins the race
+          winnerDone.await()
+          // Non-interruptible busy-wait ensures this fiber is NOT in a blocking call
+          // when cancel() arrives; the interrupt flag is set but no InterruptedException
+          // is thrown. After the wait, the RuntimeException propagates through fork(),
+          // which re-throws it, causing the loomScope subtask to fail.
+          val deadline = java.lang.System.nanoTime() + 50_000_000L // 50ms
+          while (java.lang.System.nanoTime() < deadline) { Thread.`yield`() }
+          throw new RuntimeException("loser failed independently")
+        }
+      )
+    }
+
+    actualResult shouldBe 42
+  }
+
   it should "par two computation and return the result if both succeed" in {
     Async.run {
       val (result1, result2) = Async.par(
@@ -536,13 +565,13 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
 
     Async.run {
       val fb1 = Async.fork("custom-fiber-1") {
+        Async.delay(50.millis)
         threadNames.add(Thread.currentThread().getName())
-        Async.delay(100.millis)
       }
 
       val fb2 = Async.fork("custom-fiber-2") {
-        threadNames.add(Thread.currentThread().getName())
         Async.delay(100.millis)
+        threadNames.add(Thread.currentThread().getName())
       }
     }
 

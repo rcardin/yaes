@@ -25,7 +25,7 @@ This integration enables you to:
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.13.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.14.0"
 ```
 
 ## Cats Effect Integration

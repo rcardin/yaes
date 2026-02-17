@@ -10,7 +10,7 @@ The `yaes-data` module provides a collection of functional data structures that 
 Add the following dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.13.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.14.0"
 ```
 
 ## Available Data Structures
@@ -886,6 +886,7 @@ import in.rcard.yaes.Flow
 import in.rcard.yaes.Random.*
 import in.rcard.yaes.Output.*
 import in.rcard.yaes.Log.*
+import in.rcard.yaes.Log.given
 
 def randomDataProcessor(using Random, Output, Log): List[Int] = {
   val logger = Log.getLogger("RandomProcessor")
@@ -918,7 +919,7 @@ def randomDataProcessor(using Random, Output, Log): List[Int] = {
 }
 
 // Run with effects
-val result = Log.run {
+val result = Log.run() {
   Output.run {
     Random.run {
       randomDataProcessor

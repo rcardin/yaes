@@ -8,15 +8,9 @@ import ju.concurrent.CompletableFuture
 import ju.concurrent.ExecutionException
 import ju.concurrent.Future
 import ju.concurrent.StructuredTaskScope
-import ju.concurrent.StructuredTaskScope.ShutdownOnFailure
-import ju.concurrent.StructuredTaskScope.Subtask
-import ju.concurrent.ThreadFactory
-import ju.function.Consumer
-import ju.concurrent.ConcurrentHashMap
 import ju.concurrent.CountDownLatch
-import ju.concurrent.Callable
-import ju.concurrent.atomic.AtomicBoolean
-import ju.concurrent.locks.ReentrantLock
+import ju.concurrent.StructuredTaskScope.Joiner
+import ju.concurrent.StructuredTaskScope.FailedException
 
 type Async = Yaes[Async.Unsafe]
 
@@ -83,7 +77,7 @@ trait Fiber[A] {
     */
   def cancel()(using async: Async): Unit
 
-  /** Registers a callback to be executed when the computation completes.
+  /** Registers a callback to be executed when the computation completes successfully.
     *
     * @param result
     *   the callback function
@@ -91,6 +85,15 @@ trait Fiber[A] {
     *   the async context
     */
   def onComplete(result: A => Unit)(using async: Async): Unit
+
+  /** Registers a callback to be executed when the computation fails with an exception.
+    *
+    * @param handler
+    *   the callback function receiving the exception
+    * @param async
+    *   the async context
+    */
+  def onFailure(handler: Throwable => Unit)(using async: Async): Unit
 
   private[yaes] def unsafeValue(using async: Async): A
 }
@@ -119,6 +122,14 @@ class JvmFiber[A](
     promise.thenAccept(result => fn(result))
   }
 
+  override def onFailure(handler: Throwable => Unit)(using async: Async): Unit = {
+    promise.whenComplete { (_, ex) =>
+      if (ex != null) {
+        handler(ex)
+      }
+    }
+  }
+
   override def value(using async: Async): Raise[Async.Cancelled] ?=> A = try {
     unsafeValue
   } catch {
@@ -130,6 +141,7 @@ class JvmFiber[A](
       promise.get()
     } catch {
       case cancellationEx: CancellationException => ()
+      case ee: ExecutionException                => throw ee.getCause
     }
 
   override def cancel()(using async: Async): Unit = {
@@ -155,27 +167,27 @@ class JvmAsync extends Async.Unsafe {
     JvmAsync.scope
       .get()
       .fork(() => {
-        val innerScope = new ShutdownOnFailure(name, JvmAsync.namedThreadFactory(name))
+        Thread.currentThread().setName(name)
+        val innerScope = StructuredTaskScope
+          .open[A, Void](Joiner.awaitAllSuccessfulOrThrow())
         forkedThread.complete(Thread.currentThread())
+        JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
         try {
-          val innerTask: StructuredTaskScope.Subtask[A] = innerScope.fork(() => {
-            JvmAsync.scope.set(innerScope)
-            block
-          })
+          val result = block
           innerScope.join()
-          if (innerTask.state() != Subtask.State.SUCCESS) {
-            innerTask.exception() match {
-              case ie: InterruptedException =>
-                promise.cancel(true)
-              case exex: ExecutionException => throw exex.getCause
-              case throwable                => throw throwable
-            }
-          } else {
-            promise.complete(innerTask.get())
-          }
+          promise.complete(result)
         } catch {
-          case ie: InterruptedException =>
+          case _: InterruptedException =>
             promise.cancel(true)
+            JvmAsync.ensureJoined(innerScope)
+          case fe: FailedException =>
+            promise.completeExceptionally(fe.getCause)
+            throw fe.getCause
+          case t: Throwable =>
+            val wasCancelled = Thread.currentThread().isInterrupted()
+            JvmAsync.ensureJoined(innerScope)
+            promise.completeExceptionally(t)
+            if (!wasCancelled) throw t
         } finally {
           JvmAsync.scope.remove()
           innerScope.close()
@@ -186,125 +198,18 @@ class JvmAsync extends Async.Unsafe {
 }
 object JvmAsync {
 
-  private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any]] = new ThreadLocal()
+  private[yaes] val scope: ThreadLocal[StructuredTaskScope[Any, Any]] = new ThreadLocal()
 
-  private[yaes] def namedThreadFactory(name: String): ThreadFactory = {
-    Thread.ofVirtual().name(name).factory()
-  }
-}
-
-/** A StructuredTaskScope that supports graceful shutdown with timeout enforcement.
-  *
-  * This scope extends the base `StructuredTaskScope` to provide coordination between external
-  * shutdown signals (from the [[Shutdown]] effect) and internal timeout enforcement.
-  *
-  * **Key Features:**
-  *   - Tracks the main task separately from other forked fibers
-  *   - Uses `CountDownLatch` for signaling between external thread (Shutdown hook) and internal
-  *     timeout enforcer fiber
-  *   - `initiateGracefulShutdown()` can be called from external threads safely
-  *   - When main task completes after shutdown is initiated, the scope shuts down immediately
-  *   - If the timeout expires before main task completion, remaining fibers are cancelled
-  *   - Fail-fast behavior: any fiber exception triggers immediate scope shutdown
-  *
-  * **Thread Safety:**
-  *   - `initiateGracefulShutdown()` is thread-safe and idempotent
-  *   - Exception handling uses `ReentrantLock` to ensure only the first exception is captured
-  *   - Only fibers inside the scope call `shutdown()` - respects structured concurrency
-  *
-  * @param name
-  *   the name for threads created by this scope
-  * @param factory
-  *   the thread factory for creating virtual threads
-  * @param inFlightTasksCompletionTimeout
-  *   the maximum time to wait for the main task to complete after shutdown is initiated
-  */
-private class GracefulShutdownScope(
-    name: String,
-    factory: ThreadFactory,
-    private val inFlightTasksCompletionTimeout: Duration
-) extends StructuredTaskScope[Any](name, factory) {
-
-  private val shutdownInitiated = new AtomicBoolean(false)
-  private val timeoutExpired    = new AtomicBoolean(false)
-  private val shutdownLatch     = new CountDownLatch(1)
-
-  private val exceptionLock             = new ReentrantLock()
-  private var firstException: Throwable = null
-
-  @volatile private var mainTask: Subtask[?] = null
-
-  // Fork the fiber that enforces the timeout after shutdown is initiated
-  private val timeoutEnforcer = super.fork(() => {
-    shutdownLatch.await()
-    Thread.sleep(
-      inFlightTasksCompletionTimeout.toMillis
-    )
-    timeoutExpired.set(true)
-  })
-
-  def isTimeoutExpired: Boolean = timeoutExpired.get()
-
-  /** Signals that graceful shutdown should begin.
+  /** Ensures that `join()` has been called on the given scope before `close()`.
     *
-    * Called from the Shutdown effect hook when `Shutdown.initiateShutdown()` is invoked. This
-    * method is thread-safe and idempotent. It sets `shutdownInitiated` to true and counts down the
-    * latch to wake up the timeout enforcer.
+    * In JDK 25, `close()` requires `join()` to have been called first. When the block throws before
+    * reaching `join()`, we must still call it. Setting the interrupt flag ensures `join()` returns
+    * immediately, and `close()` will then cancel all remaining fibers.
     */
-  def initiateGracefulShutdown(): Unit = {
-    if (shutdownInitiated.compareAndSet(false, true)) {
-      shutdownLatch.countDown()
-    }
-  }
-
-  /** Forks the main task and stores reference for completion tracking.
-    *
-    * @param task
-    *   the task to fork
-    * @return
-    *   the subtask representing the forked computation
-    */
-  def forkMainTask[U](task: Callable[? <: U]): Subtask[U] = {
-    val subtask = super.fork(task)
-    mainTask = subtask
-    subtask
-  }
-
-  /** Handles task completion with graceful shutdown support.
-    *
-    * Called by the StructuredTaskScope when a subtask finishes.
-    */
-  override protected def handleComplete(subtask: Subtask[?]): Unit = {
-    exceptionLock.lock()
-    try {
-      if (subtask.state() == Subtask.State.FAILED && firstException == null) {
-        firstException = subtask.exception()
-        this.shutdown()
-      } else if (timeoutExpired.get()) {
-        this.shutdown()
-      } else if ((subtask eq mainTask)) {
-        // Main task completed after shutdown initiated - all work is done
-        this.shutdown()
-      } else {
-        super.handleComplete(subtask)
-      }
-    } finally {
-      exceptionLock.unlock()
-    }
-  }
-
-  def throwIfFailed[X <: Throwable](esf: Throwable => X): Unit = {
-    ensureOwnerAndJoined()
-    val exception: Throwable = firstException
-    if (exception != null) {
-      val ex: X = esf(exception)
-      throw ex
-    }
-  }
-
-  override def join(): GracefulShutdownScope = {
-    super.join()
-    this
+  private[yaes] def ensureJoined(scope: StructuredTaskScope[?, ?]): Unit = {
+    Thread.currentThread().interrupt()
+    try { scope.join() }
+    catch { case _: Throwable => () }
   }
 }
 
@@ -535,17 +440,27 @@ object Async {
       async: Async
   ): Either[(R1, Fiber[R2]), (Fiber[R1], R2)] = {
     val promise = CompletableFuture[Either[(R1, Fiber[R2]), (Fiber[R1], R2)]]
-    val fiber1  = fork(block1)
-    val fiber2  = fork(block2)
+    val fiber1  = fork("fiber1")(block1)
+    val fiber2  = fork("fiber2")(block2)
 
     fiber1.onComplete { result1 =>
       promise.complete(Left((result1, fiber2)))
     }
+    fiber1.onFailure { ex =>
+      promise.completeExceptionally(ex)
+    }
     fiber2.onComplete { result2 =>
       promise.complete(Right((fiber1, result2)))
     }
+    fiber2.onFailure { ex =>
+      promise.completeExceptionally(ex)
+    }
 
-    promise.get()
+    try {
+      promise.get()
+    } catch {
+      case ee: ExecutionException => throw ee.getCause
+    }
   }
 
   /** Runs an asynchronous computation.
@@ -573,22 +488,26 @@ object Async {
     new Yaes.Handler[Async.Unsafe, A, A] {
       override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
         val async     = new JvmAsync()
-        val loomScope = new ShutdownOnFailure(
-          "yaes-async-handler",
-          JvmAsync.namedThreadFactory("yaes-async-handler")
+        val loomScope = StructuredTaskScope.open[A, Void](
+          Joiner.awaitAllSuccessfulOrThrow(),
+          configure => configure.withName("yaes-async-handler")
         )
+        // In JDK 25, fork() can only be called by the scope owner. Run program directly on
+        // the calling thread so it is the owner and can fork child fibers on loomScope.
+        JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
         try {
-          val mainTask = loomScope.fork(() => {
-            try {
-              JvmAsync.scope.set(loomScope)
-              program(using new Yaes(async))
-            } finally {
-              JvmAsync.scope.remove()
-            }
-          })
-          loomScope.join().throwIfFailed(identity)
-          mainTask.get()
+          val result = program(using new Yaes(async))
+          loomScope.join()
+          result
+        } catch {
+          case fe: FailedException =>
+            throw fe.getCause
+          case t: Throwable =>
+            JvmAsync.ensureJoined(loomScope)
+            Thread.interrupted()
+            throw t
         } finally {
+          JvmAsync.scope.remove()
           loomScope.close()
         }
       }
@@ -598,39 +517,6 @@ object Async {
   object Deadline {
     def after(duration: Duration): Deadline = duration
   }
-
-  def withGracefulShutdownHandler[A](
-      deadline: Deadline
-  )(using Shutdown, Raise[ShutdownTimedOut]): Yaes.Handler[Async.Unsafe, A, A] =
-    new Yaes.Handler[Async.Unsafe, A, A] {
-      override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-        val async     = new JvmAsync()
-        val loomScope = new GracefulShutdownScope(
-          "yaes-async-with-graceful-shutdown",
-          JvmAsync.namedThreadFactory("yaes-async-with-graceful-shutdown"),
-          inFlightTasksCompletionTimeout = deadline
-        )
-        try {
-
-          Shutdown.onShutdown {
-            loomScope.initiateGracefulShutdown()
-          }
-
-          val mainTask = loomScope.forkMainTask(() => {
-            Async.run {
-              program
-            }
-          })
-          loomScope.join().throwIfFailed(identity)
-          if (loomScope.isTimeoutExpired) {
-            Raise.raise(ShutdownTimedOut)
-          }
-          mainTask.get()
-        } finally {
-          loomScope.close()
-        }
-      }
-    }
 
   /** Runs an async computation with graceful shutdown support and timeout enforcement.
     *
@@ -659,13 +545,14 @@ object Async {
     *      [[ShutdownTimedOut]] is raised
     *   1. `scope.join()` completes when all fibers finish (or are cancelled)
     *
-    * **Integration with Shutdown Effect:** This method returns `(Shutdown, Raise[ShutdownTimedOut]) ?=> A`,
-    * meaning it requires both a Shutdown context and a Raise[ShutdownTimedOut] context. It automatically
-    * registers a hook with `Shutdown.onShutdown` to trigger graceful shutdown when the Shutdown effect
-    * transitions to shutting down state.
+    * **Integration with Shutdown Effect:** This method returns
+    * `(Shutdown, Raise[ShutdownTimedOut]) ?=> A`, meaning it requires both a Shutdown context and a
+    * Raise[ShutdownTimedOut] context. It automatically registers a hook with `Shutdown.onShutdown`
+    * to trigger graceful shutdown when the Shutdown effect transitions to shutting down state.
     *
-    * **Error Handling:** When the deadline expires before the main task completes, the method raises
-    * [[ShutdownTimedOut]]. Handle this error using `Raise.either`, `Raise.run`, or other Raise handlers.
+    * **Error Handling:** When the deadline expires before the main task completes, the method
+    * raises [[ShutdownTimedOut]]. Handle this error using `Raise.either`, `Raise.run`, or other
+    * Raise handlers.
     *
     * Example:
     * {{{
@@ -699,7 +586,35 @@ object Async {
       deadline: Deadline
   )(block: Async ?=> A): (Shutdown, Raise[ShutdownTimedOut]) ?=> A = {
 
-    Yaes.handle(block)(using withGracefulShutdownHandler(deadline))
+    val shutdownLatch = new CountDownLatch(1)
+
+    Shutdown.onShutdown {
+      shutdownLatch.countDown()
+    }
+
+    // If shutdown was already in progress before we registered the hook,
+    // the hook will have been silently ignored. Count down immediately
+    // so the deadline is still enforced.
+    if (Shutdown.isShuttingDown()) {
+      shutdownLatch.countDown()
+    }
+
+    val raceResult: Either[ShutdownTimedOut, A] = Async.run {
+      Async.race(
+        {
+          shutdownLatch.await()
+          Async.delay(deadline)
+          Left(ShutdownTimedOut)
+        }, {
+          Right(block)
+        }
+      )
+    }
+
+    raceResult match {
+      case Right(result) => result
+      case Left(timeout) => Raise.raise(timeout)
+    }
   }
 
   /** A trait representing asynchronous computations.
