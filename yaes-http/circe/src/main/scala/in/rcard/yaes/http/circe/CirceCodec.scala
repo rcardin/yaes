@@ -6,6 +6,38 @@ import io.circe.{Encoder, Decoder}
 import io.circe.syntax.*
 import io.circe.parser.decode as circeDecode
 
+/** 
+ * Default `BodyCodec` instance for any type `A` that has both a Circe [[io.circe.Encoder]]
+ * and [[io.circe.Decoder]] in scope.
+ *
+ * This codec:
+ *   - Encodes values of type `A` as compact JSON using Circe (`asJson.noSpaces`).
+ *   - Sets the HTTP `Content-Type` header to `application/json`.
+ *   - Decodes JSON bodies using Circe's `decode`, mapping failures to
+ *     [[in.rcard.yaes.http.server.DecodingError.ParseError]].
+ *
+ * Usage:
+ * {{{
+ *   import io.circe.{Encoder, Decoder}
+ *   import in.rcard.yaes.http.circe.given
+ *
+ *   final case class MyPayload(value: String)
+ *
+ *   given Encoder[MyPayload] = ???
+ *   given Decoder[MyPayload] = ???
+ *
+ *   // `circeBodyCodec` provides an implicit BodyCodec[MyPayload]
+ *   def handleBody(body: String)(using codec: BodyCodec[MyPayload]) = {
+ *     val decoded: MyPayload raises DecodingError = codec.decode(body)
+ *   }
+ * }}}
+ *
+ * Error mapping:
+ *   - If Circe successfully decodes the JSON, the resulting value of type `A` is returned.
+ *   - If Circe returns a failure, the underlying error is wrapped into
+ *     [[in.rcard.yaes.http.server.DecodingError.ParseError]] with the original message and
+ *     exception attached (when available).
+ */
 given circeBodyCodec[A](using encoder: Encoder[A], decoder: Decoder[A]): BodyCodec[A] with {
   def contentType: String = "application/json"
 
