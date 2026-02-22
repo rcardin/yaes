@@ -111,7 +111,7 @@ When JSON decoding fails, the codec raises a `DecodingError.ParseError` containi
 ```scala
 POST(p"/users") { req =>
   Raise.fold {
-    val user = req.bodyAs[User]
+    val user = req.as[User]
     Response.created(user)
   } { case error: DecodingError =>
     Response.badRequest(error.message)
