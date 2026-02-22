@@ -185,7 +185,7 @@ object JsonServer extends App {
         // Parse JSON body and create a user
         POST(p"/users") { req =>
           Raise.fold {
-            val newUser = req.bodyAs[CreateUser]
+            val newUser = req.as[CreateUser]
             val created = User(1, newUser.name, newUser.email)
             Response.created(created)
           } { case error: DecodingError =>
