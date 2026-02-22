@@ -53,7 +53,7 @@ Shutdown.run {
       // Request body automatically decoded from JSON
       POST(p"/users") { req =>
         Raise.fold {
-          val user = req.bodyAs[User]
+          val user = req.as[User]
           Response.created(user)
         } { case error: DecodingError =>
           Response.badRequest(error.message)
