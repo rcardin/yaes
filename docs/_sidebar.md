@@ -21,6 +21,7 @@
 
 * **HTTP**
   * [HTTP Server](http/server.md)
+  * [Circe Integration](http/circe.md)
 
 * [Examples](examples.md)
 * [Contributing](contributing.md)

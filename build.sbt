@@ -58,9 +58,21 @@ lazy val `yaes-slf4j` = project
   )
 
 lazy val `yaes-http` = project
-  .aggregate(server)
+  .aggregate(server, circe)
   .settings(
     scalaVersion := scala3Version
+  )
+
+lazy val circe = project
+  .in(file("yaes-http/circe"))
+  .dependsOn(server)
+  .settings(commonSettings)
+  .settings(
+    name         := "yaes-http-circe",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies ++ circeDependencies ++ Seq(
+      dependencies.circeGeneric % Test
+    )
   )
 
 lazy val server = project
@@ -92,6 +104,10 @@ lazy val dependencies =
     val slf4jVersion      = "2.0.17"
     val slf4jApi          = "org.slf4j"          % "slf4j-api"       % slf4jVersion
     val slf4jSimple       = "org.slf4j"          % "slf4j-simple"    % slf4jVersion
+    val circeVersion      = "0.14.15"
+    val circeCore         = "io.circe"           %% "circe-core"     % circeVersion
+    val circeParser       = "io.circe"           %% "circe-parser"   % circeVersion
+    val circeGeneric      = "io.circe"           %% "circe-generic"  % circeVersion
   }
 
 lazy val commonDependencies = Seq(
@@ -114,4 +130,9 @@ lazy val catsDependencies = Seq(
 lazy val slf4jDependencies = Seq(
   dependencies.slf4jApi,
   dependencies.slf4jSimple % Test
+)
+
+lazy val circeDependencies = Seq(
+  dependencies.circeCore,
+  dependencies.circeParser
 )
