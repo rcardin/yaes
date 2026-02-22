@@ -333,7 +333,7 @@ GET(p"/number") { req =>
 }
 
 POST(p"/echo") { req =>
-  val text = req.bodyAs[String]  // Decode body as String
+  val text = req.as[String]  // Decode body as String
   Response.ok(text)
 }
 ```
@@ -368,7 +368,7 @@ GET(p"/users" / userId) { (req, id: Int) =>
 
 POST(p"/users") { req =>
   Raise.fold {
-    val user = req.bodyAs[User]  // Automatically decoded from JSON
+    val user = req.as[User]  // Automatically decoded from JSON
     Response.created(user)
   } { case error: DecodingError =>
     Response.badRequest(error.message)

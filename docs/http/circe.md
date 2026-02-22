@@ -53,7 +53,7 @@ Shutdown.run {
       // Request body automatically decoded from JSON
       POST(p"/users") { req =>
         Raise.fold {
-          val user = req.bodyAs[User]
+          val user = req.as[User]
           Response.created(user)
         } { case error: DecodingError =>
           Response.badRequest(error.message)
@@ -139,7 +139,7 @@ When JSON decoding fails, the codec raises a `DecodingError.ParseError` with the
 ```scala
 POST(p"/users") { req =>
   Raise.fold {
-    val user = req.bodyAs[User]
+    val user = req.as[User]
     Response.created(user)
   } { case error: DecodingError =>
     Response.badRequest(error.message)
@@ -185,7 +185,7 @@ object JsonServer extends App {
         // Parse JSON body and create a user
         POST(p"/users") { req =>
           Raise.fold {
-            val newUser = req.bodyAs[CreateUser]
+            val newUser = req.as[CreateUser]
             val created = User(1, newUser.name, newUser.email)
             Response.created(created)
           } { case error: DecodingError =>

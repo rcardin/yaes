@@ -362,7 +362,7 @@ POST(p"/calculate") { req =>
 ```scala
 POST(p"/update") { req =>
   Raise.fold {
-    val value = req.bodyAs[Int]  // Decode body to Int
+    val value = req.as[Int]  // Decode body to Int
     Response.ok(s"Received: $value")
   } { case error: DecodingError =>
     Response.badRequest(error.message)
@@ -409,7 +409,7 @@ given userCodec: BodyCodec[User] with {
 // Use in routes - Content-Type is automatically set from codec
 POST(p"/users") { req =>
   Raise.fold {
-    val user = req.bodyAs[User]
+    val user = req.as[User]
     Response.created(user)  // Content-Type: application/json set automatically
   } { case error: DecodingError =>
     Response.badRequest(error.message)
@@ -673,7 +673,7 @@ GET(p"/error") { req =>
 ```scala
 POST(p"/users") { req =>
   Raise.fold {
-    val user = req.bodyAs[User]
+    val user = req.as[User]
     // Validate user...
     if (user.name.isEmpty) {
       Raise.raise(ValidationError("Name is required"))
