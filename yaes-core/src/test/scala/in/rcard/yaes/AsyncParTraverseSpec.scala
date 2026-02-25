@@ -96,6 +96,7 @@ class AsyncParTraverseSpec extends AnyFlatSpec with Matchers {
     }
 
     result shouldBe "Error from element 2"
+    executed.toArray should contain only 2
   }
 
   it should "work with different input and output types" in {
