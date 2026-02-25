@@ -449,7 +449,9 @@ object Async {
     *   a sequence of results in the same order as the input
     */
   def parTraverse[A, B](items: Seq[A])(f: A => B)(using async: Async): Seq[B] = {
-    val fibers = items.map(a => fork(s"parTraverse-${scala.util.Random.nextString(5)}")(f(a)))
+    val fibers = items.zipWithIndex.map { case (a, idx) =>
+      fork(s"parTraverse-$idx")(f(a))
+    }
     fibers.foreach(_.join())
     fibers.map(_.unsafeValue)
   }
