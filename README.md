@@ -346,9 +346,42 @@ Trying to get the value from a canceled fiber will raise a `Cancelled` error. Ho
 
 Using the `Async.fork` DSL is quite low-level. The library provides a set of structured concurrency primitives that can be used to define more complex asynchronous computations. The available primitives are:
 
-- `Async.par`: Runs two asynchronous computations in parallel and returns both .
+- `Async.par`: Runs two asynchronous computations in parallel and returns both.
 - `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
+- `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
+
+#### Parallel Traversal
+
+When you need to apply the same operation to every element of a collection in parallel, use `Async.parTraverse`. It forks one fiber per element, waits for all to finish, and returns the results **in the same order as the input**. If any computation fails, the remaining fibers are automatically cancelled (fail-fast):
+
+```scala 3
+import in.rcard.yaes.Async.*
+
+case class UserProfile(id: Int, name: String)
+def fetchUserProfile(id: Int)(using Async): UserProfile = ???
+
+val profiles: Seq[UserProfile] = Async.run {
+  Async.parTraverse(List(1, 2, 3, 4, 5))(fetchUserProfile)
+}
+```
+
+`parTraverse` also composes seamlessly with other effects such as `Raise`:
+
+```scala 3
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+def validateAndFetch(id: Int)(using Async, Raise[String]): UserProfile =
+  if (id <= 0) Raise.raise(s"Invalid id: $id")
+  else fetchUserProfile(id)
+
+val result: Either[String, Seq[UserProfile]] = Raise.either {
+  Async.run {
+    Async.parTraverse(List(1, 2, 3))(validateAndFetch)
+  }
+}
+```
 
 #### Graceful Shutdown Integration
 

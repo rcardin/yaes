@@ -423,6 +423,39 @@ object Async {
     }
   }
 
+  /** Executes a function over all elements of a collection in parallel, returning results in order.
+    *
+    * Each element is processed concurrently using a forked fiber. Results are collected preserving
+    * the input order. If any computation fails, all remaining fibers are automatically cancelled.
+    *
+    * Example:
+    * {{{
+    * val profiles: Seq[UserProfile] = Async.run {
+    *   Async.parTraverse(List(1, 2, 3, 4, 5))(fetchUserProfile)
+    * }
+    * }}}
+    *
+    * @param items
+    *   the collection of elements to process
+    * @param f
+    *   the function to apply to each element
+    * @param async
+    *   the async context
+    * @tparam A
+    *   the type of input elements
+    * @tparam B
+    *   the type of output elements
+    * @return
+    *   a sequence of results in the same order as the input
+    */
+  def parTraverse[A, B](items: Seq[A])(f: A => B)(using async: Async): Seq[B] = {
+    val fibers = items.zipWithIndex.map { case (a, idx) =>
+      fork(s"parTraverse-$idx")(f(a))
+    }
+    fibers.foreach(_.join())
+    fibers.map(_.unsafeValue)
+  }
+
   /** Races two computations and provides access to both fibers.
     *
     * This is a lower-level version of [[race]] that gives you access to the underlying fibers.
