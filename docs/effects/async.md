@@ -86,11 +86,54 @@ val queue = Async.run {
 
 ### Parallel Execution
 
-Run computations in parallel:
+Run two computations in parallel:
 
 ```scala
 val (result1, result2) = Async.par(computation1, computation2)
 ```
+
+### Parallel Traversal
+
+Apply a function to every element of a collection in parallel, returning results in input order. If any computation fails, remaining fibers are automatically cancelled (fail-fast):
+
+```scala
+import in.rcard.yaes.Async.*
+
+case class UserProfile(id: Int, name: String)
+def fetchUserProfile(id: Int)(using Async): UserProfile = ???
+
+val profiles: Seq[UserProfile] = Async.run {
+  Async.parTraverse(List(1, 2, 3, 4, 5))(fetchUserProfile)
+}
+```
+
+`parTraverse` composes with other effects like `Raise`:
+
+```scala
+import in.rcard.yaes.Raise.*
+
+def validateAndFetch(id: Int)(using Async, Raise[String]): UserProfile =
+  if (id <= 0) Raise.raise(s"Invalid id: $id")
+  else fetchUserProfile(id)
+
+val result: Either[String, Seq[UserProfile]] = Raise.either {
+  Async.run {
+    Async.parTraverse(List(1, 2, 3))(validateAndFetch)
+  }
+}
+```
+
+**Signature:**
+
+```scala
+def parTraverse[A, B](items: Seq[A])(f: A => B)(using async: Async): Seq[B]
+```
+
+**Key properties:**
+- Elements are processed concurrently, one fiber per element
+- Results are returned in the same order as the input
+- If any fiber fails, all remaining fibers are cancelled via the underlying `StructuredTaskScope`
+- Works with an empty collection (returns an empty `Seq`)
 
 ### Racing
 
