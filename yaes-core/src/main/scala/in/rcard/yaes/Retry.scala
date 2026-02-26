@@ -37,7 +37,7 @@ object Schedule {
     * schedule.delay(100) // Some(500.millis)
     * }}}
     *
-    * @param delay the constant delay between retries
+    * @param interval the constant delay between retries
     * @return a schedule with fixed delay
     */
   def fixed(interval: Duration): Schedule = new Schedule {
