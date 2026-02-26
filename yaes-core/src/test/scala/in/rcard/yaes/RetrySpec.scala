@@ -128,4 +128,33 @@ class RetrySpec extends AnyFlatSpec with Matchers {
     }
     result shouldBe Right(10)
   }
+
+  it should "execute the block once and re-raise when attempts is 1 (no retries)" in {
+    var attempts = 0
+    val result = Async.run {
+      Raise.either[String, Int] {
+        Retry[String](Schedule.fixed(10.millis).attempts(1)) {
+          attempts += 1
+          Raise.raise(s"error-$attempts")
+        }
+      }
+    }
+    result shouldBe Left("error-1")
+    attempts shouldBe 1
+  }
+
+  it should "work with zero-duration delays" in {
+    var attempts = 0
+    val result = Async.run {
+      Raise.either[String, Int] {
+        Retry[String](Schedule.fixed(Duration.Zero).attempts(3)) {
+          attempts += 1
+          if attempts < 3 then Raise.raise(s"error-$attempts")
+          attempts
+        }
+      }
+    }
+    result shouldBe Right(3)
+    attempts shouldBe 3
+  }
 }

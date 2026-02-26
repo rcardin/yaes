@@ -62,7 +62,7 @@ schedule.delay(4) // Some(800.millis)
 Parameters:
 - `initial` — delay before the first retry
 - `factor` — multiplier per attempt (default `2.0`)
-- `max` — maximum delay cap (default `Duration.Inf`)
+- `max` — maximum delay cap (default 24 hours)
 
 ### Limiting Attempts
 

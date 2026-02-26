@@ -1,6 +1,7 @@
 package in.rcard.yaes
 
 import java.util.concurrent.ThreadLocalRandom
+import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
 
 /** A retry policy that computes the delay for each attempt.
@@ -45,6 +46,11 @@ object Schedule {
       else Some(interval)
   }
 
+  /** The maximum delay cap used when no explicit max is provided. Prevents overflow from
+    * producing infinite or excessively large durations in unbounded exponential schedules.
+    */
+  private val MaxDelayCap: Duration = Duration(24, "hours")
+
   /** Exponential backoff: initial * factor^(attempt-1), capped at max.
     *
     * Example:
@@ -57,19 +63,19 @@ object Schedule {
     *
     * @param initial the delay before the first retry
     * @param factor the multiplier applied on each attempt (default 2.0)
-    * @param max the maximum delay cap (default Duration.Inf)
+    * @param max the maximum delay cap (default 24 hours)
     * @return a schedule with exponential backoff
     */
   def exponential(
       initial: Duration,
       factor: Double = 2.0,
-      max: Duration = Duration.Inf
+      max: Duration = MaxDelayCap
   ): Schedule = new Schedule {
     def delay(attempt: Int): Option[Duration] =
       if attempt <= 0 then None
       else {
         val computed = initial * Math.pow(factor, (attempt - 1).toDouble)
-        if max.isFinite && computed > max then Some(max)
+        if computed > max || !computed.isFinite then Some(max)
         else Some(computed)
       }
   }
@@ -112,9 +118,9 @@ object Schedule {
     def jitter(factor: Double): Schedule = new Schedule {
       def delay(attempt: Int): Option[Duration] =
         self.delay(attempt).map { d =>
-          if factor == 0.0 then d
+          val millis = d.toMillis.toDouble
+          if factor == 0.0 || millis == 0.0 then d
           else {
-            val millis    = d.toMillis.toDouble
             val minMillis = millis * (1.0 - factor)
             val maxMillis = millis * (1.0 + factor)
             val jittered     = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
@@ -184,15 +190,13 @@ object Retry {
     def apply[A](schedule: Schedule)(
         block: Raise[E] ?=> A
     )(using Async, Raise[E]): A = {
-      var lastError: Option[E] = None
-      var attempt              = 0
 
-      while (true) {
+      @tailrec
+      def loop(attempt: Int): A = {
         val result = Raise.fold(block)(
           onError = { error =>
-            lastError = Some(error)
-            attempt += 1
-            schedule.delay(attempt) match {
+            val nextAttempt = attempt + 1
+            schedule.delay(nextAttempt) match {
               case Some(d) =>
                 Async.delay(d)
                 None
@@ -203,14 +207,13 @@ object Retry {
         )(onSuccess = value => Some(Right(value)))
 
         result match {
-          case Some(Right(value)) => return value
+          case Some(Right(value)) => value
           case Some(Left(error))  => Raise.raise(error)
-          case None               => // continue retrying
+          case None               => loop(attempt + 1)
         }
       }
 
-      // Unreachable, but needed for type checker
-      Raise.raise(lastError.get)
+      loop(0)
     }
   }
 }

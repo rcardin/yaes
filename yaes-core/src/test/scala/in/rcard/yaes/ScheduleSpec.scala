@@ -109,4 +109,25 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     val delays = (1 to 100).flatMap(_ => schedule.delay(1))
     all(delays) shouldBe 1000.millis
   }
+
+  it should "handle zero-duration base delay without throwing" in {
+    val schedule = Schedule.fixed(Duration.Zero).jitter(0.5)
+    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+    all(delays) shouldBe Duration.Zero
+  }
+
+  "Schedule.exponential" should "cap at max when overflow produces infinite duration" in {
+    val schedule = Schedule.exponential(100.millis, factor = 2.0, max = 5.seconds)
+    // Very large attempt number would overflow without the cap
+    val d = schedule.delay(1000)
+    d shouldBe Some(5.seconds)
+  }
+
+  it should "cap at default max when no explicit max is provided" in {
+    val schedule = Schedule.exponential(100.millis, factor = 2.0)
+    // Large attempt that would overflow to Infinity
+    val d = schedule.delay(1000)
+    d shouldBe defined
+    d.get.isFinite shouldBe true
+  }
 }
