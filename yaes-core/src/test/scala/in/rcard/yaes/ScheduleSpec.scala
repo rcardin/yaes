@@ -73,4 +73,40 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     schedule.delay(2) shouldBe Some(200.millis)
     schedule.delay(3) shouldBe None
   }
+
+  "Schedule.jitter" should "produce delay within [delay*(1-factor), delay*(1+factor)]" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(0.5)
+    // Run many iterations to check bounds
+    val delays = (1 to 1000).flatMap(_ => schedule.delay(1))
+    all(delays.map(_.toMillis)) should (be >= 500L and be <= 1500L)
+  }
+
+  it should "produce varying delays (not all identical)" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(0.5)
+    val delays = (1 to 100).flatMap(_ => schedule.delay(1).map(_.toMillis))
+    delays.toSet.size should be > 1
+  }
+
+  it should "compose with exponential" in {
+    val schedule = Schedule.exponential(1000.millis, factor = 2.0).jitter(0.5)
+    // Attempt 1: base = 1000ms, jitter range [500, 1500]
+    val delays1 = (1 to 1000).flatMap(_ => schedule.delay(1))
+    all(delays1.map(_.toMillis)) should (be >= 500L and be <= 1500L)
+    // Attempt 2: base = 2000ms, jitter range [1000, 3000]
+    val delays2 = (1 to 1000).flatMap(_ => schedule.delay(2))
+    all(delays2.map(_.toMillis)) should (be >= 1000L and be <= 3000L)
+  }
+
+  it should "compose with attempts" in {
+    val schedule = Schedule.fixed(100.millis).jitter(0.5).attempts(3)
+    schedule.delay(1) shouldBe defined
+    schedule.delay(2) shouldBe defined
+    schedule.delay(3) shouldBe None
+  }
+
+  it should "handle zero jitter factor (no variation)" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(0.0)
+    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+    all(delays) shouldBe 1000.millis
+  }
 }

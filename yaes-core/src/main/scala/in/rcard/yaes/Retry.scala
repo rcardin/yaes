@@ -1,5 +1,6 @@
 package in.rcard.yaes
 
+import java.util.concurrent.ThreadLocalRandom
 import scala.concurrent.duration.Duration
 
 /** A retry policy that computes the delay for each attempt.
@@ -94,6 +95,32 @@ object Schedule {
         // n total executions = n-1 retries, so stop when attempt >= n
         if attempt >= n then None
         else self.delay(attempt)
+    }
+
+    /** Adds random jitter to each delay.
+      *
+      * Example:
+      * {{{
+      * val schedule = Schedule.fixed(1.second).jitter(0.5)
+      * // Delays will be random in [500ms, 1500ms]
+      * }}}
+      *
+      * @param factor jitter range as a fraction of the delay (0.0 to 1.0).
+      *               A factor of 0.5 on a 1s delay produces delays in [500ms, 1500ms].
+      * @return a schedule with random jitter applied to each delay
+      */
+    def jitter(factor: Double): Schedule = new Schedule {
+      def delay(attempt: Int): Option[Duration] =
+        self.delay(attempt).map { d =>
+          if factor == 0.0 then d
+          else {
+            val millis    = d.toMillis.toDouble
+            val minMillis = millis * (1.0 - factor)
+            val maxMillis = millis * (1.0 + factor)
+            val jittered  = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
+            Duration.fromNanos((jittered * 1_000_000).toLong)
+          }
+        }
     }
   }
 }
