@@ -1220,6 +1220,47 @@ object Flow {
     elements.foreach(item => emit(item))
   }
 
+  /** Merges multiple flows into a single flow that emits elements from all source flows as they
+    * arrive, in a non-deterministic interleaved order.
+    *
+    * Each source flow is collected concurrently in its own fiber, and elements are emitted to
+    * the resulting flow as soon as they are produced. The relative order of elements within each
+    * source flow is preserved, but the interleaving between different sources depends on timing
+    * and scheduling.
+    *
+    * The merged flow completes when all source flows have completed. If any source flow throws
+    * an exception, the remaining sources are cancelled and the exception is propagated.
+    *
+    * Example:
+    * {{{
+    * val flow1 = Flow(1, 2, 3)
+    * val flow2 = Flow(4, 5, 6)
+    * val merged = Flow.merge(flow1, flow2)
+    *
+    * val result = scala.collection.mutable.ArrayBuffer[Int]()
+    * merged.collect { value => result += value }
+    * // result contains all elements: 1, 2, 3, 4, 5, 6 (order may vary)
+    * }}}
+    *
+    * @param flows
+    *   The source flows to merge
+    * @tparam A
+    *   The type of elements emitted by the flows
+    * @return
+    *   A flow that emits all elements from all source flows in arrival order
+    */
+  def merge[A](flows: Flow[A]*): Flow[A] =
+    if (flows.isEmpty) Flow.flow { () }
+    else if (flows.size == 1) flows.head
+    else
+      Channel.channelFlow[A] {
+        flows.foreach { f =>
+          Async.fork {
+            f.collect { value => Channel.Producer.send(value) }
+          }
+        }
+      }
+
   extension [A](flow: Flow[A]) {
 
     /** Launches the collection of this flow in the current Async context. Returns a Fiber that
