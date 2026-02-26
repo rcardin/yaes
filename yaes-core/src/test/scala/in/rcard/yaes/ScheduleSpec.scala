@@ -37,4 +37,40 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     val schedule = Schedule.fixed(100.millis).attempts(0)
     schedule.delay(1) shouldBe None
   }
+
+  "Schedule.exponential" should "return initial * factor^(attempt-1)" in {
+    val schedule = Schedule.exponential(100.millis, factor = 2.0)
+    schedule.delay(1) shouldBe Some(100.millis)  // 100 * 2^0
+    schedule.delay(2) shouldBe Some(200.millis)  // 100 * 2^1
+    schedule.delay(3) shouldBe Some(400.millis)  // 100 * 2^2
+    schedule.delay(4) shouldBe Some(800.millis)  // 100 * 2^3
+  }
+
+  it should "use default factor of 2.0" in {
+    val schedule = Schedule.exponential(100.millis)
+    schedule.delay(1) shouldBe Some(100.millis)
+    schedule.delay(2) shouldBe Some(200.millis)
+    schedule.delay(3) shouldBe Some(400.millis)
+  }
+
+  it should "cap delay at max" in {
+    val schedule = Schedule.exponential(100.millis, factor = 2.0, max = 300.millis)
+    schedule.delay(1) shouldBe Some(100.millis)  // 100 * 2^0 = 100
+    schedule.delay(2) shouldBe Some(200.millis)  // 100 * 2^1 = 200
+    schedule.delay(3) shouldBe Some(300.millis)  // 100 * 2^2 = 400, capped to 300
+    schedule.delay(4) shouldBe Some(300.millis)  // still capped
+  }
+
+  it should "return None for attempt <= 0" in {
+    val schedule = Schedule.exponential(100.millis)
+    schedule.delay(0) shouldBe None
+    schedule.delay(-1) shouldBe None
+  }
+
+  it should "compose with attempts" in {
+    val schedule = Schedule.exponential(100.millis).attempts(3)
+    schedule.delay(1) shouldBe Some(100.millis)
+    schedule.delay(2) shouldBe Some(200.millis)
+    schedule.delay(3) shouldBe None
+  }
 }

@@ -44,6 +44,35 @@ object Schedule {
       else Some(interval)
   }
 
+  /** Exponential backoff: initial * factor^(attempt-1), capped at max.
+    *
+    * Example:
+    * {{{
+    * val schedule = Schedule.exponential(100.millis, factor = 2.0, max = 5.seconds)
+    * schedule.delay(1) // Some(100.millis)
+    * schedule.delay(2) // Some(200.millis)
+    * schedule.delay(3) // Some(400.millis)
+    * }}}
+    *
+    * @param initial the delay before the first retry
+    * @param factor the multiplier applied on each attempt (default 2.0)
+    * @param max the maximum delay cap (default Duration.Inf)
+    * @return a schedule with exponential backoff
+    */
+  def exponential(
+      initial: Duration,
+      factor: Double = 2.0,
+      max: Duration = Duration.Inf
+  ): Schedule = new Schedule {
+    def delay(attempt: Int): Option[Duration] =
+      if attempt <= 0 then None
+      else {
+        val computed = initial * Math.pow(factor, (attempt - 1).toDouble)
+        if max.isFinite && computed > max then Some(max)
+        else Some(computed)
+      }
+  }
+
   extension (self: Schedule) {
 
     /** Limits the total number of executions (1 initial + N-1 retries).
