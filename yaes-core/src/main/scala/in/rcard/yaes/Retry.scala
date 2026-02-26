@@ -117,10 +117,100 @@ object Schedule {
             val millis    = d.toMillis.toDouble
             val minMillis = millis * (1.0 - factor)
             val maxMillis = millis * (1.0 + factor)
-            val jittered  = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
-            Duration.fromNanos((jittered * 1_000_000).toLong)
+            val jittered     = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
+            val NanosPerMilli = 1_000_000L
+            Duration.fromNanos((jittered * NanosPerMilli).toLong)
           }
         }
+    }
+  }
+}
+
+/** A handler that retries a failing block according to a [[Schedule]] policy.
+  *
+  * `Retry` is not an effect — it orchestrates existing effects ([[Raise]] for detecting failure,
+  * [[Async]] for delays). The block being retried never calls `Retry.something()` — it just runs,
+  * succeeds, or fails.
+  *
+  * Only errors raised via `Raise[E]` trigger a retry. Other effect types in scope are not
+  * intercepted.
+  *
+  * Example:
+  * {{{
+  * val result: Either[DbError, User] = Async.run {
+  *   Raise.either {
+  *     Retry[DbError](Schedule.fixed(500.millis).attempts(3)) {
+  *       db.findUser(42)
+  *     }
+  *   }
+  * }
+  * }}}
+  */
+object Retry {
+
+  /** Retries the block on typed errors of type `E` according to the given schedule.
+    *
+    * Only errors raised via `Raise[E]` trigger a retry. Other effects and error types in scope
+    * are not intercepted.
+    *
+    * If all attempts are exhausted, the last error is re-raised via the outer `Raise[E]`.
+    *
+    * Example:
+    * {{{
+    * // Retry HttpError with exponential backoff
+    * Retry[HttpError](
+    *   Schedule.exponential(100.millis, factor = 2, max = 5.seconds)
+    *     .jitter(0.5)
+    *     .attempts(5)
+    * ) {
+    *   httpClient.get("/api/data")
+    * }
+    * }}}
+    *
+    * @tparam E the error type to retry on
+    * @param schedule the retry policy
+    * @param block the computation to retry
+    * @return the result of the first successful attempt
+    */
+  def apply[E]: RetryPartiallyApplied[E] = new RetryPartiallyApplied[E]
+
+  /** Partially applied class to allow `Retry[E](schedule)(block)` syntax with proper
+    * type inference.
+    *
+    * @tparam E the error type to retry on
+    */
+  class RetryPartiallyApplied[E] {
+
+    def apply[A](schedule: Schedule)(
+        block: Raise[E] ?=> A
+    )(using Async, Raise[E]): A = {
+      var lastError: Option[E] = None
+      var attempt              = 0
+
+      while (true) {
+        val result = Raise.fold(block)(
+          onError = { error =>
+            lastError = Some(error)
+            attempt += 1
+            schedule.delay(attempt) match {
+              case Some(d) =>
+                Async.delay(d)
+                None
+              case None =>
+                Some(Left(error))
+            }
+          }
+        )(onSuccess = value => Some(Right(value)))
+
+        result match {
+          case Some(Right(value)) => return value
+          case Some(Left(error))  => Raise.raise(error)
+          case None               => // continue retrying
+        }
+      }
+
+      // Unreachable, but needed for type checker
+      Raise.raise(lastError.get)
     }
   }
 }
