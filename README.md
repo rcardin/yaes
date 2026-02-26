@@ -136,6 +136,7 @@ The library provides a set of effects that can be used to define and handle effe
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
+- [`Retry`](#the-retry-handler): Retries failing blocks according to composable schedule policies.
 
 ### YaesApp: Common Entry Point
 
@@ -1202,6 +1203,58 @@ Slf4jLog.run {
 ```
 
 Level filtering is controlled by the SLF4J backend configuration instead of a handler parameter. See the [yaes-slf4j README](yaes-slf4j/README.md) for full details.
+
+### The Retry Handler
+
+The `Retry` handler re-executes a failing block according to a `Schedule` retry policy. It catches typed errors via `Raise[E]` and uses `Async` for delays between attempts.
+
+> **Note:** `Retry` is not an effect — it orchestrates existing effects (`Raise` and `Async`). The block being retried just runs, succeeds, or fails.
+
+#### Schedule Policies
+
+A `Schedule` computes the delay for each retry attempt. Schedules compose via chaining:
+
+```scala 3
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+import scala.concurrent.duration.*
+
+// Fixed delay
+val fixed = Schedule.fixed(500.millis)
+
+// Exponential backoff with cap
+val exponential = Schedule.exponential(100.millis, factor = 2.0, max = 30.seconds)
+
+// Compose: exponential + jitter + max attempts
+val composed = Schedule
+  .exponential(100.millis, factor = 2.0, max = 30.seconds)
+  .jitter(0.25)
+  .attempts(5)
+```
+
+#### Using Retry
+
+```scala 3
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+import scala.concurrent.duration.*
+
+case class DbError(msg: String)
+
+def findUser(id: Int)(using Raise[DbError]): String =
+  Raise.raise(DbError("connection timeout"))
+
+val result: Either[DbError, String] = Async.run {
+  Raise.either {
+    Retry[DbError](Schedule.fixed(500.millis).attempts(3)) {
+      findUser(42)
+    }
+  }
+}
+// result will be Left(DbError("connection timeout")) after 3 total attempts
+```
+
+If the block succeeds on any attempt, its value is returned immediately. If all attempts are exhausted, the last error is re-raised via the outer `Raise[E]`. Only errors of the specified type `E` trigger retries — other error types propagate immediately.
 
 ## Communication Primitives
 

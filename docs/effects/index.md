@@ -41,6 +41,11 @@ System properties, environment variables, and time management.
 ### [Log Effect](log.html)
 Structured logging at different levels with filtering.
 
+## Handlers
+
+### [Retry Handler](retry.html)
+Retries failing blocks according to composable schedule policies (fixed, exponential, jitter).
+
 ## Effect Composition
 
 Effects can be composed freely. You can handle effects one at a time or combine multiple effects in a single computation:
