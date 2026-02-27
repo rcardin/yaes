@@ -1215,12 +1215,11 @@ The `Retry` handler re-executes a failing block according to a `Schedule` retry 
 
 #### Schedule Policies
 
-A `Schedule` computes the delay for each retry attempt. Schedules compose via chaining. The `jitter` extension requires the `Random` effect:
+A `Schedule` computes the delay for each retry attempt. Schedules compose via chaining. The `jitter` extension requires the `Random` effect in scope:
 
 ```scala 3
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
-import in.rcard.yaes.Random.*
 import scala.concurrent.duration.*
 
 // Fixed delay
@@ -1229,12 +1228,21 @@ val fixed = Schedule.fixed(500.millis)
 // Exponential backoff with cap
 val exponential = Schedule.exponential(100.millis, factor = 2.0, max = 30.seconds)
 
-// Compose: exponential + jitter + max attempts (requires Random in scope)
-val composed = Random.run {
-  Schedule
-    .exponential(100.millis, factor = 2.0, max = 30.seconds)
-    .jitter(0.25)
-    .attempts(5)
+// Compose: exponential + jitter + max attempts
+// jitter requires Random in scope; Random.run wraps the entire usage context
+val composed: Either[DbError, String] = Random.run {
+  Async.run {
+    Raise.either {
+      Retry[DbError](
+        Schedule
+          .exponential(100.millis, factor = 2.0, max = 30.seconds)
+          .jitter(0.25)
+          .attempts(5)
+      ) {
+        findUser(42)
+      }
+    }
+  }
 }
 ```
 
@@ -1243,7 +1251,6 @@ val composed = Random.run {
 ```scala 3
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
-import in.rcard.yaes.Random.*
 import scala.concurrent.duration.*
 
 case class DbError(msg: String)
@@ -1251,12 +1258,10 @@ case class DbError(msg: String)
 def findUser(id: Int)(using Raise[DbError]): String =
   Raise.raise(DbError("connection timeout"))
 
-val result: Either[DbError, String] = Random.run {
-  Async.run {
-    Raise.either {
-      Retry[DbError](Schedule.fixed(500.millis).attempts(3)) {
-        findUser(42)
-      }
+val result: Either[DbError, String] = Async.run {
+  Raise.either {
+    Retry[DbError](Schedule.fixed(500.millis).attempts(3)) {
+      findUser(42)
     }
   }
 }

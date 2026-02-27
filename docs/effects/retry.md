@@ -80,7 +80,10 @@ schedule.delay(3) // None — stop (3 total executions reached)
 The `jitter` extension adds random variation to each delay, preventing thundering herd problems:
 
 ```scala
-val schedule = Schedule.fixed(1.second).jitter(0.5)
+// jitter requires the Random effect in scope
+val schedule = Random.run {
+  Schedule.fixed(1.second).jitter(0.5)
+}
 // Each delay will be random in [500ms, 1500ms]
 ```
 
@@ -92,10 +95,13 @@ Schedule extensions compose naturally via chaining:
 
 ```scala
 // Exponential backoff with jitter, capped at 30s, up to 5 total attempts
-val schedule = Schedule
-  .exponential(100.millis, factor = 2.0, max = 30.seconds)
-  .jitter(0.25)
-  .attempts(5)
+// jitter requires the Random effect in scope
+val schedule = Random.run {
+  Schedule
+    .exponential(100.millis, factor = 2.0, max = 30.seconds)
+    .jitter(0.25)
+    .attempts(5)
+}
 ```
 
 ## Practical Examples

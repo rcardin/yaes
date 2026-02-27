@@ -152,8 +152,8 @@ object Schedule {
       * bound of the jitter range is simply floored at 0ms (e.g., factor 1.5 on a 1s delay
       * produces delays in `[0ms, 2500ms]`). Negative factors are treated as 0.0 (no jitter).
       *
-      * This method introduces a `Random` effect dependency. The returned schedule must be used
-      * inside a `Random.run` scope.
+      * This method requires the `Random` effect in scope. The `Random` instance is captured at
+      * call time, so the resulting schedule can be used without `Random` in scope later.
       *
       * Example:
       * {{{
@@ -252,7 +252,7 @@ object Retry {
 
     def apply[A](schedule: Schedule)(
         block: Raise[E] ?=> A
-    )(using Async, Raise[E], Random): A = {
+    )(using Async, Raise[E]): A = {
 
       @tailrec
       def loop(attempt: Int): A = {
