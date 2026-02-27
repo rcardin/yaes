@@ -66,7 +66,7 @@ Parameters:
 
 ### Limiting Attempts
 
-The `attempts` extension limits the total number of executions (1 initial + N-1 retries):
+The `attempts` extension limits the total number of executions (1 initial + N-1 retries). The schedule only controls retries — the block always runs at least once. Therefore `attempts(0)` and `attempts(1)` both result in no retries:
 
 ```scala
 val schedule = Schedule.fixed(100.millis).attempts(3)

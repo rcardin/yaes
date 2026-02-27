@@ -94,6 +94,10 @@ object Schedule {
     /** Limits the total number of executions (1 initial + N-1 retries). `attempts(3)` means: 1
       * initial try + up to 2 retries = 3 total executions.
       *
+      * Note that the schedule only controls retries, not the initial execution. The block always
+      * runs at least once regardless of `n`. Therefore `attempts(0)` and `attempts(1)` both result
+      * in no retries — the block executes exactly once and any error is re-raised immediately.
+      *
       * Example:
       * {{{
       * val schedule = Schedule.fixed(100.millis).attempts(3)
@@ -103,7 +107,7 @@ object Schedule {
       * }}}
       *
       * @param n
-      *   the maximum number of total executions (must be >= 0)
+      *   the maximum number of total executions. Values <= 1 mean no retries.
       * @return
       *   a schedule that stops after n total executions
       */
