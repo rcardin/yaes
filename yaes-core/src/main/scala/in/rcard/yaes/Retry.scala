@@ -118,14 +118,24 @@ object Schedule {
     def jitter(factor: Double): Schedule = new Schedule {
       def delay(attempt: Int): Option[Duration] =
         self.delay(attempt).map { d =>
-          val millis = d.toMillis.toDouble
-          if factor == 0.0 || millis == 0.0 then d
+          // Clamp factor to [0.0, 1.0] and treat non-finite values as no jitter.
+          val clampedFactor =
+            if java.lang.Double.isNaN(factor) || java.lang.Double.isInfinite(factor) then 0.0
+            else if factor <= 0.0 then 0.0
+            else if factor >= 1.0 then 1.0
+            else factor
+
+          // Ensure we don't jitter negative durations and avoid zero-width ranges.
+          val millis = math.max(0.0, d.toMillis.toDouble)
+          if clampedFactor == 0.0 || millis == 0.0 then d
           else {
-            val minMillis = millis * (1.0 - factor)
-            val maxMillis = millis * (1.0 + factor)
-            val jittered     = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
-            val NanosPerMilli = 1_000_000L
-            Duration.fromNanos((jittered * NanosPerMilli).toLong)
+            val minMillis = millis * (1.0 - clampedFactor)
+            val maxMillis = millis * (1.0 + clampedFactor)
+            // At this point, millis > 0 and clampedFactor > 0, so minMillis < maxMillis and both are >= 0.
+            val jittered       = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
+            val NanosPerMilli  = 1_000_000L
+            val jitteredNanos  = (jittered * NanosPerMilli).toLong
+            Duration.fromNanos(jitteredNanos)
           }
         }
     }
