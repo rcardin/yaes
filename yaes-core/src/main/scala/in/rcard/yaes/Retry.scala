@@ -50,12 +50,10 @@ object Schedule {
       else Some(interval)
   }
 
-  /** The maximum delay cap used when no explicit max is provided. Prevents overflow from producing
-    * infinite or excessively large durations in unbounded exponential schedules.
-    */
-  private val MaxDelayCap: Duration = Duration(24, "hours")
-
   /** Exponential backoff: initial * factor^(attempt-1), capped at max.
+    *
+    * When the computed delay overflows to a non-finite value (e.g., due to very large attempt
+    * numbers), the previous finite delay is returned instead.
     *
     * Example:
     * {{{
@@ -70,20 +68,23 @@ object Schedule {
     * @param factor
     *   the multiplier applied on each attempt (default 2.0)
     * @param max
-    *   the maximum delay cap (default 24 hours)
+    *   the maximum delay cap (default Duration.Inf, meaning no cap)
     * @return
     *   a schedule with exponential backoff
     */
   def exponential(
       initial: Duration,
       factor: Double = 2.0,
-      max: Duration = MaxDelayCap
+      max: Duration = Duration.Inf
   ): Schedule = new Schedule {
+    private val finiteCap: Duration = Duration.fromNanos(Long.MaxValue)
+
     def delay(attempt: Int): Option[Duration] =
       if attempt <= 0 then None
       else {
         val computed = initial * Math.pow(factor, (attempt - 1).toDouble)
-        if computed > max || !computed.isFinite then Some(max)
+        if !computed.isFinite then Some(if max.isFinite then max else finiteCap)
+        else if max.isFinite && computed > max then Some(max)
         else Some(computed)
       }
   }

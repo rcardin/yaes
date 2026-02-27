@@ -136,11 +136,12 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     d shouldBe Some(5.seconds)
   }
 
-  it should "cap at default max when no explicit max is provided" in {
+  it should "return a finite duration on overflow when no max is provided" in {
     val schedule = Schedule.exponential(100.millis, factor = 2.0)
-    // Large attempt that would overflow to Infinity
+    // Large attempt that would overflow to Infinity — falls back to largest finite Duration
     val d = schedule.delay(1000)
     d shouldBe defined
     d.get.isFinite shouldBe true
+    d shouldBe Some(Duration.fromNanos(Long.MaxValue))
   }
 }
