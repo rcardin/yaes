@@ -75,52 +75,66 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
   }
 
   "Schedule.jitter" should "produce delay within [delay*(1-factor), delay*(1+factor)]" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(0.5)
-    // Run many iterations to check bounds
-    val delays = (1 to 1000).flatMap(_ => schedule.delay(1))
-    all(delays.map(_.toMillis)) should (be >= 500L and be <= 1500L)
+    Random.run {
+      val schedule = Schedule.fixed(1000.millis).jitter(0.5)
+      // Run many iterations to check bounds
+      val delays = (1 to 1000).flatMap(_ => schedule.delay(1))
+      all(delays.map(_.toMillis)) should (be >= 500L and be <= 1500L)
+    }
   }
 
   it should "compose with exponential" in {
-    val schedule = Schedule.exponential(1000.millis, factor = 2.0).jitter(0.5)
-    // Attempt 1: base = 1000ms, jitter range [500, 1500]
-    val delays1 = (1 to 1000).flatMap(_ => schedule.delay(1))
-    all(delays1.map(_.toMillis)) should (be >= 500L and be <= 1500L)
-    // Attempt 2: base = 2000ms, jitter range [1000, 3000]
-    val delays2 = (1 to 1000).flatMap(_ => schedule.delay(2))
-    all(delays2.map(_.toMillis)) should (be >= 1000L and be <= 3000L)
+    Random.run {
+      val schedule = Schedule.exponential(1000.millis, factor = 2.0).jitter(0.5)
+      // Attempt 1: base = 1000ms, jitter range [500, 1500]
+      val delays1 = (1 to 1000).flatMap(_ => schedule.delay(1))
+      all(delays1.map(_.toMillis)) should (be >= 500L and be <= 1500L)
+      // Attempt 2: base = 2000ms, jitter range [1000, 3000]
+      val delays2 = (1 to 1000).flatMap(_ => schedule.delay(2))
+      all(delays2.map(_.toMillis)) should (be >= 1000L and be <= 3000L)
+    }
   }
 
   it should "compose with attempts" in {
-    val schedule = Schedule.fixed(100.millis).jitter(0.5).attempts(3)
-    schedule.delay(1) shouldBe defined
-    schedule.delay(2) shouldBe defined
-    schedule.delay(3) shouldBe None
+    Random.run {
+      val schedule = Schedule.fixed(100.millis).jitter(0.5).attempts(3)
+      schedule.delay(1) shouldBe defined
+      schedule.delay(2) shouldBe defined
+      schedule.delay(3) shouldBe None
+    }
   }
 
   it should "handle zero jitter factor (no variation)" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(0.0)
-    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
-    all(delays) shouldBe 1000.millis
+    Random.run {
+      val schedule = Schedule.fixed(1000.millis).jitter(0.0)
+      val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+      all(delays) shouldBe 1000.millis
+    }
   }
 
   it should "treat negative factor as no jitter" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(-0.5)
-    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
-    all(delays) shouldBe 1000.millis
+    Random.run {
+      val schedule = Schedule.fixed(1000.millis).jitter(-0.5)
+      val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+      all(delays) shouldBe 1000.millis
+    }
   }
 
   it should "clamp lower bound at zero when factor exceeds 1.0" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(1.5)
-    // factor 1.5 on 1s: range is [max(0, 1000*(1-1.5)), 1000*(1+1.5)] = [0ms, 2500ms]
-    val delays = (1 to 1000).flatMap(_ => schedule.delay(1))
-    all(delays.map(_.toMillis)) should (be >= 0L and be <= 2500L)
+    Random.run {
+      val schedule = Schedule.fixed(1000.millis).jitter(1.5)
+      // factor 1.5 on 1s: range is [max(0, 1000*(1-1.5)), 1000*(1+1.5)] = [0ms, 2500ms]
+      val delays = (1 to 1000).flatMap(_ => schedule.delay(1))
+      all(delays.map(_.toMillis)) should (be >= 0L and be <= 2500L)
+    }
   }
 
   it should "handle zero-duration base delay without throwing" in {
-    val schedule = Schedule.fixed(Duration.Zero).jitter(0.5)
-    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
-    all(delays) shouldBe Duration.Zero
+    Random.run {
+      val schedule = Schedule.fixed(Duration.Zero).jitter(0.5)
+      val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+      all(delays) shouldBe Duration.Zero
+    }
   }
 
   "Schedule.fixed" should "clamp negative interval to Duration.Zero" in {
@@ -162,15 +176,19 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
   }
 
   "Schedule.jitter" should "treat NaN factor as no jitter" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(Double.NaN)
-    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
-    all(delays) shouldBe 1000.millis
+    Random.run {
+      val schedule = Schedule.fixed(1000.millis).jitter(Double.NaN)
+      val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+      all(delays) shouldBe 1000.millis
+    }
   }
 
   it should "treat Infinity factor as no jitter" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(Double.PositiveInfinity)
-    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
-    all(delays) shouldBe 1000.millis
+    Random.run {
+      val schedule = Schedule.fixed(1000.millis).jitter(Double.PositiveInfinity)
+      val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+      all(delays) shouldBe 1000.millis
+    }
   }
 
   "Schedule.exponential" should "cap at max when overflow produces infinite duration" in {

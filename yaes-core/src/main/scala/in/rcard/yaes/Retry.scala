@@ -1,6 +1,5 @@
 package in.rcard.yaes
 
-import java.util.concurrent.ThreadLocalRandom
 import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
 
@@ -153,6 +152,9 @@ object Schedule {
       * bound of the jitter range is simply floored at 0ms (e.g., factor 1.5 on a 1s delay
       * produces delays in `[0ms, 2500ms]`). Negative factors are treated as 0.0 (no jitter).
       *
+      * This method introduces a `Random` effect dependency. The returned schedule must be used
+      * inside a `Random.run` scope.
+      *
       * Example:
       * {{{
       * val schedule = Schedule.fixed(1.second).jitter(0.5)
@@ -165,7 +167,7 @@ object Schedule {
       * @return
       *   a schedule with random jitter applied to each delay
       */
-    def jitter(factor: Double): Schedule = new Schedule {
+    def jitter(factor: Double)(using Random): Schedule = new Schedule {
       // Treat non-finite values as no jitter; clamp negatives to 0.0
       private val effectiveFactor =
         if factor.isNaN || factor.isInfinite then 0.0
@@ -178,7 +180,7 @@ object Schedule {
           else {
             val minMillis      = math.max(0.0, millis * (1.0 - effectiveFactor))
             val maxMillis      = millis * (1.0 + effectiveFactor)
-            val jittered       = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
+            val jittered       = minMillis + Random.nextDouble * (maxMillis - minMillis)
             val NanosPerMilli  = 1_000_000L
             val jitteredNanos  = (jittered * NanosPerMilli).toLong
             Duration.fromNanos(jitteredNanos)
@@ -250,7 +252,7 @@ object Retry {
 
     def apply[A](schedule: Schedule)(
         block: Raise[E] ?=> A
-    )(using Async, Raise[E]): A = {
+    )(using Async, Raise[E], Random): A = {
 
       @tailrec
       def loop(attempt: Int): A = {

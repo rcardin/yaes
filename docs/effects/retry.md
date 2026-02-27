@@ -35,7 +35,7 @@ If the block succeeds on any attempt, its value is returned immediately. If all 
 
 ## Schedule Policies
 
-A `Schedule` is a trait that computes `Option[Duration]` for each retry attempt. Schedules are deterministic by default; the `jitter` extension introduces non-determinism by adding random variation to each delay. Attempts are 1-indexed: attempt 1 is the first retry after the initial failure.
+A `Schedule` is a trait that computes `Option[Duration]` for each retry attempt. Schedules are deterministic by default; the `jitter` extension introduces controlled randomness via the `Random` effect, adding variation to each delay. Attempts are 1-indexed: attempt 1 is the first retry after the initial failure.
 
 ### Fixed Delay
 
@@ -84,7 +84,7 @@ val schedule = Schedule.fixed(1.second).jitter(0.5)
 // Each delay will be random in [500ms, 1500ms]
 ```
 
-The `factor` parameter controls the range as a fraction of the base delay. A factor of `0.5` on a 1-second delay produces delays in `[500ms, 1500ms]`.
+The `factor` parameter controls the range as a fraction of the base delay. A factor of `0.5` on a 1-second delay produces delays in `[500ms, 1500ms]`. The `jitter` extension requires the `Random` effect in scope.
 
 ## Composing Schedules
 
@@ -105,6 +105,7 @@ val schedule = Schedule
 ```scala
 import in.rcard.yaes.Async.*
 import in.rcard.yaes.Raise.*
+import in.rcard.yaes.Random.*
 import scala.concurrent.duration.*
 
 sealed trait HttpError
@@ -113,14 +114,16 @@ case class ServerError(code: Int)  extends HttpError
 
 def fetchData(url: String)(using Raise[HttpError], Async): String = ???
 
-val result: Either[HttpError, String] = Async.run {
-  Raise.either {
-    Retry[HttpError](
-      Schedule.exponential(100.millis, factor = 2.0, max = 5.seconds)
-        .jitter(0.5)
-        .attempts(5)
-    ) {
-      fetchData("https://api.example.com/data")
+val result: Either[HttpError, String] = Random.run {
+  Async.run {
+    Raise.either {
+      Retry[HttpError](
+        Schedule.exponential(100.millis, factor = 2.0, max = 5.seconds)
+          .jitter(0.5)
+          .attempts(5)
+      ) {
+        fetchData("https://api.example.com/data")
+      }
     }
   }
 }
