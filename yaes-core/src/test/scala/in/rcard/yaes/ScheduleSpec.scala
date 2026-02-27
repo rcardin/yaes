@@ -110,6 +110,19 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     all(delays) shouldBe 1000.millis
   }
 
+  it should "treat negative factor as no jitter" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(-0.5)
+    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+    all(delays) shouldBe 1000.millis
+  }
+
+  it should "clamp lower bound at zero when factor exceeds 1.0" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(1.5)
+    // factor 1.5 on 1s: range is [max(0, 1000*(1-1.5)), 1000*(1+1.5)] = [0ms, 2500ms]
+    val delays = (1 to 1000).flatMap(_ => schedule.delay(1))
+    all(delays.map(_.toMillis)) should (be >= 0L and be <= 2500L)
+  }
+
   it should "handle zero-duration base delay without throwing" in {
     val schedule = Schedule.fixed(Duration.Zero).jitter(0.5)
     val delays = (1 to 100).flatMap(_ => schedule.delay(1))

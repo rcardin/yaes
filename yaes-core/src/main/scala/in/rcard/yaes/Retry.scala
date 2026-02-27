@@ -4,8 +4,8 @@ import java.util.concurrent.ThreadLocalRandom
 import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
 
-/** A retry policy that computes the delay for each attempt.
-  * Attempts are 1-indexed: attempt 1 is the first retry after the initial failure.
+/** A retry policy that computes the delay for each attempt. Attempts are 1-indexed: attempt 1 is
+  * the first retry after the initial failure.
   *
   * Example:
   * {{{
@@ -20,8 +20,10 @@ trait Schedule {
 
   /** Returns the delay before the next attempt, or None to stop retrying.
     *
-    * @param attempt the retry attempt number (1-indexed)
-    * @return Some(delay) to retry after the given delay, or None to stop
+    * @param attempt
+    *   the retry attempt number (1-indexed)
+    * @return
+    *   Some(delay) to retry after the given delay, or None to stop
     */
   def delay(attempt: Int): Option[Duration]
 }
@@ -37,8 +39,10 @@ object Schedule {
     * schedule.delay(100) // Some(500.millis)
     * }}}
     *
-    * @param interval the constant delay between retries
-    * @return a schedule with fixed delay
+    * @param interval
+    *   the constant delay between retries
+    * @return
+    *   a schedule with fixed delay
     */
   def fixed(interval: Duration): Schedule = new Schedule {
     def delay(attempt: Int): Option[Duration] =
@@ -46,8 +50,8 @@ object Schedule {
       else Some(interval)
   }
 
-  /** The maximum delay cap used when no explicit max is provided. Prevents overflow from
-    * producing infinite or excessively large durations in unbounded exponential schedules.
+  /** The maximum delay cap used when no explicit max is provided. Prevents overflow from producing
+    * infinite or excessively large durations in unbounded exponential schedules.
     */
   private val MaxDelayCap: Duration = Duration(24, "hours")
 
@@ -61,10 +65,14 @@ object Schedule {
     * schedule.delay(3) // Some(400.millis)
     * }}}
     *
-    * @param initial the delay before the first retry
-    * @param factor the multiplier applied on each attempt (default 2.0)
-    * @param max the maximum delay cap (default 24 hours)
-    * @return a schedule with exponential backoff
+    * @param initial
+    *   the delay before the first retry
+    * @param factor
+    *   the multiplier applied on each attempt (default 2.0)
+    * @param max
+    *   the maximum delay cap (default 24 hours)
+    * @return
+    *   a schedule with exponential backoff
     */
   def exponential(
       initial: Duration,
@@ -82,8 +90,8 @@ object Schedule {
 
   extension (self: Schedule) {
 
-    /** Limits the total number of executions (1 initial + N-1 retries).
-      * `attempts(3)` means: 1 initial try + up to 2 retries = 3 total executions.
+    /** Limits the total number of executions (1 initial + N-1 retries). `attempts(3)` means: 1
+      * initial try + up to 2 retries = 3 total executions.
       *
       * Example:
       * {{{
@@ -93,8 +101,10 @@ object Schedule {
       * schedule.delay(3) // None — stop (3 total executions reached)
       * }}}
       *
-      * @param n the maximum number of total executions (must be >= 0)
-      * @return a schedule that stops after n total executions
+      * @param n
+      *   the maximum number of total executions (must be >= 0)
+      * @return
+      *   a schedule that stops after n total executions
       */
     def attempts(n: Int): Schedule = new Schedule {
       def delay(attempt: Int): Option[Duration] =
@@ -103,7 +113,12 @@ object Schedule {
         else self.delay(attempt)
     }
 
-    /** Adds random jitter to each delay.
+    /** Adds random jitter to each delay. The jittered delay is uniformly distributed in
+      * `[delay * (1 - factor), delay * (1 + factor)]`, clamped so it never goes below zero.
+      *
+      * Typical factors are in `[0.0, 1.0]`. Values greater than 1.0 are accepted — the lower
+      * bound of the jitter range is simply floored at 0ms (e.g., factor 1.5 on a 1s delay
+      * produces delays in `[0ms, 2500ms]`). Negative factors are treated as 0.0 (no jitter).
       *
       * Example:
       * {{{
@@ -111,31 +126,24 @@ object Schedule {
       * // Delays will be random in [500ms, 1500ms]
       * }}}
       *
-      * @param factor jitter range as a fraction of the delay (0.0 to 1.0).
-      *               A factor of 0.5 on a 1s delay produces delays in [500ms, 1500ms].
-      * @return a schedule with random jitter applied to each delay
+      * @param factor
+      *   jitter range as a fraction of the delay. A factor of 0.5 on a 1s delay produces delays
+      *   in [500ms, 1500ms]. Negative values are treated as 0.0.
+      * @return
+      *   a schedule with random jitter applied to each delay
       */
     def jitter(factor: Double): Schedule = new Schedule {
+      private val effectiveFactor = math.max(0.0, factor)
       def delay(attempt: Int): Option[Duration] =
         self.delay(attempt).map { d =>
-          // Clamp factor to [0.0, 1.0] and treat non-finite values as no jitter.
-          val clampedFactor =
-            if java.lang.Double.isNaN(factor) || java.lang.Double.isInfinite(factor) then 0.0
-            else if factor <= 0.0 then 0.0
-            else if factor >= 1.0 then 1.0
-            else factor
-
-          // Ensure we don't jitter negative durations and avoid zero-width ranges.
-          val millis = math.max(0.0, d.toMillis.toDouble)
-          if clampedFactor == 0.0 || millis == 0.0 then d
+          val millis = d.toMillis.toDouble
+          if effectiveFactor == 0.0 || millis == 0.0 then d
           else {
-            val minMillis = millis * (1.0 - clampedFactor)
-            val maxMillis = millis * (1.0 + clampedFactor)
-            // At this point, millis > 0 and clampedFactor > 0, so minMillis < maxMillis and both are >= 0.
-            val jittered       = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
-            val NanosPerMilli  = 1_000_000L
-            val jitteredNanos  = (jittered * NanosPerMilli).toLong
-            Duration.fromNanos(jitteredNanos)
+            val minMillis     = math.max(0.0, millis * (1.0 - effectiveFactor))
+            val maxMillis     = millis * (1.0 + effectiveFactor)
+            val jittered      = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
+            val NanosPerMilli = 1_000_000L
+            Duration.fromNanos((jittered * NanosPerMilli).toLong)
           }
         }
     }
@@ -166,8 +174,8 @@ object Retry {
 
   /** Retries the block on typed errors of type `E` according to the given schedule.
     *
-    * Only errors raised via `Raise[E]` trigger a retry. Other effects and error types in scope
-    * are not intercepted.
+    * Only errors raised via `Raise[E]` trigger a retry. Other effects and error types in scope are
+    * not intercepted.
     *
     * If all attempts are exhausted, the last error is re-raised via the outer `Raise[E]`.
     *
@@ -183,17 +191,22 @@ object Retry {
     * }
     * }}}
     *
-    * @tparam E the error type to retry on
-    * @param schedule the retry policy
-    * @param block the computation to retry
-    * @return the result of the first successful attempt
+    * @tparam E
+    *   the error type to retry on
+    * @param schedule
+    *   the retry policy
+    * @param block
+    *   the computation to retry
+    * @return
+    *   the result of the first successful attempt
     */
   def apply[E]: RetryPartiallyApplied[E] = new RetryPartiallyApplied[E]
 
-  /** Partially applied class to allow `Retry[E](schedule)(block)` syntax with proper
-    * type inference.
+  /** Partially applied class to allow `Retry[E](schedule)(block)` syntax with proper type
+    * inference.
     *
-    * @tparam E the error type to retry on
+    * @tparam E
+    *   the error type to retry on
     */
   class RetryPartiallyApplied[E] {
 
