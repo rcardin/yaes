@@ -48,7 +48,7 @@ class RetrySpec extends AnyFlatSpec with Matchers {
 
   it should "delay between retries using the schedule" in {
     var attempts = 0
-    val startTime = java.lang.System.currentTimeMillis()
+    val startTime = java.lang.System.nanoTime()
     val result = Async.run {
       Raise.either[String, Int] {
         Retry[String](Schedule.fixed(100.millis).attempts(3)) {
@@ -57,7 +57,7 @@ class RetrySpec extends AnyFlatSpec with Matchers {
         }
       }
     }
-    val elapsed = java.lang.System.currentTimeMillis() - startTime
+    val elapsed = (java.lang.System.nanoTime() - startTime) / 1_000_000L
     // 2 retries with 100ms delays = at least ~200ms
     elapsed should be >= 150L
     result shouldBe Left("error-3")
