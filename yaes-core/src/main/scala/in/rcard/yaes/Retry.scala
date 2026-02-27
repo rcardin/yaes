@@ -52,8 +52,10 @@ object Schedule {
 
   /** Exponential backoff: initial * factor^(attempt-1), capped at max.
     *
-    * When the computed delay overflows to a non-finite value (e.g., due to very large attempt
-    * numbers), the previous finite delay is returned instead.
+    * The delay for attempt `n` is computed as `initial * factor^(n - 1)`. When this computed delay
+    * overflows to a non-finite value (e.g., due to very large attempt numbers), the schedule
+    * returns `max` if it is finite, or a large finite cap (`Duration.fromNanos(Long.MaxValue)`)
+    * if `max` is infinite.
     *
     * Example:
     * {{{
