@@ -44,16 +44,25 @@ object Schedule {
     * @return
     *   a schedule with fixed delay
     */
-  def fixed(interval: Duration): Schedule = new Schedule {
-    def delay(attempt: Int): Option[Duration] =
-      if attempt <= 0 then None
-      else Some(interval)
+  def fixed(interval: Duration): Schedule = {
+    // Clamp invalid inputs: negative or non-finite intervals default to Duration.Zero
+    val safeInterval =
+      if interval.isFinite && interval >= Duration.Zero then interval
+      else Duration.Zero
+
+    new Schedule {
+      def delay(attempt: Int): Option[Duration] =
+        if attempt <= 0 then None
+        else Some(safeInterval)
+    }
   }
 
   /** Exponential backoff: initial * factor^(attempt-1), capped at max.
     *
-    * When the computed delay overflows to a non-finite value (e.g., due to very large attempt
-    * numbers), the previous finite delay is returned instead.
+    * The delay for attempt `n` is computed as `initial * factor^(n - 1)`. When this computed delay
+    * overflows to a non-finite value (e.g., due to very large attempt numbers), the schedule
+    * returns `max` if it is finite, or a large finite cap (`Duration.fromNanos(Long.MaxValue)`)
+    * if `max` is infinite.
     *
     * Example:
     * {{{
@@ -64,11 +73,14 @@ object Schedule {
     * }}}
     *
     * @param initial
-    *   the delay before the first retry
+    *   the delay before the first retry. Negative or non-finite values are clamped to
+    *   `Duration.Zero`.
     * @param factor
-    *   the multiplier applied on each attempt (default 2.0)
+    *   the multiplier applied on each attempt (default 2.0). Non-positive, `NaN`, or infinite
+    *   values default to `2.0`.
     * @param max
-    *   the maximum delay cap (default Duration.Inf, meaning no cap)
+    *   the maximum delay cap (default `Duration.Inf`, meaning no cap). Negative values are clamped
+    *   to `Duration.Zero`.
     * @return
     *   a schedule with exponential backoff
     */
@@ -76,17 +88,33 @@ object Schedule {
       initial: Duration,
       factor: Double = 2.0,
       max: Duration = Duration.Inf
-  ): Schedule = new Schedule {
-    private val finiteCap: Duration = Duration.fromNanos(Long.MaxValue)
+  ): Schedule = {
+    // Clamp invalid inputs to sensible defaults
+    val safeInitial =
+      if initial.isFinite && initial >= Duration.Zero then initial
+      else Duration.Zero
 
-    def delay(attempt: Int): Option[Duration] =
-      if attempt <= 0 then None
-      else {
-        val computed = initial * Math.pow(factor, (attempt - 1).toDouble)
-        if !computed.isFinite then Some(if max.isFinite then max else finiteCap)
-        else if max.isFinite && computed > max then Some(max)
-        else Some(computed)
-      }
+    val safeFactor =
+      if factor > 0.0 && !factor.isInfinity && !factor.isNaN then factor
+      else 2.0
+
+    val safeMax =
+      if max == Duration.Inf then Duration.Inf
+      else if max.isFinite && max >= Duration.Zero then max
+      else Duration.Zero
+
+    new Schedule {
+      private val finiteCap: Duration = Duration.fromNanos(Long.MaxValue)
+
+      def delay(attempt: Int): Option[Duration] =
+        if attempt <= 0 then None
+        else {
+          val computed = safeInitial * Math.pow(safeFactor, (attempt - 1).toDouble)
+          if !computed.isFinite then Some(if safeMax.isFinite then safeMax else finiteCap)
+          else if safeMax.isFinite && computed > safeMax then Some(safeMax)
+          else Some(computed)
+        }
+    }
   }
 
   extension (self: Schedule) {
@@ -138,17 +166,22 @@ object Schedule {
       *   a schedule with random jitter applied to each delay
       */
     def jitter(factor: Double): Schedule = new Schedule {
-      private val effectiveFactor = math.max(0.0, factor)
+      // Treat non-finite values as no jitter; clamp negatives to 0.0
+      private val effectiveFactor =
+        if factor.isNaN || factor.isInfinite then 0.0
+        else math.max(0.0, factor)
+
       def delay(attempt: Int): Option[Duration] =
         self.delay(attempt).map { d =>
-          val millis = d.toMillis.toDouble
+          val millis = math.max(0.0, d.toMillis.toDouble)
           if effectiveFactor == 0.0 || millis == 0.0 then d
           else {
-            val minMillis     = math.max(0.0, millis * (1.0 - effectiveFactor))
-            val maxMillis     = millis * (1.0 + effectiveFactor)
-            val jittered      = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
-            val NanosPerMilli = 1_000_000L
-            Duration.fromNanos((jittered * NanosPerMilli).toLong)
+            val minMillis      = math.max(0.0, millis * (1.0 - effectiveFactor))
+            val maxMillis      = millis * (1.0 + effectiveFactor)
+            val jittered       = ThreadLocalRandom.current().nextDouble(minMillis, maxMillis)
+            val NanosPerMilli  = 1_000_000L
+            val jitteredNanos  = (jittered * NanosPerMilli).toLong
+            Duration.fromNanos(jitteredNanos)
           }
         }
     }

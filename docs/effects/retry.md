@@ -35,7 +35,7 @@ If the block succeeds on any attempt, its value is returned immediately. If all 
 
 ## Schedule Policies
 
-A `Schedule` is a pure trait that computes `Option[Duration]` for each retry attempt. Attempts are 1-indexed: attempt 1 is the first retry after the initial failure.
+A `Schedule` is a trait that computes `Option[Duration]` for each retry attempt. Schedules are deterministic by default; the `jitter` extension introduces non-determinism by adding random variation to each delay. Attempts are 1-indexed: attempt 1 is the first retry after the initial failure.
 
 ### Fixed Delay
 

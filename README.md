@@ -122,7 +122,7 @@ The library is only available for Scala 3 and is currently in an experimental st
 
 ## Usage
 
-The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
+The library provides a set of effects and handlers that can be used to define and handle effectful computations. The available effects are:
 
 - [`Sync`](#the-sync-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
@@ -136,6 +136,9 @@ The library provides a set of effects that can be used to define and handle effe
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
+
+The library also provides the following handlers that orchestrate existing effects:
+
 - [`Retry`](#the-retry-handler): Retries failing blocks according to composable schedule policies.
 
 ### YaesApp: Common Entry Point

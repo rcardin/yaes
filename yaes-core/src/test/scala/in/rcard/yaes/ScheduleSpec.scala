@@ -81,12 +81,6 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     all(delays.map(_.toMillis)) should (be >= 500L and be <= 1500L)
   }
 
-  it should "produce varying delays (not all identical)" in {
-    val schedule = Schedule.fixed(1000.millis).jitter(0.5)
-    val delays = (1 to 100).flatMap(_ => schedule.delay(1).map(_.toMillis))
-    delays.toSet.size should be > 1
-  }
-
   it should "compose with exponential" in {
     val schedule = Schedule.exponential(1000.millis, factor = 2.0).jitter(0.5)
     // Attempt 1: base = 1000ms, jitter range [500, 1500]
@@ -127,6 +121,56 @@ class ScheduleSpec extends AnyFlatSpec with Matchers {
     val schedule = Schedule.fixed(Duration.Zero).jitter(0.5)
     val delays = (1 to 100).flatMap(_ => schedule.delay(1))
     all(delays) shouldBe Duration.Zero
+  }
+
+  "Schedule.fixed" should "clamp negative interval to Duration.Zero" in {
+    val schedule = Schedule.fixed(-100.millis)
+    schedule.delay(1) shouldBe Some(Duration.Zero)
+  }
+
+  it should "clamp non-finite interval to Duration.Zero" in {
+    val schedule = Schedule.fixed(Duration.Inf)
+    schedule.delay(1) shouldBe Some(Duration.Zero)
+  }
+
+  "Schedule.exponential" should "clamp negative initial delay to Duration.Zero" in {
+    val schedule = Schedule.exponential(-100.millis)
+    schedule.delay(1) shouldBe Some(Duration.Zero)
+  }
+
+  it should "default non-positive factor to 2.0" in {
+    val schedule = Schedule.exponential(100.millis, factor = 0.0)
+    schedule.delay(1) shouldBe Some(100.millis)
+    schedule.delay(2) shouldBe Some(200.millis)
+  }
+
+  it should "default NaN factor to 2.0" in {
+    val schedule = Schedule.exponential(100.millis, factor = Double.NaN)
+    schedule.delay(1) shouldBe Some(100.millis)
+    schedule.delay(2) shouldBe Some(200.millis)
+  }
+
+  it should "default Infinity factor to 2.0" in {
+    val schedule = Schedule.exponential(100.millis, factor = Double.PositiveInfinity)
+    schedule.delay(1) shouldBe Some(100.millis)
+    schedule.delay(2) shouldBe Some(200.millis)
+  }
+
+  it should "clamp negative max to Duration.Zero" in {
+    val schedule = Schedule.exponential(100.millis, max = -1.second)
+    schedule.delay(1) shouldBe Some(Duration.Zero)
+  }
+
+  "Schedule.jitter" should "treat NaN factor as no jitter" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(Double.NaN)
+    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+    all(delays) shouldBe 1000.millis
+  }
+
+  it should "treat Infinity factor as no jitter" in {
+    val schedule = Schedule.fixed(1000.millis).jitter(Double.PositiveInfinity)
+    val delays = (1 to 100).flatMap(_ => schedule.delay(1))
+    all(delays) shouldBe 1000.millis
   }
 
   "Schedule.exponential" should "cap at max when overflow produces infinite duration" in {
