@@ -252,7 +252,7 @@ object Retry {
 
     def apply[A](schedule: Schedule)(
         block: Raise[E] ?=> A
-    )(using Async, Raise[E], Random): A = {
+    )(using Async, Raise[E]): A = {
 
       @tailrec
       def loop(attempt: Int): A = {
