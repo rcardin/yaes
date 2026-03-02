@@ -39,7 +39,7 @@ class AsyncParTraverseSpec extends AnyFlatSpec with Matchers {
     val result = Async.run {
       Async.parTraverse(Seq(1, 2, 3)) { x =>
         // Element 1 is slowest, element 3 is fastest
-        Async.delay((100 * (4 - x)).millis)
+        Async.delay((500 * (4 - x)).millis)
         executionOrder.add(x)
         x * 10
       }
