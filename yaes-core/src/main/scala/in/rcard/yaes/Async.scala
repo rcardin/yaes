@@ -452,7 +452,13 @@ object Async {
     val fibers = items.zipWithIndex.map { case (a, idx) =>
       fork(s"parTraverse-$idx")(f(a))
     }
-    fibers.foreach(_.join())
+    try {
+      fibers.foreach(_.join())
+    } catch {
+      case t: Throwable =>
+        fibers.foreach(_.cancel())
+        throw t
+    }
     fibers.map(_.unsafeValue)
   }
 
