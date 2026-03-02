@@ -2,7 +2,7 @@ package in.rcard.yaes.http.circe
 
 import in.rcard.yaes.*
 import in.rcard.yaes.http.server.{BodyCodec, DecodingError}
-import io.circe.{Encoder, Decoder}
+import io.circe.{Encoder, Decoder, ParsingFailure, DecodingFailure}
 import io.circe.syntax.*
 import io.circe.parser.decode as circeDecode
 
@@ -34,9 +34,12 @@ import io.circe.parser.decode as circeDecode
  *
  * Error mapping:
  *   - If Circe successfully decodes the JSON, the resulting value of type `A` is returned.
- *   - If Circe returns a failure, the underlying error is wrapped into
+ *   - If Circe returns a [[io.circe.ParsingFailure]] (invalid JSON syntax), it is mapped to
  *     [[in.rcard.yaes.http.server.DecodingError.ParseError]] with the original message and
- *     exception attached (when available).
+ *     exception attached.
+ *   - If Circe returns a [[io.circe.DecodingFailure]] (valid JSON but wrong shape, e.g. missing
+ *     fields), it is mapped to [[in.rcard.yaes.http.server.DecodingError.ValidationError]]
+ *     with the original message.
  */
 given circeBodyCodec[A](using encoder: Encoder[A], decoder: Decoder[A]): BodyCodec[A] with {
   def contentType: String = "application/json"
@@ -46,7 +49,9 @@ given circeBodyCodec[A](using encoder: Encoder[A], decoder: Decoder[A]): BodyCod
   def decode(body: String): A raises DecodingError =
     circeDecode[A](body) match {
       case Right(value) => value
-      case Left(error) =>
+      case Left(error: ParsingFailure) =>
         Raise.raise(DecodingError.ParseError(error.getMessage, Some(error)))
+      case Left(error: DecodingFailure) =>
+        Raise.raise(DecodingError.ValidationError(error.getMessage))
     }
 }

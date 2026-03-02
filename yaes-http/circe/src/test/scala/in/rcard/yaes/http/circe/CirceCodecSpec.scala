@@ -37,13 +37,13 @@ class CirceCodecSpec extends AnyFlatSpec with Matchers {
     result.left.get.asInstanceOf[DecodingError.ParseError].cause shouldBe defined
   }
 
-  it should "raise ParseError for JSON with missing fields" in {
+  it should "raise ValidationError for JSON with missing fields" in {
     val codec = summon[BodyCodec[User]]
     val result = Raise.either {
       codec.decode("""{"name":"Alice"}""")
     }
     result.isLeft shouldBe true
-    result.left.get shouldBe a[DecodingError.ParseError]
+    result.left.get shouldBe a[DecodingError.ValidationError]
   }
 
   it should "have content type application/json" in {

@@ -6,7 +6,7 @@ JSON body codec integration for the λÆS HTTP server using [Circe](https://circ
 - **Automatic BodyCodec derivation** - Any type with Circe `Encoder` and `Decoder` gets a `BodyCodec` for free
 - **Compact JSON encoding** - Values are serialized using `asJson.noSpaces`
 - **Content-Type handling** - Automatically sets `Content-Type: application/json`
-- **Error mapping** - Circe decoding failures are mapped to `DecodingError.ParseError`
+- **Error mapping** - Circe `ParsingFailure` maps to `DecodingError.ParseError`, `DecodingFailure` maps to `DecodingError.ValidationError`
 
 **Requirements:**
 - Java 25+ (for Virtual Threads and Structured Concurrency)
@@ -22,6 +22,12 @@ Add `yaes-http-circe` to your project dependencies:
 ```scala
 libraryDependencies += "in.rcard.yaes" %% "yaes-http-circe" % "0.15.0"
 ```
+
+If you need Circe's automatic derivation features, also include `circe-generic`:
+
+```scala
+libraryDependencies += "io.circe" %% "circe-generic" % "0.14.15"
+``` 
 
 > Check [Maven Central](https://central.sonatype.com/artifact/in.rcard.yaes/yaes-http-circe_3) for the latest version.
 
@@ -84,7 +90,7 @@ This instance implements the three methods of the `BodyCodec` trait:
 |---|---|
 | `contentType` | Returns `"application/json"` |
 | `encode(value: A)` | Serializes using `value.asJson.noSpaces` (compact JSON) |
-| `decode(body: String)` | Parses using Circe's `decode[A]`, raising `DecodingError.ParseError` on failure |
+| `decode(body: String)` | Parses using Circe's `decode[A]`, raising `DecodingError.ParseError` for invalid JSON syntax or `DecodingError.ValidationError` for schema mismatches |
 
 Because the instance is parameterized over `A`, it works for **any** type with the required Circe typeclasses — no per-type boilerplate is needed.
 
@@ -134,7 +140,7 @@ codec.encode(Person("Alice", Address("123 Main St", "Springfield")))
 
 ## Error Handling
 
-When JSON decoding fails, the codec raises a `DecodingError.ParseError` with the original Circe error message and exception attached. Use `Raise.fold` to handle decoding errors in your routes:
+When JSON decoding fails, the codec raises the appropriate `DecodingError` variant. A `ParsingFailure` (invalid JSON syntax) becomes `DecodingError.ParseError` with the original exception attached, while a `DecodingFailure` (valid JSON but wrong shape) becomes `DecodingError.ValidationError`. Use `Raise.fold` to handle decoding errors in your routes:
 
 ```scala
 POST(p"/users") { req =>
@@ -152,8 +158,8 @@ Common failure scenarios:
 | Scenario | Example Input | Result |
 |---|---|---|
 | Malformed JSON | `"not json at all"` | `DecodingError.ParseError` with parse error message |
-| Missing required fields | `{"name":"Alice"}` (missing `age`) | `DecodingError.ParseError` with missing field message |
-| Wrong field types | `{"name":"Alice","age":"thirty"}` | `DecodingError.ParseError` with type mismatch message |
+| Missing required fields | `{"name":"Alice"}` (missing `age`) | `DecodingError.ValidationError` with missing field message |
+| Wrong field types | `{"name":"Alice","age":"thirty"}` | `DecodingError.ValidationError` with type mismatch message |
 
 ---
 
