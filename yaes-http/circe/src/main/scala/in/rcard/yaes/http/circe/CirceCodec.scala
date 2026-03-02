@@ -13,9 +13,13 @@ import io.circe.parser.decode as circeDecode
  * This codec:
  *   - Encodes values of type `A` as compact JSON using Circe (`asJson.noSpaces`).
  *   - Sets the HTTP `Content-Type` header to `application/json`.
- *   - Decodes JSON bodies using Circe's `decode`, mapping failures to
- *     [[in.rcard.yaes.http.server.DecodingError.ParseError]].
- *
+ *   - Decodes JSON bodies using Circe's `decode`, mapping failures to:
+ *     - If Circe returns a [[io.circe.ParsingFailure]] (invalid JSON syntax), it is mapped to
+ *       [[in.rcard.yaes.http.server.DecodingError.ParseError]] with the original message and
+ *       exception attached.
+ *     - If Circe returns a [[io.circe.DecodingFailure]] (valid JSON but wrong shape, e.g. missing
+ *       fields), it is mapped to [[in.rcard.yaes.http.server.DecodingError.ValidationError]]
+ *       with the original message.
  * Usage:
  * {{{
  *   import io.circe.{Encoder, Decoder}
