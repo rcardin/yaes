@@ -14,7 +14,7 @@ JSON body codec integration for the λÆS HTTP server using [Circe](https://circ
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-circe" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-circe" % "0.15.0"
 ```
 
 This module depends on `yaes-http-server` and `circe-core`/`circe-generic`/`circe-parser` (included transitively).
