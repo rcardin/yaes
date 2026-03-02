@@ -17,7 +17,11 @@ Add the dependency to your `build.sbt`:
 libraryDependencies += "in.rcard.yaes" %% "yaes-http-circe" % "0.15.0"
 ```
 
-This module depends on `yaes-http-server` and `circe-core`/`circe-generic`/`circe-parser` (included transitively).
+This module depends on `yaes-http-server` and `circe-core`/`circe-parser` (included transitively). If you want to use Circe's automatic derivation features, also include `circe-generic`:
+
+```scala
+libraryDependencies += "io.circe" %% "circe-generic" % "0.14.15"
+```
 
 ## Quick Start
 
