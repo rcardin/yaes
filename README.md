@@ -87,31 +87,31 @@ The library is available on Maven Central. To use it, add the following dependen
 **For effects only** (Raise, Async, Sync, etc.):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.15.0"
 ```
 
 **For effects + data structures** (Flow, Channel, and reactive streams):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.15.0"
 ```
 
 **For Cats integration** (includes all effects and data structures):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.15.0"
 ```
 
 **For SLF4J logging integration** (delegates `Log` effect to any SLF4J backend):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.15.0"
 ```
 
 **For HTTP Server based on λÆS effects**:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.15.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
@@ -122,7 +122,7 @@ The library is only available for Scala 3 and is currently in an experimental st
 
 ## Usage
 
-The library provides a set of effects that can be used to define and handle effectful computations. The available effects are:
+The library provides a set of effects and handlers that can be used to define and handle effectful computations. The available effects are:
 
 - [`Sync`](#the-sync-effect): Allows for running side-effecting operations.
 - [`Async`](#the-async-effect): Allows for asynchronous computations and fiber management.
@@ -136,6 +136,10 @@ The library provides a set of effects that can be used to define and handle effe
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
+
+The library also provides the following handlers that orchestrate existing effects:
+
+- [`Retry`](#the-retry-handler): Retries failing blocks according to composable schedule policies.
 
 ### YaesApp: Common Entry Point
 
@@ -346,9 +350,42 @@ Trying to get the value from a canceled fiber will raise a `Cancelled` error. Ho
 
 Using the `Async.fork` DSL is quite low-level. The library provides a set of structured concurrency primitives that can be used to define more complex asynchronous computations. The available primitives are:
 
-- `Async.par`: Runs two asynchronous computations in parallel and returns both .
+- `Async.par`: Runs two asynchronous computations in parallel and returns both.
 - `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
+- `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
+
+#### Parallel Traversal
+
+When you need to apply the same operation to every element of a collection in parallel, use `Async.parTraverse`. It forks one fiber per element, waits for all to finish, and returns the results **in the same order as the input**. If any computation fails, the remaining fibers are automatically cancelled (fail-fast):
+
+```scala 3
+import in.rcard.yaes.Async.*
+
+case class UserProfile(id: Int, name: String)
+def fetchUserProfile(id: Int)(using Async): UserProfile = ???
+
+val profiles: Seq[UserProfile] = Async.run {
+  Async.parTraverse(List(1, 2, 3, 4, 5))(fetchUserProfile)
+}
+```
+
+`parTraverse` also composes seamlessly with other effects such as `Raise`:
+
+```scala 3
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+
+def validateAndFetch(id: Int)(using Async, Raise[String]): UserProfile =
+  if (id <= 0) Raise.raise(s"Invalid id: $id")
+  else fetchUserProfile(id)
+
+val result: Either[String, Seq[UserProfile]] = Raise.either {
+  Async.run {
+    Async.parTraverse(List(1, 2, 3))(validateAndFetch)
+  }
+}
+```
 
 #### Graceful Shutdown Integration
 
@@ -1169,6 +1206,69 @@ Slf4jLog.run {
 ```
 
 Level filtering is controlled by the SLF4J backend configuration instead of a handler parameter. See the [yaes-slf4j README](yaes-slf4j/README.md) for full details.
+
+### The Retry Handler
+
+The `Retry` handler re-executes a failing block according to a `Schedule` retry policy. It catches typed errors via `Raise[E]` and uses `Async` for delays between attempts.
+
+> **Note:** `Retry` is not an effect — it orchestrates existing effects (`Raise` and `Async`). The block being retried just runs, succeeds, or fails.
+
+#### Schedule Policies
+
+A `Schedule` computes the delay for each retry attempt. Schedules compose via chaining. The `jitter` extension requires the `Random` effect in scope:
+
+```scala 3
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+import scala.concurrent.duration.*
+
+// Fixed delay
+val fixed = Schedule.fixed(500.millis)
+
+// Exponential backoff with cap
+val exponential = Schedule.exponential(100.millis, factor = 2.0, max = 30.seconds)
+
+// Compose: exponential + jitter + max attempts
+// jitter requires Random in scope; Random.run wraps the entire usage context
+val composed: Either[DbError, String] = Random.run {
+  Async.run {
+    Raise.either {
+      Retry[DbError](
+        Schedule
+          .exponential(100.millis, factor = 2.0, max = 30.seconds)
+          .jitter(0.25)
+          .attempts(5)
+      ) {
+        findUser(42)
+      }
+    }
+  }
+}
+```
+
+#### Using Retry
+
+```scala 3
+import in.rcard.yaes.Async.*
+import in.rcard.yaes.Raise.*
+import scala.concurrent.duration.*
+
+case class DbError(msg: String)
+
+def findUser(id: Int)(using Raise[DbError]): String =
+  Raise.raise(DbError("connection timeout"))
+
+val result: Either[DbError, String] = Async.run {
+  Raise.either {
+    Retry[DbError](Schedule.fixed(500.millis).attempts(3)) {
+      findUser(42)
+    }
+  }
+}
+// result will be Left(DbError("connection timeout")) after 3 total attempts
+```
+
+If the block succeeds on any attempt, its value is returned immediately. If all attempts are exhausted, the last error is re-raised via the outer `Raise[E]`. Only errors of the specified type `E` trigger retries — other error types propagate immediately.
 
 ## Communication Primitives
 

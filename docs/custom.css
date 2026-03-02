@@ -1,55 +1,63 @@
 /* ========================================
-   λÆS Documentation - Custom Theme
-   Modern, Clean, Professional
+   λÆS Documentation - Catppuccin Theme
+   Matching blog.rcard.in design
    ======================================== */
 
-/* CSS Variables */
-:root {
-  /* Light theme colors */
-  --primary-color: #3B82F6;
-  --primary-hover: #2563EB;
-  --bg-color: #FFFFFF;
-  --surface-color: #F9FAFB;
-  --text-primary: #1F2937;
-  --text-secondary: #6B7280;
-  --border-color: #E5E7EB;
-  --code-bg: #F3F4F6;
-  --code-border: #D1D5DB;
-  --sidebar-bg: #FFFFFF;
-  --sidebar-border: #E5E7EB;
-  --link-color: #3B82F6;
-  --link-hover: #2563EB;
-
-  /* Syntax highlighting - Light */
-  --syntax-keyword: #D73A49;
-  --syntax-string: #032F62;
-  --syntax-number: #005CC5;
-  --syntax-function: #6F42C1;
-  --syntax-comment: #6A737D;
+/* CSS Variables - Catppuccin Mocha (dark, default) */
+:root,
+[data-theme="dark"] {
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #181825;
+  --bg-surface: #313244;
+  --bg-hover: #45475a;
+  --text-primary: #cdd6f4;
+  --text-secondary: #a6adc8;
+  --text-muted: #6c7086;
+  --accent-primary: #89b4fa;
+  --accent-hover: #b4d0fb;
+  --accent-green: #a6e3a1;
+  --accent-peach: #fab387;
+  --accent-mauve: #cba6f7;
+  --accent-red: #f38ba8;
+  --accent-yellow: #f9e2af;
+  --accent-teal: #94e2d5;
+  --border-color: #45475a;
+  --border-subtle: #313244;
+  --code-bg: #11111b;
+  --code-border: #313244;
+  --heading-color: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --sidebar-bg: #181825;
 }
 
-[data-theme="dark"] {
-  /* Dark theme colors */
-  --primary-color: #60A5FA;
-  --primary-hover: #3B82F6;
-  --bg-color: #0F172A;
-  --surface-color: #1E293B;
-  --text-primary: #FFFFFF;
-  --text-secondary: #94A3B8;
-  --border-color: #334155;
-  --code-bg: #1E293B;
-  --code-border: #475569;
-  --sidebar-bg: #1E293B;
-  --sidebar-border: #334155;
-  --link-color: #60A5FA;
-  --link-hover: #93C5FD;
-
-  /* Syntax highlighting - Dark */
-  --syntax-keyword: #FF7B72;
-  --syntax-string: #A5D6FF;
-  --syntax-number: #79C0FF;
-  --syntax-function: #D2A8FF;
-  --syntax-comment: #8B949E;
+/* Catppuccin Latte (light) */
+[data-theme="light"] {
+  --bg-primary: #eff1f5;
+  --bg-secondary: #e6e9ef;
+  --bg-surface: #ccd0da;
+  --bg-hover: #bcc0cc;
+  --text-primary: #4c4f69;
+  --text-secondary: #5c5f77;
+  --text-muted: #8c8fa1;
+  --accent-primary: #1e66f5;
+  --accent-hover: #2a6ef6;
+  --accent-green: #40a02b;
+  --accent-peach: #fe640b;
+  --accent-mauve: #8839ef;
+  --accent-red: #d20f39;
+  --accent-yellow: #df8e1d;
+  --accent-teal: #179299;
+  --border-color: #bcc0cc;
+  --border-subtle: #ccd0da;
+  --code-bg: #e6e9ef;
+  --code-border: #ccd0da;
+  --heading-color: #1e1e2e;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --sidebar-bg: #e6e9ef;
 }
 
 /* ========================================
@@ -57,9 +65,11 @@
    ======================================== */
 
 body {
-  background-color: var(--bg-color);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+  font-size: 16px;
+  line-height: 1.6;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -68,8 +78,8 @@ body {
    ======================================== */
 
 .sidebar {
-  background-color: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
+  background-color: var(--sidebar-bg) !important;
+  border-right: 1px solid var(--border-color) !important;
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
@@ -89,42 +99,51 @@ body {
 
 .sidebar-nav a {
   display: block;
-  padding: 0.5rem 1rem;
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-radius: 0.375rem;
-  transition: all 0.2s ease;
-  font-size: 1.5rem;
+  padding: 0.4rem 1rem;
+  color: var(--text-secondary) !important;
+  text-decoration: none !important;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .sidebar-nav a:hover {
-  color: var(--link-hover);
+  color: var(--accent-primary) !important;
+  text-decoration: none !important;
 }
 
 .sidebar-nav a.active {
-  color: var(--primary-color);
-  background-color: var(--surface-color);
+  color: var(--accent-primary) !important;
+  background-color: var(--bg-surface);
   font-weight: 500;
+  border-left: 3px solid var(--accent-primary);
 }
 
 .sidebar-nav a.active:hover {
-  color: var(--primary-hover);
+  color: var(--accent-hover) !important;
 }
 
-/* Sidebar sections (Effects, etc.) */
+/* Sidebar section headers */
 .sidebar-nav > ul > li > strong {
   display: block;
   padding: 1rem 1rem 0.5rem;
-  font-size: 1rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-weight: 600;
 }
 
 /* Nested items under sections */
 .sidebar-nav ul ul {
   padding-left: 0.75rem;
+}
+
+/* Sidebar logo area */
+.app-name-link {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+  letter-spacing: -0.5px;
 }
 
 /* ========================================
@@ -137,24 +156,25 @@ body {
   left: 1rem;
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 50%;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background-color: var(--surface-color);
-  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
   font-size: 1.25rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
   z-index: 100;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .theme-toggle-btn:hover {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  transform: scale(1.1);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background-color: var(--bg-hover);
+  transform: none;
 }
 
 /* ========================================
@@ -168,7 +188,7 @@ body {
 }
 
 .markdown-section {
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
   line-height: 1.7;
   font-size: 1rem;
 }
@@ -180,42 +200,83 @@ body {
 .markdown-section h4,
 .markdown-section h5,
 .markdown-section h6 {
-  color: var(--text-primary);
+  color: var(--heading-color) !important;
   font-weight: 600;
   margin-top: 2rem;
   margin-bottom: 1rem;
 }
 
+[data-theme="dark"] .markdown-section h1,
+[data-theme="dark"] .markdown-section h2,
+[data-theme="dark"] .markdown-section h3,
+[data-theme="dark"] .markdown-section h4,
+[data-theme="dark"] .markdown-section h5,
+[data-theme="dark"] .markdown-section h6 {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .markdown-section h1,
+[data-theme="light"] .markdown-section h2,
+[data-theme="light"] .markdown-section h3,
+[data-theme="light"] .markdown-section h4,
+[data-theme="light"] .markdown-section h5,
+[data-theme="light"] .markdown-section h6 {
+  color: #1e1e2e !important;
+}
+
 .markdown-section h1 {
   font-size: 2.25rem;
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   padding-bottom: 0.5rem;
   margin-top: 0;
+  letter-spacing: -0.5px;
 }
 
 .markdown-section h2 {
-  font-size: 1.875rem;
-  border-bottom: 1px solid var(--border-color);
+  font-size: 1.75rem;
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.375rem;
 }
 
 .markdown-section h3 {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
 }
 
 .markdown-section h4 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
+}
+
+/* Paragraphs */
+.markdown-section p {
+  color: var(--text-primary);
 }
 
 /* Links */
 .markdown-section a {
-  color: var(--link-color);
+  color: var(--accent-primary) !important;
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
 .markdown-section a:hover {
-  color: var(--link-hover);
+  color: var(--accent-hover) !important;
+  text-decoration: underline;
+}
+
+/* Lists */
+.markdown-section ul,
+.markdown-section ol {
+  color: var(--text-primary);
+}
+
+.markdown-section li {
+  color: var(--text-primary);
+}
+
+/* Strong / Bold */
+.markdown-section strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* ========================================
@@ -224,53 +285,60 @@ body {
 
 /* Inline code */
 .markdown-section code {
-  background-color: var(--code-bg);
+  background-color: var(--code-bg) !important;
   border: 1px solid var(--code-border);
-  color: var(--text-primary);
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
+  color: var(--accent-peach) !important;
+  padding: 2px 6px;
+  border-radius: 6px;
   font-size: 0.875em;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
 }
 
 /* Code blocks */
 .markdown-section pre {
-  background-color: var(--code-bg);
+  background-color: var(--code-bg) !important;
   border: 1px solid var(--code-border);
-  border-radius: 0.5rem;
-  padding: 1.25rem;
+  border-radius: 6px;
+  padding: 12px 16px;
   overflow-x: auto;
   line-height: 1.5;
   position: relative;
 }
 
 .markdown-section pre > code {
-  background: none;
+  background: none !important;
   border: none;
   padding: 0;
-  font-size: 0.875rem;
-  color: var(--text-primary);
+  font-size: 14px;
+  color: var(--text-primary) !important;
 }
 
 /* Copy code button */
 .docsify-copy-code-button {
-  background-color: var(--primary-color) !important;
-  color: white !important;
-  border-radius: 0.375rem !important;
+  background-color: var(--bg-surface) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 6px !important;
   font-size: 0.75rem !important;
   padding: 0.375rem 0.75rem !important;
 }
 
 .docsify-copy-code-button:hover {
-  background-color: var(--primary-hover) !important;
+  background-color: var(--bg-hover) !important;
+  color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
 }
 
-/* Syntax highlighting - GitHub style */
+/* ========================================
+   Syntax Highlighting - Catppuccin
+   ======================================== */
+
+/* Dark theme (default) */
 .token.comment,
 .token.prolog,
 .token.doctype,
 .token.cdata {
-  color: var(--syntax-comment);
+  color: #6c7086;
   font-style: italic;
 }
 
@@ -280,12 +348,12 @@ body {
 
 .token.string,
 .token.attr-value {
-  color: var(--syntax-string);
+  color: #a6e3a1;
 }
 
 .token.punctuation,
 .token.operator {
-  color: var(--text-primary);
+  color: #89dceb;
 }
 
 .token.entity,
@@ -298,26 +366,28 @@ body {
 .token.property,
 .token.regex,
 .token.inserted {
-  color: var(--syntax-number);
+  color: #fab387;
 }
 
 .token.atrule,
 .token.keyword,
 .token.attr-name,
 .language-autohotkey .token.selector {
-  color: var(--syntax-keyword);
+  color: #cba6f7;
+  font-weight: bold;
 }
 
 .token.function,
 .token.deleted,
 .language-autohotkey .token.tag {
-  color: var(--syntax-function);
+  color: #89b4fa;
+  font-weight: bold;
 }
 
 .token.tag,
 .token.selector,
 .language-autohotkey .token.keyword {
-  color: var(--syntax-keyword);
+  color: #cba6f7;
 }
 
 .token.important,
@@ -330,11 +400,67 @@ body {
 }
 
 .token.class-name {
-  color: var(--syntax-function);
+  color: #f9e2af;
+  font-weight: bold;
 }
 
 .token.builtin {
-  color: var(--syntax-keyword);
+  color: #f5c2e7;
+}
+
+/* Light theme syntax overrides */
+[data-theme="light"] .token.comment,
+[data-theme="light"] .token.prolog,
+[data-theme="light"] .token.doctype,
+[data-theme="light"] .token.cdata {
+  color: #8c8fa1;
+}
+
+[data-theme="light"] .token.string,
+[data-theme="light"] .token.attr-value {
+  color: #40a02b;
+}
+
+[data-theme="light"] .token.punctuation,
+[data-theme="light"] .token.operator {
+  color: #04a5e5;
+}
+
+[data-theme="light"] .token.entity,
+[data-theme="light"] .token.url,
+[data-theme="light"] .token.symbol,
+[data-theme="light"] .token.number,
+[data-theme="light"] .token.boolean,
+[data-theme="light"] .token.variable,
+[data-theme="light"] .token.constant,
+[data-theme="light"] .token.property,
+[data-theme="light"] .token.regex,
+[data-theme="light"] .token.inserted {
+  color: #fe640b;
+}
+
+[data-theme="light"] .token.atrule,
+[data-theme="light"] .token.keyword,
+[data-theme="light"] .token.attr-name {
+  color: #8839ef;
+}
+
+[data-theme="light"] .token.function,
+[data-theme="light"] .token.deleted {
+  color: #1e66f5;
+}
+
+[data-theme="light"] .token.tag,
+[data-theme="light"] .token.selector {
+  color: #8839ef;
+}
+
+[data-theme="light"] .token.class-name {
+  color: #df8e1d;
+}
+
+[data-theme="light"] .token.builtin {
+  color: #ea76cb;
 }
 
 /* ========================================
@@ -346,22 +472,22 @@ body {
   width: 100%;
   margin: 1.5rem 0;
   border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
+  border-radius: 6px;
   overflow: hidden;
-  background-color: var(--bg-color);
+  background-color: var(--bg-primary);
 }
 
 .markdown-section thead {
-  background-color: var(--surface-color);
+  background-color: var(--bg-surface);
 }
 
 .markdown-section th,
 .markdown-section td {
-  padding: 0.75rem 1rem;
+  padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
   border-right: 1px solid var(--border-color);
-  background-color: var(--bg-color);
+  background-color: var(--bg-primary);
 }
 
 .markdown-section th:last-child,
@@ -372,15 +498,15 @@ body {
 .markdown-section th {
   font-weight: 600;
   color: var(--text-primary);
-  background-color: var(--surface-color);
+  background-color: var(--bg-surface);
 }
 
 .markdown-section tbody tr:nth-child(even) {
-  background-color: var(--surface-color);
+  background-color: var(--bg-secondary);
 }
 
 .markdown-section tbody tr:nth-child(even) td {
-  background-color: var(--surface-color);
+  background-color: var(--bg-secondary);
 }
 
 .markdown-section tr:last-child td {
@@ -388,15 +514,15 @@ body {
 }
 
 /* ========================================
-   Blockquotes & Alerts
+   Blockquotes
    ======================================== */
 
 .markdown-section blockquote {
-  border-left: 4px solid var(--primary-color);
-  background-color: var(--surface-color);
+  border-left: 4px solid var(--accent-mauve);
+  background-color: var(--bg-secondary);
   padding: 1rem 1.25rem;
   margin: 1.5rem 0;
-  border-radius: 0 0.375rem 0.375rem 0;
+  border-radius: 0 6px 6px 0;
 }
 
 .markdown-section blockquote p {
@@ -411,36 +537,33 @@ body {
 .markdown-section img {
   max-width: 100%;
   height: auto;
-  border-radius: 0.5rem;
+  border-radius: 6px;
   margin: 1rem 0;
 }
 
-/* Images with explicit height/width attributes should respect them */
 .markdown-section img[height],
 .markdown-section img[width] {
   height: auto;
   max-height: attr(height);
 }
 
-/* Right-aligned images (like badges) */
 .markdown-section img[align="right"] {
   float: right;
   margin: 0 0 1rem 1rem;
   max-width: 200px;
 }
 
-/* Badge styling for Maven Central, etc. */
+/* Badge styling */
 .markdown-section img[alt*="badge"],
 .markdown-section img[src*="shields.io"],
 .markdown-section img[src*="maven-central"],
 .markdown-section img[src*="javadoc.io"] {
   display: inline-block;
   margin: 0.25rem 0.25rem 0.25rem 0;
-  border-radius: 0.25rem;
+  border-radius: 4px;
   vertical-align: middle;
 }
 
-/* Links containing badges should not add extra spacing */
 .markdown-section a:has(img[src*="shields.io"]),
 .markdown-section a:has(img[src*="maven-central"]),
 .markdown-section a:has(img[src*="javadoc.io"]) {
@@ -453,26 +576,27 @@ body {
    ======================================== */
 
 .search input {
-  background-color: var(--surface-color);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  border-radius: 0.5rem;
+  background-color: var(--bg-surface) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px;
   padding: 0.625rem 1rem;
   width: 100%;
-  transition: all 0.2s ease;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .search input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px rgba(137, 180, 250, 0.15);
 }
 
 .search .results-panel {
   background-color: var(--sidebar-bg);
   border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
 }
 
 .search .matching-post {
@@ -482,7 +606,7 @@ body {
 }
 
 .search .matching-post:hover {
-  background-color: var(--surface-color);
+  background-color: var(--bg-surface);
 }
 
 /* ========================================
@@ -490,20 +614,20 @@ body {
    ======================================== */
 
 .pagination-item {
-  background-color: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   padding: 1rem;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .pagination-item:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .pagination-item a {
-  color: var(--link-color);
+  color: var(--accent-primary);
   text-decoration: none;
 }
 
@@ -532,12 +656,4 @@ body {
   .sidebar-logo img {
     max-width: 140px;
   }
-}
-
-/* ========================================
-   Smooth Transitions
-   ======================================== */
-
-* {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }

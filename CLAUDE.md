@@ -1,36 +1,24 @@
 ## Project Overview
 
-λÆS (Yet Another Effect System) is an experimental effect system for Scala 3 inspired by Algebraic Effects. It uses Scala 3 context parameters and context functions to provide modular, composable effect management with deferred execution.
+λÆS (Yet Another Effect System) is an experimental effect system for Scala 3 inspired by Algebraic Effects. It uses context parameters and context functions for modular, composable effect management with deferred execution.
 
-**Key Concepts:**
-- Effects describe side effects in a type-safe way (e.g., `Random`, `Raise[E]`, `Sync`, `Async`)
-- Effects are managed via **context parameters** (`using` clauses)
-- Execution is **deferred** until handlers run the effects
-- Effects can be handled **one at a time** in any order, allowing fine-grained control
+**Scala Version:** 3.8.1 | **Java Requirement:** Java 25+ (Virtual Threads, Structured Concurrency)
 
-**Scala Version:** 3.8.1
-**Java Requirement:** Java 25+ (for Virtual Threads and Structured Concurrency)
+## Build and Test
 
-## Common Development Commands
+Use SBT with `-batch --no-colors --error` flags for tests. Use `-batch --no-colors` when searching for errors. Prefer testing a single class or module for faster feedback.
 
-### Build and Compilation
+## Error Handling Philosophy
 
-Use SBT for building and testing the project. Use the `-batch --no-colors --error` flags during tests.
-If you're searching for an error, use the `-batch --no-colors` flags.
-Prefer testing a single class or module during development for faster feedback.
+As an effect system, λÆS must never throw untracked exceptions (e.g., `require`, `IllegalArgumentException`). Invalid inputs must be handled without escaping the effect system. Two acceptable strategies:
 
-Tests use ScalaTest with the following structure:
-```scala
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers
+1. **Default values**: Clamp or coerce invalid inputs to a sensible default (e.g., negative delay becomes `Duration.Zero`, `NaN` factor becomes `0.0`).
+2. **Make wrong state unrepresentable**: Use validated opaque types so invalid values cannot be constructed at all (e.g., an opaque `PositiveDuration` type that only admits valid values).
 
-class EffectNameSpec extends AnyFlatSpec with Matchers {
-  "EffectName" should "do something" in {
-    // Test implementation
-  }
-}
-```
+Never use `require`, `assert`, or throw exceptions in public API surfaces.
 
-## Architecture and Design
+## References
 
-If you need to understand the architecture and design of λÆS, refer to the `ARCHITECTURE.md` file for detailed explanations of the core components, design decisions, and how effects are implemented and managed in the system.
+- Architecture and module structure: `ARCHITECTURE.md`
+- Code style and documentation standards: `CONVENTIONS.md`
+- Module-specific guidance: `<module>/CLAUDE.md`

@@ -3,7 +3,7 @@
 
 ## Requirements
 
-- **Java 24 or higher** is required to run λÆS due to its use of modern Java features like Virtual Threads and Structured Concurrency.
+- **Java 25 or higher** is required to run λÆS due to its use of modern Java features like Virtual Threads and Structured Concurrency.
 - **Scala 3** is required, as λÆS leverages Scala 3's context functions and other advanced features.
 
 ## Installation
@@ -12,8 +12,12 @@ The library is available on Maven Central. Add the following dependencies to you
 
 ```scala
 libraryDependencies ++= Seq(
-  "in.rcard.yaes" %% "yaes-core" % "0.14.0",
-  "in.rcard.yaes" %% "yaes-data" % "0.14.0"  // Optional: for Flow and data structures
+  "in.rcard.yaes" %% "yaes-core"        % "0.15.0",
+  "in.rcard.yaes" %% "yaes-data"        % "0.15.0", // Optional: Flow and data structures
+  "in.rcard.yaes" %% "yaes-cats"        % "0.15.0", // Optional: Cats Effect integration
+  "in.rcard.yaes" %% "yaes-slf4j"       % "0.15.0", // Optional: SLF4J logging backend
+  "in.rcard.yaes" %% "yaes-http-server" % "0.15.0", // Optional: HTTP server
+  "in.rcard.yaes" %% "yaes-http-circe"  % "0.15.0"  // Optional: Circe JSON for HTTP
 )
 ```
 
@@ -23,6 +27,10 @@ The library is only available for **Scala 3** and is currently in an experimenta
 
 - **yaes-core**: Essential effects for functional programming (Sync, Async, Raise, etc.)
 - **yaes-data**: Functional data structures that work with effects (Flow, etc.)
+- **yaes-cats**: Cats Effect 3 integration for bidirectional interop
+- **yaes-slf4j**: SLF4J logging backend for the Log effect
+- **yaes-http-server**: HTTP server built on λÆS effects and virtual threads
+- **yaes-http-circe**: Circe JSON integration for the HTTP server
 
 ## Your First Effect
 

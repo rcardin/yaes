@@ -181,6 +181,22 @@ Flow(1, 2, 3)
 // sideEffects now contains: 10, 20, 30
 ```
 
+### merge
+
+Merges multiple flows into a single flow that emits elements as they arrive from any source (non-deterministic interleaving):
+
+```scala
+val flow1 = Flow(1, 2, 3)
+val flow2 = Flow(4, 5, 6)
+val merged = Flow.merge(flow1, flow2)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+merged.collect { value => result += value }
+// result contains all elements: 1, 2, 3, 4, 5, 6 (order may vary)
+```
+
+Each source flow is collected concurrently, so elements are interleaved based on timing. The merged flow completes when all sources complete. If any source fails, the error is propagated and remaining sources are cancelled.
+
 ### Terminal Operators
 
 Flow also provides several terminal operators that process the entire flow:
@@ -522,7 +538,7 @@ Key characteristics:
 To use the `yaes-data` module, add the following dependency to your build.sbt file:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.15.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.

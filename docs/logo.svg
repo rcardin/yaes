@@ -17,16 +17,16 @@
         font-weight="bold" 
         text-anchor="middle" 
         dominant-baseline="central"
-        fill="#4287f5"
+        fill="url(#textGradient)"
         letter-spacing="0.5px">λÆS</text>
   
   <!-- Separator line -->
   <line x1="80" y1="54" x2="120" y2="54" stroke="#cff525" stroke-width="1" stroke-linecap="round"/>
   
   <!-- Subtitle -->
-  <text x="100" y="59" 
-        font-family="'Segoe UI', Arial, sans-serif" 
-        font-size="6" 
+  <text x="100" y="62"
+        font-family="'Segoe UI', Arial, sans-serif"
+        font-size="9"
         font-weight="normal" 
         text-anchor="middle" 
         dominant-baseline="central"

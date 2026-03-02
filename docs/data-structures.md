@@ -10,7 +10,7 @@ The `yaes-data` module provides a collection of functional data structures that 
 Add the following dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.15.0"
 ```
 
 ## Available Data Structures
@@ -253,6 +253,28 @@ val initFlow = Flow(1, 2, 3)
 
 // Emits: 0, 1, 2, 3
 ```
+
+### merge
+
+Merge multiple flows into a single flow with non-deterministic interleaving:
+
+```scala
+import in.rcard.yaes.Flow
+
+val flow1 = Flow(1, 2, 3)
+val flow2 = Flow(4, 5, 6)
+val merged = Flow.merge(flow1, flow2)
+
+val result = scala.collection.mutable.ArrayBuffer[Int]()
+merged.collect { value => result += value }
+// result contains all elements from both flows (order depends on timing)
+```
+
+Concurrency is handled internally — no `Async` context is required from the caller. Each source flow is collected concurrently in its own fiber. The relative order of elements within each source is preserved, but the interleaving between sources is non-deterministic. The merged flow completes when all sources complete. If any source throws, the error propagates and remaining sources are cancelled.
+
+Edge cases:
+- `Flow.merge()` with no arguments produces an empty flow
+- `Flow.merge(flow)` with a single argument returns that flow unchanged
 
 ## Terminal Operators
 

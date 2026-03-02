@@ -130,7 +130,7 @@ val result = Output.run {
 To use the `yaes-slf4j` module, add the following dependency to your `build.sbt` file:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.14.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.15.0"
 ```
 
 You also need an SLF4J backend on the classpath. For example, to use Logback:

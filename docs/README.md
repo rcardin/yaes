@@ -8,79 +8,38 @@
 
 λÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner.
 
-## 🎥 Featured Talk
+## Featured Talk
 
 Watch the talk from **Scalar 2025** about the main concepts behind the library:
 
 [![Watch the video](https://img.youtube.com/vi/TXUxCsPpZp0/maxresdefault.jpg)](https://youtu.be/TXUxCsPpZp0)
 
-## 📦 Available Modules
+## Modules at a Glance
 
-- **`yaes-core`**: The main effects of the λÆS library
-- **`yaes-data`**: Functional data structures that complement the λÆS effects system
-- **`yaes-cats`**: Cats Effect integration for seamless interoperability
-- **`yaes-http-server`**: HTTP server built on YAES effects and virtual threads
+| Module | Description |
+|--------|-------------|
+| [**yaes-core**](getting-started.md) | Effects for IO, concurrency, error handling, state, logging, and more |
+| [**yaes-data**](data-structures.md) | Functional data structures like Flow for async streams |
+| [**yaes-cats**](cats-effect.md) | Cats Effect 3 integration for bidirectional interop |
+| [**yaes-slf4j**](effects/log.md) | SLF4J logging backend for the Log effect |
+| [**yaes-http-server**](http/server.md) | HTTP server built on λÆS effects and virtual threads |
+| [**yaes-http-circe**](http/circe.md) | Circe JSON integration for the HTTP server |
 
+## Get Started
 
-### λÆS Core
-The core module provides a comprehensive set of effects for functional programming:
-- IO operations and side effect management
-- Structured concurrency with async computations
-- Typed error handling and resource management
-- Stateful computations with the State effect
-- Console I/O, logging, and system integration
+λÆS requires **Java 25+** for Virtual Threads and Structured Concurrency. Head over to the [Getting Started](getting-started.md) guide for installation instructions, requirements, and your first program.
 
-### λÆS Data
-The data module provides functional data structures optimized for use with effects:
-- **Flow**: Cold asynchronous data streams with rich transformation operators
-- Future additions: Immutable collections, persistent data structures
+## Core Concepts
 
-### λÆS Cats
-The [Cats Effect integration](cats-effect.md) module provides seamless interoperability between λÆS and Cats Effect 3:
-- **Bidirectional Conversions**: Convert between λÆS IO and Cats Effect IO
-- **Typed Error Handling**: Full integration with Raise[Throwable]
-- **Timeout Support**: Prevent indefinite blocking with configurable timeouts
-- **Fluent API**: Extension methods for natural chaining
+In λÆS, types like `Random` and `Raise` are **Effects**:
 
-### λÆS HTTP Server
-The HTTP server module provides a simple and efficient way to build web applications using λÆS effects and virtual threads:
-- **Effectful Request Handling**: Define request handlers using λÆS effects
-- **Virtual Threads**: Leverage Java's virtual threads for efficient concurrency
-- **Type-Safe Routing DSL**: Compile-time verified routes with path and query parameters
+- A **Side Effect** is an unpredictable interaction, usually with an external system
+- An **Effect System** manages Side Effects by tracking and wrapping them into Effects
+- An **Effect** describes the type of the Side Effect and the return type of an effectful computation
 
-## 🚀 Quick Start
+λÆS uses **deferred execution** - calling effectful functions returns a value that represents something that can be run but hasn't yet.
 
-### Requirements
-
-- **Java 24 or higher** is required to run λÆS due to its use of modern Java features like Virtual Threads and Structured Concurrency.
-
-### Installation
-
-Add the dependencies to your `build.sbt`:
-
-```scala
-libraryDependencies ++= Seq(
-  "in.rcard.yaes" %% "yaes-core" % "0.14.0",
-  "in.rcard.yaes" %% "yaes-data" % "0.14.0"  // Optional: for Flow and other data structures
-)
-```
-
-## ✨ What's New in λÆS?
-
-You can choose between **monadic style**:
-
-```scala
-import in.rcard.yaes.Random.*
-import in.rcard.yaes.Raise.*
-import in.rcard.yaes.Yaes.*
-
-def drunkFlip(using Random, Raise[String]): String = for {
-  caught <- Random.nextBoolean
-  heads  <- if (caught) Random.nextBoolean else Raise.raise("We dropped the coin")
-} yield if (heads) "Heads" else "Tails"
-```
-
-Or a more **direct style**:
+## Quick Example
 
 ```scala
 import in.rcard.yaes.Random.*
@@ -97,77 +56,10 @@ def drunkFlip(using Random, Raise[String]): String = {
 }
 ```
 
-## 🎯 Core Concepts
-
-In λÆS, types like `Random` and `Raise` are **Effects**:
-
-- A **Side Effect** is an unpredictable interaction, usually with an external system
-- An **Effect System** manages Side Effects by tracking and wrapping them into Effects
-- An **Effect** describes the type of the Side Effect and the return type of an effectful computation
-
-λÆS uses **deferred execution** - calling effectful functions returns a value that represents something that can be run but hasn't yet.
-
-## 🛠 Effect Management
-
-Effects are managed using **Handlers**:
-
-```scala
-import in.rcard.yaes.Random.*
-import in.rcard.yaes.Raise.*
-
-val result: String = Raise.run {
-  Random.run {
-    drunkFlip
-  }
-}
-```
-
-## 📚 Available Effects
-
-- [**IO**](effects/io.md) - Side-effecting operations
-- [**Async**](effects/async.md) - Asynchronous computations and fiber management
-- [**Raise**](effects/raise.md) - Error handling and propagation
-- [**State**](effects/state.md) - Stateful computations and mutable state management
-- [**Resource**](effects/resource.md) - Automatic resource management
-- [**Input**](effects/io-effects.md) - Console input operations
-- [**Output**](effects/io-effects.md) - Console output operations
-- [**Random**](effects/random.md) - Random content generation
-- [**Clock**](effects/system-clock.md) - Time management
-- [**System**](effects/system-clock.md) - System properties and environment variables
-- [**Log**](effects/log.md) - Logging at different levels
-
-## 🛠️ Application Development
-
-- [**YaesApp**](yaes-app.md) - Common entry point for YAES applications with automatic effect handling
-
-`YaesApp` provides a unified entry point for building complete applications:
-
-```scala
-import in.rcard.yaes.*
-
-object MyApp extends YaesApp {
-  override def run {
-    Output.printLn("Hello, YAES!")
-    val logger = Log.getLogger("MyApp")
-    logger.info("Application started")
-  }
-}
-```
-
-## 🗃 Data Structures
-
-- [**Flow**](data-structures.md#flow) - Cold asynchronous data streams with rich operators
-- [**More data structures**](data-structures.md) - Additional functional data structures
-
-## 🔗 Communication Primitives
-
-- [**Channel**](communication-primitives.md#channel) - Communication primitive for transferring data between fibers
-- [**More primitives**](communication-primitives.md) - Additional concurrency primitives
-
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please check our [contributing guidelines](contributing.md) to get started.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-Special thanks to all the smart engineers who helped with ideas and suggestions, including Daniel Ciocîrlan, Simon Vergauwen, Jon Pretty, Noel Welsh, and Flavio Brasil.
+Special thanks to all the smart engineers who helped with ideas and suggestions, including Daniel Ciocirlan, Simon Vergauwen, Jon Pretty, Noel Welsh, and Flavio Brasil.
