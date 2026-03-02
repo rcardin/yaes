@@ -14,6 +14,7 @@
   * [Random](effects/random.md)
   * [Clock & System](effects/system-clock.md)
   * [Log](effects/log.md)
+  * [Retry](effects/retry.md)
 
 * [Data Structures](data-structures.md)
 * [Communication Primitives](communication-primitives.md)
