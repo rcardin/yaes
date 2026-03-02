@@ -72,7 +72,7 @@ For any type `A` with both a Circe `Encoder` and `Decoder` in scope, a `BodyCode
 
 - **Encodes** values as compact JSON using `asJson.noSpaces`
 - **Sets** the `Content-Type` header to `application/json`
-- **Decodes** JSON bodies using Circe's parser, mapping failures to `DecodingError.ParseError`
+- **Decodes** JSON bodies using Circe's parser, mapping parse failures (`ParsingFailure`) to `DecodingError.ParseError` and decoding/schema failures (`DecodingFailure`) to `DecodingError.ValidationError`
 
 ## Derivation Strategies
 
