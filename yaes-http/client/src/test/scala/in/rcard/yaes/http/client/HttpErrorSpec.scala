@@ -44,3 +44,9 @@ class HttpErrorSpec extends AnyFlatSpec with Matchers:
     HttpError.fromStatus(500, "") shouldBe a[ServerHttpError]
     HttpError.fromStatus(599, "") shouldBe a[ServerHttpError]
   }
+
+  it should "map non-4xx/5xx to UnexpectedStatus" in {
+    HttpError.fromStatus(200, "ok") shouldBe HttpError.UnexpectedStatus(200, "ok")
+    HttpError.fromStatus(301, "moved") shouldBe HttpError.UnexpectedStatus(301, "moved")
+    HttpError.fromStatus(100, "continue") shouldBe HttpError.UnexpectedStatus(100, "continue")
+  }

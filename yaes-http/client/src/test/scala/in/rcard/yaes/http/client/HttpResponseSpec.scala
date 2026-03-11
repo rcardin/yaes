@@ -31,10 +31,10 @@ class HttpResponseSpec extends AnyFlatSpec with Matchers:
     result shouldBe Right(99)
   }
 
-  it should "decode 301 body (3xx passes through to decode, no HttpError)" in {
-    val resp = HttpResponse(301, Map.empty, "42")
+  it should "raise UnexpectedStatus for 301 (non-2xx)" in {
+    val resp = HttpResponse(301, Map.empty, "moved")
     val result = Raise.either[HttpError | DecodingError, Int] { resp.as[Int] }
-    result shouldBe Right(42)
+    result shouldBe Left(HttpError.UnexpectedStatus(301, "moved"))
   }
 
   it should "raise NotFound for 404" in {

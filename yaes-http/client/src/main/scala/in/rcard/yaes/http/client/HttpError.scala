@@ -25,6 +25,8 @@ object HttpError:
   case class GatewayTimeout(body: String) extends ServerHttpError        { val status = 504 }
   case class OtherServerError(status: Int, body: String) extends ServerHttpError
 
+  case class UnexpectedStatus(status: Int, body: String) extends HttpError
+
   def fromStatus(status: Int, body: String): HttpError = status match
     case 400 => BadRequest(body)
     case 401 => Unauthorized(body)
@@ -41,3 +43,4 @@ object HttpError:
     case 503 => ServiceUnavailable(body)
     case 504 => GatewayTimeout(body)
     case s if s >= 500 && s < 600 => OtherServerError(s, body)
+    case s => UnexpectedStatus(s, body)

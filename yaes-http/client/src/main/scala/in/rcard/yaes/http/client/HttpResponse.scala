@@ -14,7 +14,7 @@ extension (resp: HttpResponse)
     resp.headers.get(name.toLowerCase)
 
   def as[A](using codec: BodyCodec[A]): A raises (HttpError | DecodingError) =
-    if resp.status >= 400 && resp.status < 600 then
+    if resp.status < 200 || resp.status >= 300 then
       Raise.raise(HttpError.fromStatus(resp.status, resp.body))
     else
       codec.decode(resp.body)
