@@ -15,3 +15,18 @@
 - **2B**: Error ADTs (requires only 1A — already done)
 - **2C**: HttpRequest (requires 1B)
 - **2D**: HttpResponse (requires 1B and 2B)
+
+## TASK-1C (completed)
+
+- Main source files in `server/src/main/` also needed import updates (not just test files).
+  Files changed: Response.scala, Routes.scala, MethodDSL.scala, Request.scala, routing/TypedRoute.scala, parsing/HttpParser.scala
+- Test files in the `in.rcard.yaes.http.server` package (no wildcard import) also needed core imports:
+  BodyCodecSpec.scala, RoutesSpec.scala
+- Test files with `import in.rcard.yaes.http.server.*` needed `import in.rcard.yaes.http.core.Method` added.
+
+## Next tasks available after 1C (PHASE 1 gate cleared)
+
+- **2A**: Enums + config for http client (requires 1A)
+- **2B**: Error ADTs (requires 1A)
+- **2C**: HttpRequest (requires 1B)
+- **2D**: HttpResponse (requires 1B and 2B)
