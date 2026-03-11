@@ -35,3 +35,9 @@
 
 - `BodyCodec` built-in instances return `"text/plain; charset=UTF-8"` (confirmed by server BodyCodecSpec/ResponseSpec tests). The TASK-2C spec test had incorrect expected values (`"text/plain"`); fixed to `"text/plain; charset=UTF-8"`.
 - `HttpRequest` extension methods (`header`, `queryParam`, `timeout`) live in the companion object using Scala 3 `extension` syntax — consistent with project patterns.
+
+## TASK-2D (HttpResponse) — completed
+
+- Task spec shows `Raise.either[HttpError | DecodingError] { ... }` with one type arg, but the actual signature is `Raise.either[E, A]` — two type params required. Correct form: `Raise.either[HttpError | DecodingError, Int] { ... }`.
+- Union error type `Raise[HttpError | DecodingError]` works without special handling via contravariance of `Raise[-E]`.
+- PHASE 2 gate (`sbt client/test`) passed after 2D.

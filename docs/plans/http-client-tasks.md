@@ -16,7 +16,7 @@ Tasks: `docs/plans/tasks/TASK-*.md`
 ## Status
 
 ```
-1A:[x] 1B:[x] 1C:[x] 2A:[x] 2B:[x] 2C:[x] 2D:[ ] 3A:[ ] 3B:[ ] 4:[ ]
+1A:[x] 1B:[x] 1C:[x] 2A:[x] 2B:[x] 2C:[x] 2D:[x] 3A:[ ] 3B:[ ] 4:[ ]
 ```
 
 ## Tasks
