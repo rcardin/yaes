@@ -5,7 +5,7 @@ import scala.concurrent.duration.Duration
 
 case class HttpRequest(
   method: Method,
-  url: String,
+  url: String, // FIXME I don't like to use a String, since we need to parse it later. Maybe we can use java.net.URI or something else?
   headers: Map[String, String] = Map.empty,
   body: String = "",
   queryParams: List[(String, String)] = List.empty,

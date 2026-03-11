@@ -94,4 +94,11 @@ project/.bloop/*
 project/project/*
 project/metals.sbt
 
+## Claude related
 .claude/*
+
+PROMPT.md
+STOP.md
+docs/plans/*
+
+async-*

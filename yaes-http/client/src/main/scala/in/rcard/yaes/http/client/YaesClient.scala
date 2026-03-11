@@ -44,6 +44,8 @@ class YaesClient private (val underlying: JHttpClient):
         ))
       case e: java.net.http.HttpTimeoutException =>
         Raise.raise(ConnectionError.RequestTimeout(request.url))
+      case e: Exception =>
+        Raise.raise(ConnectionError.Unexpected(e))
 
   private def buildUri(url: String, queryParams: List[(String, String)]): URI =
     if queryParams.isEmpty then URI(url)

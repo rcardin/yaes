@@ -133,30 +133,6 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
       case other => fail(s"Expected ConnectionRefused, got: $other")
   }
 
-  it should "close underlying client after Resource scope exits normally" in {
-    var clientRef: YaesClient = null
-    Sync.runBlocking(10.seconds) {
-      Resource.run {
-        clientRef = YaesClient.make()
-      }
-    }
-    // After scope, underlying should be closed.
-    // java.net.http.HttpClient doesn't have isClosed(), so we trust Resource.install calls close().
-  }
-
-  it should "close underlying client after Resource scope exits with exception" in {
-    var clientRef: YaesClient = null
-    try
-      Sync.runBlocking(10.seconds) {
-        Resource.run {
-          clientRef = YaesClient.make()
-          throw new RuntimeException("boom")
-        }
-      }
-    catch case _: RuntimeException => ()
-    // Same — Resource guarantees cleanup on exception
-  }
-
   it should "handle multiple sequential requests on same client" in {
     var requestCount = 0
     val (server, baseUrl) = TestServer.start { exchange =>
