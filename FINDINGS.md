@@ -41,3 +41,15 @@
 - Task spec shows `Raise.either[HttpError | DecodingError] { ... }` with one type arg, but the actual signature is `Raise.either[E, A]` — two type params required. Correct form: `Raise.either[HttpError | DecodingError, Int] { ... }`.
 - Union error type `Raise[HttpError | DecodingError]` works without special handling via contravariance of `Raise[-E]`.
 - PHASE 2 gate (`sbt client/test`) passed after 2D.
+
+## TASK-3B (YaesClient.send) — completed
+
+- **`ofByteArray` instead of `ofString`**: `JHttpRequest.BodyPublishers.ofString(body)` may cause charset issues; `ofByteArray(body.getBytes(UTF_8))` avoids this.
+- **URISyntaxException in `buildUri`**: Must be inside the `try/catch` block. If `buildUri` is called before `try`, `URISyntaxException` propagates unhandled instead of being mapped to `ConnectionError.MalformedUrl`.
+- **Test spec adjustments needed** (the task spec had several issues):
+  - `import HttpRequest.*` conflicts with `HttpResponse.header(name)` extension — remove the wildcard import (companion extensions are in implicit scope anyway).
+  - `Sync.runBlocking` requires `implicit ec: ExecutionContext` — add global EC import.
+  - `Sync.runBlocking` returns `Try[A]` — call `.get` to propagate `TestFailedException`.
+  - `Raise.either[E]` needs two type args: `Raise.either[E, A]`.
+  - `BodyCodec[String].contentType` is `"text/plain; charset=UTF-8"` — test should expect that, not `"text/plain"`.
+- PHASE 3 gate (`sbt client/test`) passed after 3B.
