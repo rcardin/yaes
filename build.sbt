@@ -58,14 +58,32 @@ lazy val `yaes-slf4j` = project
   )
 
 lazy val `yaes-http` = project
-  .aggregate(server, circe)
+  .aggregate(core, server, client, circe)
+  .settings(scalaVersion := scala3Version)
+
+lazy val core = project
+  .in(file("yaes-http/core"))
+  .dependsOn(`yaes-core`)
+  .settings(commonSettings)
   .settings(
-    scalaVersion := scala3Version
+    name         := "yaes-http-core",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies
+  )
+
+lazy val client = project
+  .in(file("yaes-http/client"))
+  .dependsOn(core)
+  .settings(commonSettings)
+  .settings(
+    name         := "yaes-http-client",
+    scalaVersion := scala3Version,
+    libraryDependencies ++= commonDependencies
   )
 
 lazy val circe = project
   .in(file("yaes-http/circe"))
-  .dependsOn(server)
+  .dependsOn(server, core)
   .settings(commonSettings)
   .settings(
     name         := "yaes-http-circe",
@@ -77,7 +95,7 @@ lazy val circe = project
 
 lazy val server = project
   .in(file("yaes-http/server"))
-  .dependsOn(`yaes-core`)
+  .dependsOn(`yaes-core`, core)
   .settings(
     name         := "yaes-http-server",
     scalaVersion := scala3Version,
