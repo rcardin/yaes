@@ -30,3 +30,8 @@
 - **2B**: Error ADTs (requires 1A)
 - **2C**: HttpRequest (requires 1B)
 - **2D**: HttpResponse (requires 1B and 2B)
+
+## TASK-2C (HttpRequest) — completed
+
+- `BodyCodec` built-in instances return `"text/plain; charset=UTF-8"` (confirmed by server BodyCodecSpec/ResponseSpec tests). The TASK-2C spec test had incorrect expected values (`"text/plain"`); fixed to `"text/plain; charset=UTF-8"`.
+- `HttpRequest` extension methods (`header`, `queryParam`, `timeout`) live in the companion object using Scala 3 `extension` syntax — consistent with project patterns.
