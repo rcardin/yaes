@@ -3,17 +3,16 @@ package in.rcard.yaes.http.client
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import in.rcard.yaes.*
-import in.rcard.yaes.http.core.Uri
+import in.rcard.yaes.http.client.Uri.InvalidUri
 import scala.concurrent.duration.*
 import scala.concurrent.ExecutionContext.Implicits.global
-import in.rcard.yaes.http.core.Uri.InvalidUri
 
 class YaesClientSendSpec extends AnyFlatSpec with Matchers:
 
   private def uri(raw: String): Uri =
-    Raise.run[InvalidUri, Uri] { Uri(raw) } match
-      case e: InvalidUri => fail(s"Invalid URI: ${e.reason}")
-      case u: Uri        => u
+    Raise.either[InvalidUri, Uri] { Uri(raw) } match
+      case Left(e)  => fail(s"Invalid URI: ${e.reason}")
+      case Right(u) => u
 
   "YaesClient.send" should "return status, headers, and body for GET" in {
     val (server, baseUrl) = TestServer.start { exchange =>

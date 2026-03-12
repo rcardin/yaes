@@ -1,7 +1,6 @@
 package in.rcard.yaes.http.client
 
 import in.rcard.yaes.*
-import in.rcard.yaes.http.core.Uri
 import java.net.{URI, URLEncoder}
 import java.net.http.{HttpClient => JHttpClient, HttpRequest => JHttpRequest, HttpResponse => JHttpResponse}
 import java.nio.charset.StandardCharsets.UTF_8

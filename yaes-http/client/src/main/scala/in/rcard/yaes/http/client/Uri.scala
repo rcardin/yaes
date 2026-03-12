@@ -1,4 +1,4 @@
-package in.rcard.yaes.http.core
+package in.rcard.yaes.http.client
 
 import in.rcard.yaes.*
 import java.net.URISyntaxException

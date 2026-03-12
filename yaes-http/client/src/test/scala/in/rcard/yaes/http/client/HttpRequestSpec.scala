@@ -5,8 +5,7 @@ import in.rcard.yaes.http.client.HttpRequest.*
 import in.rcard.yaes.http.core.BodyCodec
 import in.rcard.yaes.http.core.Headers
 import in.rcard.yaes.http.core.Method
-import in.rcard.yaes.http.core.Uri
-import in.rcard.yaes.http.core.Uri.InvalidUri
+import in.rcard.yaes.http.client.Uri.InvalidUri
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -15,9 +14,9 @@ import scala.concurrent.duration.*
 class HttpRequestSpec extends AnyFlatSpec with Matchers:
 
   private def uri(raw: String): Uri =
-    Raise.run[InvalidUri, Uri] { Uri(raw) } match
-      case e: InvalidUri => fail(s"Invalid URI: ${e.reason}")
-      case u: Uri        => u
+    Raise.either[InvalidUri, Uri] { Uri(raw) } match
+      case Left(e)  => fail(s"Invalid URI: ${e.reason}")
+      case Right(u) => u
 
   "HttpRequest.get" should "create GET with empty body and headers" in {
     val req = HttpRequest.get(uri("http://example.com"))

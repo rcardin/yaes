@@ -1,6 +1,6 @@
 package in.rcard.yaes.http.client
 
-import in.rcard.yaes.http.core.{BodyCodec, Headers, Method, Uri}
+import in.rcard.yaes.http.core.{BodyCodec, Headers, Method}
 import scala.concurrent.duration.Duration
 
 case class HttpRequest(
