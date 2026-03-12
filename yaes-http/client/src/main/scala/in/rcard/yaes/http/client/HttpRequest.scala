@@ -1,29 +1,29 @@
 package in.rcard.yaes.http.client
 
-import in.rcard.yaes.http.core.{BodyCodec, Headers, Method}
+import in.rcard.yaes.http.core.{BodyCodec, Headers, Method, Uri}
 import scala.concurrent.duration.Duration
 
 case class HttpRequest(
   method: Method,
-  url: String, // FIXME I don't like to use a String, since we need to parse it later. Maybe we can use java.net.URI or something else?
+  uri: Uri,
   headers: Map[String, String] = Map.empty,
-  body: String = "",
+  body: String = "", // FIXME Isn't it better to use a byte array here?
   queryParams: List[(String, String)] = List.empty,
   timeout: Option[Duration] = None
 )
 
 object HttpRequest:
-  def get(url: String): HttpRequest     = HttpRequest(Method.GET, url)
-  def head(url: String): HttpRequest    = HttpRequest(Method.HEAD, url)
-  def delete(url: String): HttpRequest  = HttpRequest(Method.DELETE, url)
-  def options(url: String): HttpRequest = HttpRequest(Method.OPTIONS, url)
+  def get(uri: Uri): HttpRequest     = HttpRequest(Method.GET, uri)
+  def head(uri: Uri): HttpRequest    = HttpRequest(Method.HEAD, uri)
+  def delete(uri: Uri): HttpRequest  = HttpRequest(Method.DELETE, uri)
+  def options(uri: Uri): HttpRequest = HttpRequest(Method.OPTIONS, uri)
 
-  def post[A](url: String, body: A)(using codec: BodyCodec[A]): HttpRequest =
-    HttpRequest(Method.POST, url, Map(Headers.ContentType -> codec.contentType), codec.encode(body))
-  def put[A](url: String, body: A)(using codec: BodyCodec[A]): HttpRequest =
-    HttpRequest(Method.PUT, url, Map(Headers.ContentType -> codec.contentType), codec.encode(body))
-  def patch[A](url: String, body: A)(using codec: BodyCodec[A]): HttpRequest =
-    HttpRequest(Method.PATCH, url, Map(Headers.ContentType -> codec.contentType), codec.encode(body))
+  def post[A](uri: Uri, body: A)(using codec: BodyCodec[A]): HttpRequest =
+    HttpRequest(Method.POST, uri, Map(Headers.ContentType -> codec.contentType), codec.encode(body))
+  def put[A](uri: Uri, body: A)(using codec: BodyCodec[A]): HttpRequest =
+    HttpRequest(Method.PUT, uri, Map(Headers.ContentType -> codec.contentType), codec.encode(body))
+  def patch[A](uri: Uri, body: A)(using codec: BodyCodec[A]): HttpRequest =
+    HttpRequest(Method.PATCH, uri, Map(Headers.ContentType -> codec.contentType), codec.encode(body))
 
   extension (req: HttpRequest)
     def header(name: String, value: String): HttpRequest =

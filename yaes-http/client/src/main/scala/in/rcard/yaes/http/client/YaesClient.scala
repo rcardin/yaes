@@ -1,6 +1,7 @@
 package in.rcard.yaes.http.client
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.core.Uri
 import java.net.{URI, URLEncoder}
 import java.net.http.{HttpClient => JHttpClient, HttpRequest => JHttpRequest, HttpResponse => JHttpResponse}
 import java.nio.charset.StandardCharsets.UTF_8
@@ -14,9 +15,9 @@ class YaesClient private (val underlying: JHttpClient):
       if request.body.isEmpty then JHttpRequest.BodyPublishers.noBody()
       else JHttpRequest.BodyPublishers.ofByteArray(request.body.getBytes(UTF_8))
     try
-      val uri = buildUri(request.url, request.queryParams)
+      val javaUri = buildUri(request.uri, request.queryParams)
       val jReqBuilder = JHttpRequest.newBuilder()
-        .uri(uri)
+        .uri(javaUri)
         .method(request.method.toString, bodyPublisher)
       request.headers.foreach((k, v) => jReqBuilder.header(k, v))
       request.timeout.foreach(d =>
@@ -29,35 +30,29 @@ class YaesClient private (val underlying: JHttpClient):
       }.toMap
       HttpResponse(jResp.statusCode(), headers, jResp.body())
     catch
-      case e: java.net.URISyntaxException =>
-        Raise.raise(ConnectionError.MalformedUrl(request.url))
       case e: java.net.ConnectException =>
-        val parsedUri = tryParseUri(request.url)
         Raise.raise(ConnectionError.ConnectionRefused(
-          parsedUri.map(_.getHost).getOrElse("unknown"),
-          parsedUri.map(u => if u.getPort == -1 then 80 else u.getPort).getOrElse(0)
+          request.uri.host.getOrElse("unknown"),
+          request.uri.port
         ))
       case e: java.net.http.HttpConnectTimeoutException =>
-        val parsedUri = tryParseUri(request.url)
         Raise.raise(ConnectionError.ConnectTimeout(
-          parsedUri.map(_.getHost).getOrElse("unknown")
+          request.uri.host.getOrElse("unknown")
         ))
       case e: java.net.http.HttpTimeoutException =>
-        Raise.raise(ConnectionError.RequestTimeout(request.url))
+        Raise.raise(ConnectionError.RequestTimeout(request.uri.value))
       case e: Exception =>
         Raise.raise(ConnectionError.Unexpected(e))
 
-  private def buildUri(url: String, queryParams: List[(String, String)]): URI =
-    if queryParams.isEmpty then URI(url)
+  private def buildUri(uri: Uri, queryParams: List[(String, String)]): URI =
+    if queryParams.isEmpty then uri.toJavaURI
     else
       val encoded = queryParams.map { (k, v) =>
         URLEncoder.encode(k, UTF_8) + "=" + URLEncoder.encode(v, UTF_8)
       }.mkString("&")
-      val separator = if url.contains("?") then "&" else "?"
-      URI(url + separator + encoded)
-
-  private def tryParseUri(url: String): Option[URI] =
-    try Some(URI(url)) catch case _: Exception => None
+      val base = uri.value
+      val separator = if base.contains("?") then "&" else "?"
+      URI(base + separator + encoded)
 
 object YaesClient:
   def make(config: YaesClientConfig = YaesClientConfig())(using Resource): YaesClient =

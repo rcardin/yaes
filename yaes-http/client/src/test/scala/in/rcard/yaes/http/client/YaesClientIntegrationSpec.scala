@@ -3,22 +3,32 @@ package in.rcard.yaes.http.client
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import in.rcard.yaes.*
-import in.rcard.yaes.http.core.{BodyCodec, DecodingError, Headers}
+import in.rcard.yaes.http.core.{BodyCodec, DecodingError, Headers, Uri}
 import in.rcard.yaes.http.client.HttpRequest.*
 import scala.concurrent.duration.*
 import scala.concurrent.ExecutionContext.Implicits.global
+import in.rcard.yaes.http.core.Uri.InvalidUri
 
 class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
 
-  private def sendAndDecode[A](client: YaesClient, request: HttpRequest)(
-      using BodyCodec[A],
+  private def uri(raw: String): Uri =
+    Raise.run[InvalidUri, Uri] { Uri(raw) } match
+      case e: InvalidUri => fail(s"Invalid URI: ${e.reason}")
+      case u: Uri        => u
+
+  private def sendAndDecode[A](client: YaesClient, request: HttpRequest)(using
+      BodyCodec[A],
       Sync
   ): Either[ConnectionError | HttpError | DecodingError, A] =
-    Raise.either[ConnectionError, HttpResponse] { client.send(request) }
-      .left.map(e => e: ConnectionError | HttpError | DecodingError)
+    Raise
+      .either[ConnectionError, HttpResponse] { client.send(request) }
+      .left
+      .map(e => e: ConnectionError | HttpError | DecodingError)
       .flatMap { resp =>
-        Raise.either[HttpError | DecodingError, A] { resp.as[A] }
-          .left.map(e => e: ConnectionError | HttpError | DecodingError)
+        Raise
+          .either[HttpError | DecodingError, A] { resp.as[A] }
+          .left
+          .map(e => e: ConnectionError | HttpError | DecodingError)
       }
 
   "YaesClient full pipeline" should "GET and decode response body" in {
@@ -32,7 +42,7 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
       val result = Sync.runBlocking(10.seconds) {
         Resource.run {
           val client = YaesClient.make()
-          sendAndDecode[Int](client, HttpRequest.get(baseUrl))
+          sendAndDecode[Int](client, HttpRequest.get(uri(baseUrl)))
         }
       }
       result.get shouldBe Right(42)
@@ -52,7 +62,7 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
           val client = YaesClient.make()
           sendAndDecode[String](
             client,
-            HttpRequest.post(baseUrl, "payload").header(Headers.Authorization, "Bearer token")
+            HttpRequest.post(uri(baseUrl), "payload").header(Headers.Authorization, "Bearer token")
           )
         }
       }
@@ -71,7 +81,7 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
       val result = Sync.runBlocking(10.seconds) {
         Resource.run {
           val client = YaesClient.make()
-          sendAndDecode[String](client, HttpRequest.get(baseUrl))
+          sendAndDecode[String](client, HttpRequest.get(uri(baseUrl)))
         }
       }
       result.get shouldBe Left(HttpError.Forbidden("forbidden"))
@@ -90,7 +100,7 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
         Resource.run {
           val client = YaesClient.make()
           Raise.either[ConnectionError, HttpResponse] {
-            client.send(HttpRequest.get(baseUrl))
+            client.send(HttpRequest.get(uri(baseUrl)))
           }
         }
       }
@@ -111,7 +121,7 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
       val result = Sync.runBlocking(10.seconds) {
         Resource.run {
           val client = YaesClient.make()
-          sendAndDecode[Int](client, HttpRequest.get(baseUrl))
+          sendAndDecode[Int](client, HttpRequest.get(uri(baseUrl)))
         }
       }
       result.get.left.getOrElse(fail()) shouldBe a[DecodingError]
@@ -119,12 +129,12 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "raise ConnectionRefused when server is down" in {
-    val port = TestServer.findFreePort()
+    val port   = TestServer.findFreePort()
     val result = Sync.runBlocking(10.seconds) {
       Resource.run {
         val client = YaesClient.make()
         Raise.either[ConnectionError, HttpResponse] {
-          client.send(HttpRequest.get(s"http://localhost:$port"))
+          client.send(HttpRequest.get(uri(s"http://localhost:$port")))
         }
       }
     }
@@ -134,7 +144,7 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "handle multiple sequential requests on same client" in {
-    var requestCount = 0
+    var requestCount      = 0
     val (server, baseUrl) = TestServer.start { exchange =>
       requestCount += 1
       val body = requestCount.toString
@@ -146,8 +156,8 @@ class YaesClientIntegrationSpec extends AnyFlatSpec with Matchers:
       val result = Sync.runBlocking(10.seconds) {
         Resource.run {
           val client = YaesClient.make()
-          val r1     = sendAndDecode[Int](client, HttpRequest.get(baseUrl))
-          val r2     = sendAndDecode[Int](client, HttpRequest.get(baseUrl))
+          val r1     = sendAndDecode[Int](client, HttpRequest.get(uri(baseUrl)))
+          val r2     = sendAndDecode[Int](client, HttpRequest.get(uri(baseUrl)))
           for { a <- r1; b <- r2 } yield (a, b)
         }
       }
