@@ -73,7 +73,7 @@ lazy val core = project
 
 lazy val client = project
   .in(file("yaes-http/client"))
-  .dependsOn(core)
+  .dependsOn(`yaes-core`, core)
   .settings(commonSettings)
   .settings(
     name         := "yaes-http-client",
