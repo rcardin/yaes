@@ -23,7 +23,8 @@ Watch the talk from **Scalar 2025** about the main concepts behind the library:
 | [**yaes-cats**](cats-effect.md) | Cats Effect 3 integration for bidirectional interop |
 | [**yaes-slf4j**](effects/log.md) | SLF4J logging backend for the Log effect |
 | [**yaes-http-server**](http/server.md) | HTTP server built on λÆS effects and virtual threads |
-| [**yaes-http-circe**](http/circe.md) | Circe JSON integration for the HTTP server |
+| [**yaes-http-client**](http/client.md) | HTTP client built on λÆS effects and Java's HttpClient |
+| [**yaes-http-circe**](http/circe.md) | Circe JSON integration for HTTP server and client |
 
 ## Get Started
 
