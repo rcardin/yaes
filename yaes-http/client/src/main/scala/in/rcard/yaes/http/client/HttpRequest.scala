@@ -7,7 +7,7 @@ case class HttpRequest(
   method: Method,
   uri: Uri,
   headers: Map[String, String] = Map.empty,
-  body: String = "", // FIXME Isn't it better to use a byte array here?
+  body: String = "",
   queryParams: List[(String, String)] = List.empty,
   timeout: Option[Duration] = None
 )
