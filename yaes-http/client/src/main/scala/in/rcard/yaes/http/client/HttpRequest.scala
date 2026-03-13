@@ -76,6 +76,10 @@ object HttpRequest:
     /** Appends a query parameter. Duplicate keys are allowed. */
     def queryParam(name: String, value: String): HttpRequest =
       req.copy(queryParams = req.queryParams :+ (name, value))
-    /** Sets the per-request timeout, overriding any previous value. */
+    /** Sets the per-request timeout, overriding any previous value.
+      *
+      * Infinite or undefined durations are treated as "no timeout" and leave the field unchanged.
+      */
     def timeout(duration: Duration): HttpRequest =
-      req.copy(timeout = Some(duration))
+      if duration.isFinite then req.copy(timeout = Some(duration))
+      else req

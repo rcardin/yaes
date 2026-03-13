@@ -1,12 +1,13 @@
 package in.rcard.yaes.http.client
 
 import in.rcard.yaes.*
-import java.net.URISyntaxException
+import java.net.{URI, URISyntaxException, URLEncoder}
+import java.nio.charset.StandardCharsets.UTF_8
 
 /** Validated URI wrapper backed by [[java.net.URI]].
   *
-  * An opaque type ensuring URIs are syntactically valid at construction time. Invalid input
-  * raises [[Uri.InvalidUri]] via the [[in.rcard.yaes.Raise]] effect.
+  * An opaque type ensuring URIs are syntactically valid at construction time. Invalid input raises
+  * [[Uri.InvalidUri]] via the [[in.rcard.yaes.Raise]] effect.
   *
   * Example:
   * {{{
@@ -19,15 +20,19 @@ object Uri:
 
   /** Raised when a raw string cannot be parsed as a valid URI.
     *
-    * @param input  the invalid input string
-    * @param reason the parse error message
+    * @param input
+    *   the invalid input string
+    * @param reason
+    *   the parse error message
     */
   case class InvalidUri(input: String, reason: String)
 
   /** Parses a raw string into a [[Uri]], raising [[InvalidUri]] on failure.
     *
-    * @param raw the URI string to parse
-    * @return the validated URI
+    * @param raw
+    *   the URI string to parse
+    * @return
+    *   the validated URI
     */
   def apply(raw: String): Uri raises InvalidUri =
     try new java.net.URI(raw)
@@ -38,9 +43,29 @@ object Uri:
   extension (uri: Uri)
     /** Returns the underlying [[java.net.URI]]. */
     def toJavaURI: java.net.URI = uri
+
     /** Returns the URI as a string. */
-    def value: String           = uri.toString
+    def value: String = uri.toString
+
     /** Returns the host component, if present. */
-    def host: Option[String]    = Option(uri.getHost)
+    def host: Option[String] = Option(uri.getHost)
+
     /** Returns the port, defaulting to 80 if not specified. */
-    def port: Int               = if uri.getPort == -1 then 80 else uri.getPort
+    def port: Int = if uri.getPort == -1 then 80 else uri.getPort
+
+    /** Appends query parameters to the URI, URL-encoding keys and values.
+      *
+      * If the URI already contains a query string, parameters are appended with `&`.
+      *
+      * @param queryParams the parameters to append
+      * @return a [[java.net.URI]] with the appended query string
+      */
+    def withQueryParams(queryParams: List[(String, String)]): URI =
+      if queryParams.isEmpty then uri.toJavaURI
+      else
+        val encoded = queryParams.map { (k, v) =>
+          URLEncoder.encode(k, UTF_8) + "=" + URLEncoder.encode(v, UTF_8)
+        }.mkString("&")
+        val base      = uri.value
+        val separator = if base.contains("?") then "&" else "?"
+        URI(base + separator + encoded)

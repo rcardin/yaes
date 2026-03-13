@@ -19,7 +19,7 @@ class HttpErrorSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "map unknown 4xx to OtherClientError" in {
-    HttpError.fromStatus(418, "teapot") shouldBe HttpError.OtherClientError(418, "teapot")
+    HttpError.fromStatus(418, "teapot") shouldBe HttpError.OtherClientError(418,"teapot")
   }
 
   it should "map 500 to InternalServerError" in {
@@ -32,7 +32,7 @@ class HttpErrorSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "map unknown 5xx to OtherServerError" in {
-    HttpError.fromStatus(599, "unknown") shouldBe HttpError.OtherServerError(599, "unknown")
+    HttpError.fromStatus(599, "unknown") shouldBe HttpError.OtherServerError(599,"unknown")
   }
 
   it should "classify 4xx as ClientHttpError" in {
@@ -46,7 +46,7 @@ class HttpErrorSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "map non-4xx/5xx to UnexpectedStatus" in {
-    HttpError.fromStatus(200, "ok") shouldBe HttpError.UnexpectedStatus(200, "ok")
-    HttpError.fromStatus(301, "moved") shouldBe HttpError.UnexpectedStatus(301, "moved")
-    HttpError.fromStatus(100, "continue") shouldBe HttpError.UnexpectedStatus(100, "continue")
+    HttpError.fromStatus(200, "ok") shouldBe HttpError.UnexpectedStatus(200,"ok")
+    HttpError.fromStatus(301, "moved") shouldBe HttpError.UnexpectedStatus(301,"moved")
+    HttpError.fromStatus(100, "continue") shouldBe HttpError.UnexpectedStatus(100,"continue")
   }

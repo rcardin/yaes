@@ -1,11 +1,9 @@
 package in.rcard.yaes.http.client
 
 import in.rcard.yaes.*
-import java.net.{URI, URLEncoder}
 import java.net.http.{HttpClient => JHttpClient, HttpRequest => JHttpRequest, HttpResponse => JHttpResponse}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Duration => JDuration}
-import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.*
 
 /** Effect-based HTTP client built on Java's [[java.net.http.HttpClient]].
@@ -41,7 +39,7 @@ class YaesClient private (private[client] val underlying: JHttpClient):
       if request.body.isEmpty then JHttpRequest.BodyPublishers.noBody()
       else JHttpRequest.BodyPublishers.ofByteArray(request.body.getBytes(UTF_8))
     try
-      val javaUri = buildUri(request.uri, request.queryParams)
+      val javaUri = request.uri.withQueryParams(request.queryParams)
       val jReqBuilder = JHttpRequest.newBuilder()
         .uri(javaUri)
         .method(request.method.toString, bodyPublisher)
@@ -70,42 +68,23 @@ class YaesClient private (private[client] val underlying: JHttpClient):
       case e: Exception =>
         Raise.raise(ConnectionError.Unexpected(e))
 
-  private def buildUri(uri: Uri, queryParams: List[(String, String)]): URI =
-    if queryParams.isEmpty then uri.toJavaURI
-    else
-      val encoded = queryParams.map { (k, v) =>
-        URLEncoder.encode(k, UTF_8) + "=" + URLEncoder.encode(v, UTF_8)
-      }.mkString("&")
-      val base = uri.value
-      val separator = if base.contains("?") then "&" else "?"
-      URI(base + separator + encoded)
-
 /** Factory for creating [[YaesClient]] instances. */
 object YaesClient:
   /** Creates a new [[YaesClient]] managed by the [[in.rcard.yaes.Resource]] effect.
     *
     * The underlying Java HTTP client is automatically closed when the enclosing [[Resource.run]]
-    * block completes.
+    * block completes. Infinite or undefined connect timeouts are silently ignored.
     *
     * @param config client configuration (timeout, redirect policy, HTTP version)
     * @return a managed client instance
     */
   def make(config: YaesClientConfig = YaesClientConfig())(using Resource): YaesClient =
     val builder = JHttpClient.newBuilder()
-    config.connectTimeout.foreach(d =>
+    config.connectTimeout.filter(_.isFinite).foreach(d =>
       builder.connectTimeout(JDuration.ofMillis(d.toMillis))
     )
-    builder.followRedirects(toJavaRedirect(config.followRedirects))
-    builder.version(toJavaVersion(config.httpVersion))
+    builder.followRedirects(config.followRedirects.toJava)
+    builder.version(config.httpVersion.toJava)
     val javaClient = builder.build()
     Resource.install(javaClient)(_.close())
     new YaesClient(javaClient)
-
-  private def toJavaRedirect(policy: RedirectPolicy): JHttpClient.Redirect = policy match
-    case RedirectPolicy.Never  => JHttpClient.Redirect.NEVER
-    case RedirectPolicy.Always => JHttpClient.Redirect.ALWAYS
-    case RedirectPolicy.Normal => JHttpClient.Redirect.NORMAL
-
-  private def toJavaVersion(version: HttpVersion): JHttpClient.Version = version match
-    case HttpVersion.Http11 => JHttpClient.Version.HTTP_1_1
-    case HttpVersion.Http2  => JHttpClient.Version.HTTP_2
