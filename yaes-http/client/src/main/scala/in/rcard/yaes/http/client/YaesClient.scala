@@ -8,7 +8,7 @@ import java.time.{Duration => JDuration}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.*
 
-class YaesClient private (val underlying: JHttpClient):
+class YaesClient private (private[client] val underlying: JHttpClient):
   def send(request: HttpRequest)(using Sync, Raise[ConnectionError]): HttpResponse =
     val bodyPublisher =
       if request.body.isEmpty then JHttpRequest.BodyPublishers.noBody()
