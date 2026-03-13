@@ -50,12 +50,16 @@ object Uri:
     /** Returns the host component, if present. */
     def host: Option[String] = Option(uri.getHost)
 
-    /** Returns the port, defaulting to 80 if not specified. */
-    def port: Int = if uri.getPort == -1 then 80 else uri.getPort
+    /** Returns the port, defaulting to 443 for `https` and 80 for other schemes if not specified. */
+    def port: Int =
+      if uri.getPort != -1 then uri.getPort
+      else if uri.getScheme == "https" then 443
+      else 80
 
     /** Appends query parameters to the URI, URL-encoding keys and values.
       *
       * If the URI already contains a query string, parameters are appended with `&`.
+      * Existing fragment components are preserved correctly.
       *
       * @param queryParams the parameters to append
       * @return a [[java.net.URI]] with the appended query string
@@ -66,6 +70,5 @@ object Uri:
         val encoded = queryParams.map { (k, v) =>
           URLEncoder.encode(k, UTF_8) + "=" + URLEncoder.encode(v, UTF_8)
         }.mkString("&")
-        val base      = uri.value
-        val separator = if base.contains("?") then "&" else "?"
-        URI(base + separator + encoded)
+        val newQuery = Option(uri.getQuery).fold(encoded)(q => q + "&" + encoded)
+        new URI(uri.getScheme, uri.getAuthority, uri.getPath, newQuery, uri.getFragment)

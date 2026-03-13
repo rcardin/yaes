@@ -1,6 +1,7 @@
 package in.rcard.yaes.http.client
 
 import in.rcard.yaes.http.core.{BodyCodec, Headers, Method}
+import java.util.Locale
 import scala.concurrent.duration.Duration
 
 /** HTTP request representation for the client.
@@ -72,14 +73,14 @@ object HttpRequest:
   extension (req: HttpRequest)
     /** Adds or replaces a header. The key is lowercased for consistency. */
     def header(name: String, value: String): HttpRequest =
-      req.copy(headers = req.headers + (name.toLowerCase -> value))
+      req.copy(headers = req.headers + (name.toLowerCase(Locale.ROOT) -> value))
     /** Appends a query parameter. Duplicate keys are allowed. */
     def queryParam(name: String, value: String): HttpRequest =
       req.copy(queryParams = req.queryParams :+ (name, value))
     /** Sets the per-request timeout, overriding any previous value.
       *
-      * Infinite or undefined durations are treated as "no timeout" and leave the field unchanged.
+      * Non-finite or non-positive durations clear any previously set timeout (i.e. no timeout).
       */
     def timeout(duration: Duration): HttpRequest =
-      if duration.isFinite then req.copy(timeout = Some(duration))
-      else req
+      if duration.isFinite && duration.toMillis > 0 then req.copy(timeout = Some(duration))
+      else req.copy(timeout = None)

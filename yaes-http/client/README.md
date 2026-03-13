@@ -38,15 +38,17 @@ import in.rcard.yaes.*
 import in.rcard.yaes.http.client.*
 import scala.concurrent.duration.*
 
-Raise.run[ConnectionError] {
-  Resource.run {
-    val client = YaesClient.make()
+Sync.runBlocking(30.seconds) {
+  Raise.run[ConnectionError] {
+    Resource.run {
+      val client = YaesClient.make()
 
-    Raise.run[Uri.InvalidUri] {
-      val uri = Uri("https://httpbin.org/get")
-      val response = client.send(HttpRequest.get(uri))
-      println(s"Status: ${response.status}")
-      println(s"Body: ${response.body}")
+      Raise.run[Uri.InvalidUri] {
+        val uri = Uri("https://httpbin.org/get")
+        val response = client.send(HttpRequest.get(uri))
+        println(s"Status: ${response.status}")
+        println(s"Body: ${response.body}")
+      }
     }
   }
 }
@@ -145,26 +147,28 @@ Raise.run[Uri.InvalidUri] {
 
 - `header(name, value)` — adds or replaces a header (keys are lowercased)
 - `queryParam(name, value)` — appends a query parameter (duplicate keys allowed)
-- `timeout(duration)` — sets the per-request timeout (infinite durations are ignored)
+- `timeout(duration)` — sets the per-request timeout (non-finite or non-positive durations clear any existing timeout)
 
 ## Sending Requests
 
 Use `client.send(request)` to execute a request. The method requires `Sync` and `Raise[ConnectionError]` effects:
 
 ```scala
-Raise.run[ConnectionError] {
-  Resource.run {
-    val client = YaesClient.make()
+Sync.runBlocking(30.seconds) {
+  Raise.run[ConnectionError] {
+    Resource.run {
+      val client = YaesClient.make()
 
-    Raise.run[Uri.InvalidUri] {
-      val uri = Uri("https://httpbin.org/post")
-      val request = HttpRequest.post(uri, "hello")
-        .header("Accept", "application/json")
+      Raise.run[Uri.InvalidUri] {
+        val uri = Uri("https://httpbin.org/post")
+        val request = HttpRequest.post(uri, "hello")
+          .header("Accept", "application/json")
 
-      val response: HttpResponse = client.send(request)
-      println(s"Status: ${response.status}")
-      println(s"Content-Type: ${response.header("content-type")}")
-      println(s"Body: ${response.body}")
+        val response: HttpResponse = client.send(request)
+        println(s"Status: ${response.status}")
+        println(s"Content-Type: ${response.header("content-type")}")
+        println(s"Body: ${response.body}")
+      }
     }
   }
 }

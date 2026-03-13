@@ -38,24 +38,26 @@ import in.rcard.yaes.*
 import in.rcard.yaes.http.client.*
 import scala.concurrent.duration.*
 
-Raise.run[ConnectionError] {
-  Resource.run {
-    val client = YaesClient.make()
+Sync.runBlocking(30.seconds) {
+  Raise.run[ConnectionError] {
+    Resource.run {
+      val client = YaesClient.make()
 
-    Raise.run[Uri.InvalidUri] {
-      val uri = Uri("https://httpbin.org/get")
-      val response = client.send(HttpRequest.get(uri))
-      println(s"Status: ${response.status}")
-      println(s"Body: ${response.body}")
+      Raise.run[Uri.InvalidUri] {
+        val uri = Uri("https://httpbin.org/get")
+        val response = client.send(HttpRequest.get(uri))
+        println(s"Status: ${response.status}")
+        println(s"Body: ${response.body}")
+      }
     }
   }
 }
 ```
 
 **Required Effects:**
+- **`Sync`** - Required by `YaesClient.send`; use `Sync.runBlocking` (or a `YaesApp` stack) as the outermost handler
 - **`Resource`** - Manages the lifecycle of the underlying Java `HttpClient` (auto-closed on block exit)
 - **`Raise[ConnectionError]`** - Handles transport-level errors (connection refused, timeouts)
-- **`Sync`** - Provided implicitly within `Resource.run`
 
 ---
 
