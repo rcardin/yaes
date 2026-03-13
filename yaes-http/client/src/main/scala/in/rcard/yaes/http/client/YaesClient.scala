@@ -8,7 +8,34 @@ import java.time.{Duration => JDuration}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.*
 
+/** Effect-based HTTP client built on Java's [[java.net.http.HttpClient]].
+  *
+  * Wraps the Java HTTP client and integrates with the yaes effect system. Transport errors
+  * are raised as [[ConnectionError]] via the [[in.rcard.yaes.Raise]] effect; HTTP-level errors
+  * (non-2xx) are only raised when the response is decoded via [[HttpResponse.as]].
+  *
+  * Create instances via the [[YaesClient.make]] factory method, which manages the underlying
+  * client's lifecycle through the [[in.rcard.yaes.Resource]] effect.
+  *
+  * Example:
+  * {{{
+  * Resource.run {
+  *   val client = YaesClient.make()
+  *   val resp = client.send(HttpRequest.get(uri))  // HttpResponse
+  *   resp.as[User]                                  // User raises (HttpError | DecodingError)
+  * }
+  * }}}
+  */
 class YaesClient private (private[client] val underlying: JHttpClient):
+  /** Sends an HTTP request and returns the raw response.
+    *
+    * Transport-level failures (connection refused, timeouts, malformed URIs) are raised as
+    * [[ConnectionError]]. The response is returned as-is regardless of status code — use
+    * [[HttpResponse.as]] to decode and check for HTTP errors.
+    *
+    * @param request the request to send
+    * @return the HTTP response
+    */
   def send(request: HttpRequest)(using Sync, Raise[ConnectionError]): HttpResponse =
     val bodyPublisher =
       if request.body.isEmpty then JHttpRequest.BodyPublishers.noBody()
@@ -53,7 +80,16 @@ class YaesClient private (private[client] val underlying: JHttpClient):
       val separator = if base.contains("?") then "&" else "?"
       URI(base + separator + encoded)
 
+/** Factory for creating [[YaesClient]] instances. */
 object YaesClient:
+  /** Creates a new [[YaesClient]] managed by the [[in.rcard.yaes.Resource]] effect.
+    *
+    * The underlying Java HTTP client is automatically closed when the enclosing [[Resource.run]]
+    * block completes.
+    *
+    * @param config client configuration (timeout, redirect policy, HTTP version)
+    * @return a managed client instance
+    */
   def make(config: YaesClientConfig = YaesClientConfig())(using Resource): YaesClient =
     val builder = JHttpClient.newBuilder()
     config.connectTimeout.foreach(d =>
