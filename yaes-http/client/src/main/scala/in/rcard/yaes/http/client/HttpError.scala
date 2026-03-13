@@ -1,10 +1,31 @@
 package in.rcard.yaes.http.client
 
+/** HTTP-level errors derived from non-2xx response status codes.
+  *
+  * Raised by [[HttpResponse.as]] when the response status code is outside the 2xx range. The error
+  * hierarchy distinguishes client errors (4xx) from server errors (5xx) via the [[ClientHttpError]]
+  * and [[ServerHttpError]] subtypes. Status codes outside 4xx/5xx are mapped to [[HttpError.UnexpectedStatus]].
+  *
+  * Example:
+  * {{{
+  * val result = Raise.either[HttpError | DecodingError, User] {
+  *   response.as[User]
+  * }
+  * result match
+  *   case Left(_: ClientHttpError) => // 4xx
+  *   case Left(_: ServerHttpError) => // 5xx
+  *   case Right(user)              => // decoded successfully
+  * }}}
+  */
 sealed trait HttpError:
+  /** The HTTP status code. */
   def status: Int
+  /** The raw response body. */
   def body: String
 
+/** Marker trait for 4xx client errors. */
 sealed trait ClientHttpError extends HttpError
+/** Marker trait for 5xx server errors. */
 sealed trait ServerHttpError extends HttpError
 
 object HttpError:
@@ -25,8 +46,15 @@ object HttpError:
   case class GatewayTimeout(body: String) extends ServerHttpError        { val status = 504 }
   case class OtherServerError(status: Int, body: String) extends ServerHttpError
 
+  /** Catch-all for status codes outside 4xx and 5xx (e.g. 1xx, 3xx). */
   case class UnexpectedStatus(status: Int, body: String) extends HttpError
 
+  /** Maps an HTTP status code to the corresponding [[HttpError]] subtype.
+    *
+    * @param status the HTTP status code
+    * @param body   the raw response body
+    * @return the typed error
+    */
   def fromStatus(status: Int, body: String): HttpError = status match
     case 400 => BadRequest(body)
     case 401 => Unauthorized(body)
