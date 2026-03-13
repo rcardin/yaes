@@ -2,6 +2,7 @@ package in.rcard.yaes.http.client
 
 import in.rcard.yaes.*
 import in.rcard.yaes.http.core.{BodyCodec, DecodingError}
+import java.util.Locale
 
 /** HTTP response returned by [[YaesClient.send]].
   *
@@ -32,7 +33,7 @@ extension (resp: HttpResponse)
     * @return the header value, or `None` if absent
     */
   def header(name: String): Option[String] =
-    resp.headers.get(name.toLowerCase)
+    resp.headers.get(name.toLowerCase(Locale.ROOT))
 
   /** Decodes the response body into a typed value.
     *

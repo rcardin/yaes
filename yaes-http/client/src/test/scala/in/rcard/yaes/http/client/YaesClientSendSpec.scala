@@ -187,7 +187,7 @@ class YaesClientSendSpec extends AnyFlatSpec with Matchers:
 
   it should "raise RequestTimeout when per-request timeout exceeded" in {
     val (server, baseUrl) = TestServer.start { exchange =>
-      Thread.sleep(2000)
+      Thread.sleep(500)
       exchange.sendResponseHeaders(200, 0)
       exchange.close()
     }

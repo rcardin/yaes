@@ -4,6 +4,7 @@ import in.rcard.yaes.*
 import java.net.http.{HttpClient => JHttpClient, HttpRequest => JHttpRequest, HttpResponse => JHttpResponse}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Duration => JDuration}
+import java.util.Locale
 import scala.jdk.CollectionConverters.*
 
 /** Effect-based HTTP client built on Java's [[java.net.http.HttpClient]].
@@ -44,13 +45,13 @@ class YaesClient private (private[client] val underlying: JHttpClient):
         .uri(javaUri)
         .method(request.method.toString, bodyPublisher)
       request.headers.foreach((k, v) => jReqBuilder.header(k, v))
-      request.timeout.foreach(d =>
+      request.timeout.filter(_.toMillis > 0).foreach(d =>
         jReqBuilder.timeout(JDuration.ofMillis(d.toMillis))
       )
       val jReq = jReqBuilder.build()
       val jResp = underlying.send(jReq, JHttpResponse.BodyHandlers.ofString())
       val headers = jResp.headers().map().asScala.map { (k, vs) =>
-        k.toLowerCase -> vs.asScala.headOption.getOrElse("")
+        k.toLowerCase(Locale.ROOT) -> vs.asScala.mkString(", ")
       }.toMap
       HttpResponse(jResp.statusCode(), headers, jResp.body())
     catch
@@ -80,7 +81,7 @@ object YaesClient:
     */
   def make(config: YaesClientConfig = YaesClientConfig())(using Resource): YaesClient =
     val builder = JHttpClient.newBuilder()
-    config.connectTimeout.filter(_.isFinite).foreach(d =>
+    config.connectTimeout.filter(d => d.isFinite && d.toMillis > 0).foreach(d =>
       builder.connectTimeout(JDuration.ofMillis(d.toMillis))
     )
     builder.followRedirects(config.followRedirects.toJava)
