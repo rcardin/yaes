@@ -26,3 +26,21 @@
 - **Chunk 4** fills in HTTP, Integrations, Community + CI/CD + cleanup
 - All internal links in content pages should use `/yaes/` prefix (e.g., `/yaes/learn/2-core-concepts/`)
 - `data-structures.md` is 3743 lines — read in two passes (lines 1-2000 then 2000+) as the task notes warn
+
+## Chunk 3 — Step 7 completed
+
+### Key Decisions
+
+1. **Page structure**: Organized as intro → Flow → Reactive Streams Integration (FlowPublisher) → Channels → Combining Flows with Channels (channelFlow + buffer)
+
+2. **FlowPublisher section**: data-structures.md has a very large Reactive Streams Integration section (~2700 lines from line 1010 onward). All content was preserved in the merged page.
+
+3. **channelFlow and buffer** are documented in `communication-primitives.md`, not `data-structures.md` — they bridge channels and flows, so they go in the "Combining" section at the end.
+
+### For Next Tasks
+
+- **3.3**: Step 8 — merge `docs/yaes-app.md` (301 lines) + `docs/examples.md` (336 lines)
+  - This is the capstone page — show how everything comes together
+  - `website/src/content/docs/learn/8-building-applications.md` is currently a placeholder
+- **3.4**: Verify full learning path navigation (steps 1→8)
+- **Chunk 4**: HTTP pages, Integrations, Community, CI/CD, final cleanup
