@@ -45,7 +45,7 @@ class YaesClient private (private[client] val underlying: JHttpClient):
         .uri(javaUri)
         .method(request.method.toString, bodyPublisher)
       request.headers.foreach((k, v) => jReqBuilder.header(k, v))
-      request.timeout.filter(_.toMillis > 0).foreach(d =>
+      request.timeout.filter(d => d.isFinite && d.toMillis > 0).foreach(d =>
         jReqBuilder.timeout(JDuration.ofMillis(d.toMillis))
       )
       val jReq = jReqBuilder.build()
