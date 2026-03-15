@@ -11,8 +11,7 @@ object TestServer:
     port
 
   def start(handler: HttpExchange => Unit): (HttpServer, String) =
-    val port   = findFreePort()
-    val server = HttpServer.create(new InetSocketAddress(port), 0)
+    val server = HttpServer.create(new InetSocketAddress(0), 0)
     server.createContext(
       "/",
       exchange => {
@@ -21,4 +20,5 @@ object TestServer:
     )
     server.setExecutor(null)
     server.start()
+    val port = server.getAddress.getPort
     (server, s"http://localhost:$port")
