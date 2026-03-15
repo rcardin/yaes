@@ -67,8 +67,12 @@ object Uri:
     def withQueryParams(queryParams: List[(String, String)]): URI =
       if queryParams.isEmpty then uri.toJavaURI
       else
-        val encoded = queryParams.map { (k, v) =>
-          URLEncoder.encode(k, UTF_8) + "=" + URLEncoder.encode(v, UTF_8)
+        val encoded = queryParams.iterator.map { (k, v) =>
+          s"${URLEncoder.encode(k, UTF_8)}=${URLEncoder.encode(v, UTF_8)}"
         }.mkString("&")
-        val newQuery = Option(uri.getQuery).fold(encoded)(q => q + "&" + encoded)
-        new URI(uri.getScheme, uri.getAuthority, uri.getPath, newQuery, uri.getFragment)
+        val raw       = uri.toASCIIString
+        val fragIdx   = raw.indexOf('#')
+        val (base, fragment) =
+          if fragIdx == -1 then (raw, "") else (raw.substring(0, fragIdx), raw.substring(fragIdx))
+        val separator = if base.contains('?') then "&" else "?"
+        new URI(s"$base$separator$encoded$fragment")
