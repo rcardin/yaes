@@ -22,6 +22,7 @@
 
 * **HTTP**
   * [HTTP Server](http/server.md)
+  * [HTTP Client](http/client.md)
   * [Circe Integration](http/circe.md)
 
 * [Examples](examples.md)

@@ -2,13 +2,7 @@ package in.rcard.yaes.http.server
 
 
 import in.rcard.yaes.*
-/** HTTP method enumeration.
-  *
-  * Represents the standard HTTP methods used in REST APIs.
-  */
-enum Method:
-  case GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
-
+import in.rcard.yaes.http.core.{BodyCodec, DecodingError, Method}
 /** HTTP request representation.
   *
   * Immutable case class representing an incoming HTTP request. This is a simplified model focusing

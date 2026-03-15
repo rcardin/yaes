@@ -1,6 +1,7 @@
 package in.rcard.yaes.http.server
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.core.Method
 import in.rcard.yaes.http.server.routing.*
 import in.rcard.yaes.http.server.params.path.*
 import in.rcard.yaes.http.server.params.query.*

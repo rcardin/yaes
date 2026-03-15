@@ -1,7 +1,7 @@
 package in.rcard.yaes.http.circe
 
 import in.rcard.yaes.*
-import in.rcard.yaes.http.server.{BodyCodec, DecodingError}
+import in.rcard.yaes.http.core.{BodyCodec, DecodingError}
 import io.circe.{Encoder, Decoder}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

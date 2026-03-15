@@ -3,6 +3,7 @@ package in.rcard.yaes.http.server.integration
 import in.rcard.yaes.*
 import in.rcard.yaes.Async.ShutdownTimedOut
 import in.rcard.yaes.Log.given
+import in.rcard.yaes.http.core.Method
 import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.server.PathBuilder.given
 import in.rcard.yaes.http.server.params.query.queryParam
