@@ -53,7 +53,7 @@ object Uri:
     /** Returns the port, defaulting to 443 for `https` and 80 for other schemes if not specified. */
     def port: Int =
       if uri.getPort != -1 then uri.getPort
-      else if uri.getScheme == "https" then 443
+      else if Option(uri.getScheme).exists(_.equalsIgnoreCase("https")) then 443
       else 80
 
     /** Appends query parameters to the URI, URL-encoding keys and values.
