@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters.*
 class YaesClient private (private[client] val underlying: JHttpClient):
   /** Sends an HTTP request and returns the raw response.
     *
-    * Transport-level failures (connection refused, timeouts, malformed URIs) are raised as
+    * Transport-level failures (connection refused, timeouts, other I/O errors) are raised as
     * [[ConnectionError]]. The response is returned as-is regardless of status code — use
     * [[HttpResponse.as]] to decode and check for HTTP errors.
     *
