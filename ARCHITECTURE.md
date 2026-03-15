@@ -34,6 +34,10 @@ Running handlers (`Sync.run`, `Raise.run`, etc.) executes effects and breaks ref
 **Java 25 Requirement:**
 The library requires Java 25+ for Virtual Threads and Structured Concurrency features. Ensure your development environment has Java 25 or higher.
 
+## Testing
+
+Avoid using `Thread.sleep` in tests. If you need synchronization, use `CountDownLatch` or similar primitives from `java.util.concurrent`.
+
 ## Related Resources
 
 - Main Documentation: https://rcardin.github.io/yaes/

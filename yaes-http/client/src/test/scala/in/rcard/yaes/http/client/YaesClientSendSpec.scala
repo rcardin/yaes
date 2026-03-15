@@ -186,8 +186,9 @@ class YaesClientSendSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "raise RequestTimeout when per-request timeout exceeded" in {
+    val latch = java.util.concurrent.CountDownLatch(1)
     val (server, baseUrl) = TestServer.start { exchange =>
-      Thread.sleep(500)
+      latch.await()
       exchange.sendResponseHeaders(200, 0)
       exchange.close()
     }
@@ -206,7 +207,9 @@ class YaesClientSendSpec extends AnyFlatSpec with Matchers:
           }
         }
         .get
-    finally server.stop(0)
+    finally
+      latch.countDown()
+      server.stop(0)
   }
 
   it should "append query params to URL that already has query string" in {

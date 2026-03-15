@@ -3,7 +3,7 @@ package in.rcard.yaes.http.client
 /** Transport-level errors that occur before an HTTP response is received.
   *
   * These errors represent failures in the network layer, such as the server being unreachable,
-  * connection timeouts, or malformed URLs. They are raised as typed errors via the
+  * or connection timeouts. They are raised as typed errors via the
   * [[in.rcard.yaes.Raise]] effect in [[YaesClient.send]].
   *
   * Example:
