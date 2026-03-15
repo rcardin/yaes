@@ -429,7 +429,7 @@ This means your application automatically responds to:
 
 1. **Check state before accepting work**: Always check `isShuttingDown()` before starting new operations
 2. **Use hooks for notifications**: Register hooks to notify components about shutdown
-3. **Use Resource for cleanup**: Prefer the `Resource` effect (see [Step 6](/learn/6-state-and-resources)) for resource cleanup over shutdown hooks
+3. **Use Resource for cleanup**: Prefer the `Resource` effect (see [Step 6](/yaes/learn/6-state-and-resources/)) for resource cleanup over shutdown hooks
 4. **Allow work to complete**: Don't abruptly terminate — let in-flight operations finish
 5. **Log shutdown progress**: Use hooks to log shutdown milestones for debugging
 6. **Choose appropriate deadlines**: Base the deadline on your longest normal operation and add a buffer for cleanup
