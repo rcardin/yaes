@@ -44,3 +44,25 @@
   - `website/src/content/docs/learn/8-building-applications.md` is currently a placeholder
 - **3.4**: Verify full learning path navigation (steps 1→8)
 - **Chunk 4**: HTTP pages, Integrations, Community, CI/CD, final cleanup
+
+## Chunk 4 — Final Verification (task 4.6) completed
+
+### Verification Results
+
+- **Build**: 16 pages generated successfully, no errors
+- **Sidebar**: Matches PRD exactly — Learn λÆS (8 steps), HTTP Module (collapsed), Integrations (collapsed), Community
+- **Internal links**: No `.md)` or `.html)` broken link patterns found
+- **Search**: Pagefind index built (16 HTML files indexed)
+- **CI/CD**: `.github/workflows/docs.yml` exists and is syntactically valid
+- **All pages present**: learn/1-8, http/server+client+circe, integrations/cats-effect+slf4j-logging, community/contributing
+
+### Remaining Task
+
+- **4.7**: Remove old Docsify files — **REQUIRES USER CONFIRMATION** before proceeding.
+  - Files to delete: `docs/index.html`, `docs/_sidebar.md`, `docs/custom.css`, `docs/custom-theme-toggle.js`, `docs/.nojekyll`
+  - Directories to remove: migrated content from `docs/`, `docs/effects/`, `docs/http/`
+  - Keep: `docs/plans/` (not part of site), `docs/logo.svg`
+
+### Note
+
+`docs/plans/SITE-TASKS.md` is in `.gitignore` — task status updates to that file cannot be committed.
