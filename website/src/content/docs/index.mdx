@@ -1,0 +1,94 @@
+---
+title: λÆS — Yet Another Effect System
+description: An experimental effect system for Scala 3 inspired by Algebraic Effects, using context parameters and context functions for modular, composable effect management.
+template: splash
+hero:
+  tagline: Algebraic Effects for Scala 3 — modular, composable, and built on Virtual Threads.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Get Started
+      link: /yaes/learn/1-getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/rcardin/yaes
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What is λÆS?
+
+λÆS is an experimental effect system for Scala 3 inspired by Algebraic Effects. Using Scala 3 context parameters and context functions, it provides a way to define, compose, and handle effects in a modular manner — without monads or complex type class hierarchies.
+
+Effects are first-class: they are tracked in function signatures, composed freely, and executed by handlers. λÆS uses **deferred execution** and Java 25 **Virtual Threads** for safe, efficient concurrency.
+
+## Learn λÆS in 8 Steps
+
+<div class="learning-path">
+  <a href="/yaes/learn/1-getting-started/" class="learning-path-step not-content">
+    <span class="step-number">Step 1</span>
+    <span class="step-title">Getting Started</span>
+  </a>
+  <a href="/yaes/learn/2-core-concepts/" class="learning-path-step not-content">
+    <span class="step-number">Step 2</span>
+    <span class="step-title">Core Concepts</span>
+  </a>
+  <a href="/yaes/learn/3-basic-effects/" class="learning-path-step not-content">
+    <span class="step-number">Step 3</span>
+    <span class="step-title">Basic Effects</span>
+  </a>
+  <a href="/yaes/learn/4-error-handling/" class="learning-path-step not-content">
+    <span class="step-number">Step 4</span>
+    <span class="step-title">Error Handling</span>
+  </a>
+  <a href="/yaes/learn/5-concurrency/" class="learning-path-step not-content">
+    <span class="step-number">Step 5</span>
+    <span class="step-title">Concurrency</span>
+  </a>
+  <a href="/yaes/learn/6-state-and-resources/" class="learning-path-step not-content">
+    <span class="step-number">Step 6</span>
+    <span class="step-title">State &amp; Resources</span>
+  </a>
+  <a href="/yaes/learn/7-streams-and-channels/" class="learning-path-step not-content">
+    <span class="step-number">Step 7</span>
+    <span class="step-title">Streams &amp; Channels</span>
+  </a>
+  <a href="/yaes/learn/8-building-applications/" class="learning-path-step not-content">
+    <span class="step-number">Step 8</span>
+    <span class="step-title">Building Applications</span>
+  </a>
+</div>
+
+## Modules
+
+<CardGrid>
+  <Card title="HTTP Module" icon="laptop">
+    Build HTTP servers and clients using λÆS effects and virtual threads, with Circe JSON integration.
+    [HTTP Server](/yaes/http/server/) · [HTTP Client](/yaes/http/client/) · [JSON with Circe](/yaes/http/circe/)
+  </Card>
+  <Card title="Integrations" icon="puzzle">
+    Connect λÆS with the broader Scala ecosystem. Cats Effect 3 interop and SLF4J logging support.
+    [Cats Effect](/yaes/integrations/cats-effect/) · [SLF4J Logging](/yaes/integrations/slf4j-logging/)
+  </Card>
+</CardGrid>
+
+## Featured Talk
+
+Watch the talk from **Scalar 2025** introducing the main concepts behind λÆS:
+
+<div style="margin-block: 2rem;">
+  <a href="https://youtu.be/TXUxCsPpZp0" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.youtube.com/vi/TXUxCsPpZp0/maxresdefault.jpg" alt="Watch the Scalar 2025 talk about λÆS" style="width: 100%; border-radius: 0.5rem;" />
+  </a>
+</div>
+
+## Community
+
+<CardGrid>
+  <LinkCard title="GitHub" href="https://github.com/rcardin/yaes" description="Source code, issues, and contributions." />
+  <LinkCard title="Maven Central" href="https://central.sonatype.com/artifact/in.rcard.yaes/yaes-core_3" description="Latest release and version history." />
+  <LinkCard title="Contributing" href="/yaes/community/contributing/" description="Guidelines for contributing to λÆS." />
+</CardGrid>
