@@ -22,7 +22,7 @@ By now you've learned each effect individually. This step shows how to wire them
 import in.rcard.yaes.*
 
 object MyApp extends YaesApp {
-  override def run {
+  override def run(using Sync, Output, Input, Random, Clock, System): Unit = {
     Output.printLn("Hello, λÆS!")
 
     val currentTime = Clock.now
@@ -58,7 +58,7 @@ Within a `run` block, the following effects are automatically available:
 The `Sync` effect is available inside `run`, allowing you to explicitly track side-effecting computations:
 
 ```scala 3
-override def run {
+override def run(using Sync, Output, Input, Random, Clock, System): Unit = {
   val user = Sync(findUserById(1))  // Track side-effecting calls
   Output.printLn(s"Found user: $user")
 }
@@ -69,7 +69,7 @@ Wrapping external side-effecting code with `Sync(...)` makes effectful boundarie
 ### Output Effect
 
 ```scala 3
-override def run {
+override def run(using Sync, Output, Input, Random, Clock, System): Unit = {
   Output.print("Hello ")
   Output.printLn("World!")
 }
