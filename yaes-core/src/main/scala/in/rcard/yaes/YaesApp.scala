@@ -7,7 +7,7 @@ import scala.concurrent.duration.Duration
 /** An abstract base class for YAES applications providing a common entry point.
   *
   * This trait provides a foundation for building applications using the YAES framework, with
-  * built-in support for common effects like Output, Input, Random, Clock, and System.
+  * built-in support for common effects like Sync, Output, Input, Random, Clock, and System.
   *
   * Logging is intentionally excluded from the automatic effect stack so that the application
   * can choose its own logging backend (e.g., `Log.run` or `Slf4jLog.run`).
@@ -44,6 +44,7 @@ trait YaesApp {
   /** The application logic that will be executed when the application starts.
     *
     * This method has access to common effects:
+    *   - Sync: for tracking side-effecting computations
     *   - Output: for console output
     *   - Input: for console input
     *   - Random: for random number generation
@@ -66,6 +67,7 @@ trait YaesApp {
     * }}}
     */
   def run: (
+      Sync,
       Output,
       Input,
       Random,
@@ -154,6 +156,7 @@ object YaesApp {
     */
   def apply(
       block: (
+          Sync,
           Output,
           Input,
           Random,
@@ -162,6 +165,7 @@ object YaesApp {
       ) ?=> Unit
   ): YaesApp = new YaesApp {
     def run: (
+        Sync,
         Output,
         Input,
         Random,

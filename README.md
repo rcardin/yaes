@@ -164,6 +164,7 @@ object MyApp extends YaesApp {
 ```
 
 `YaesApp` automatically provides:
+- **Sync** - Side-effecting computations tracking
 - **Output**, **Input** - Console I/O
 - **Random** - Random number generation
 - **Clock** - Time operations
