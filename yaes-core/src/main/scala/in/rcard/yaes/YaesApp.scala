@@ -15,15 +15,15 @@ import scala.concurrent.duration.Duration
   * Example usage:
   * {{{
   * object MyApp extends YaesApp:
-  *   def run(using Sync, Output, Input, Random, Clock, System): Unit = {
-  *     Output.printLn(s"Starting application with args: ${args.mkString(", ")}")
+  *   override def run: (Sync, Output, Input, Random, Clock, System) ?=> Unit =
+  *     val arguments = args.mkString(", ")
+  *     Output.printLn(s"Starting application with args: $arguments")
   *
   *     val currentTime = Clock.now
   *     Output.printLn(s"Current time: $currentTime")
   *
   *     val randomNumber = Random.nextInt
   *     Output.printLn(s"Random number: $randomNumber")
-  *   }
   * }}}
   */
 trait YaesApp {
