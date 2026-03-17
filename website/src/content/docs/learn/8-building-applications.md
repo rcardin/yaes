@@ -22,7 +22,7 @@ By now you've learned each effect individually. This step shows how to wire them
 import in.rcard.yaes.*
 
 object MyApp extends YaesApp {
-  override def run {
+  override def run(using Sync, Output, Input, Random, Clock, System): Unit = {
     Output.printLn("Hello, λÆS!")
 
     val currentTime = Clock.now
@@ -53,10 +53,23 @@ sbt "runMain in.rcard.yaes.MyApp"
 
 Within a `run` block, the following effects are automatically available:
 
+### Sync Effect
+
+The `Sync` effect is available inside `run`, allowing you to explicitly track side-effecting computations:
+
+```scala 3
+override def run(using Sync, Output, Input, Random, Clock, System): Unit = {
+  val user = Sync(findUserById(1))  // Track side-effecting calls
+  Output.printLn(s"Found user: $user")
+}
+```
+
+Wrapping external side-effecting code with `Sync(...)` makes effectful boundaries explicit at the type level. While exceptions thrown inside `run` are already caught by the outer `Sync.runBlocking`, having `Sync` in scope lets you be intentional about where side effects occur.
+
 ### Output Effect
 
 ```scala 3
-override def run {
+override def run(using Sync, Output, Input, Random, Clock, System): Unit = {
   Output.print("Hello ")
   Output.printLn("World!")
 }
@@ -169,6 +182,8 @@ sbt "runMain in.rcard.yaes.ArgsApp arg1 arg2 arg3"
 | 4     | Random   | Random generation                                  |
 | 5     | Clock    | Time operations                                    |
 | 6     | System   | System properties / environment variables          |
+
+All six effects are available as context parameters inside the `run` block, including `Sync`. The `Sync` handler (`Sync.runBlocking`) wraps the entire execution, providing the `Sync` context to the inner effects.
 
 Logging is intentionally excluded so applications can choose their own backend (`Log.run` or `Slf4jLog.run`).
 
