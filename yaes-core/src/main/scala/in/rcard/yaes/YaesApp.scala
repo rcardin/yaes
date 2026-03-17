@@ -15,7 +15,7 @@ import scala.concurrent.duration.Duration
   * Example usage:
   * {{{
   * object MyApp extends YaesApp:
-  *   def run: Unit = {
+  *   def run(using Sync, Output, Input, Random, Clock, System): Unit = {
   *     Output.printLn(s"Starting application with args: ${args.mkString(", ")}")
   *
   *     val currentTime = Clock.now
@@ -59,7 +59,7 @@ trait YaesApp {
     * Example:
     * {{{
     * object MyApp extends YaesApp:
-    *   def run: Unit = {
+    *   def run(using Sync, Output, Input, Random, Clock, System): Unit = {
     *     Output.printLn("Hello, YAES!")
     *     val now = Clock.now
     *     Output.printLn(s"Current time: $now")
