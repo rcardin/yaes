@@ -785,8 +785,6 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
   it should "shut down promptly when no requests are in flight" in {
     val port = findFreePort()
 
-    val startTime = java.lang.System.nanoTime()
-
     Sync.runBlocking(30.seconds) {
       Shutdown.run {
         Raise.run {
@@ -807,6 +805,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               waitForServer(port)
 
               // Initiate shutdown while server is idle (blocked on accept())
+              val startTime = java.lang.System.nanoTime()
               Shutdown.initiateShutdown()
 
               // Server should shut down promptly — well under the 2-second deadline
