@@ -34,12 +34,15 @@ case class ServerDef(routes: Routes) {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(config: ServerConfig)(using
       Log,
-      Shutdown
+      Shutdown,
+      Sync
   ): Unit = {
     YaesServer.run(this, config)
   }
@@ -58,12 +61,15 @@ case class ServerDef(routes: Routes) {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
       Log,
-      Shutdown
+      Shutdown,
+      Sync
   ): Unit = {
     YaesServer.run(this, ServerConfig(port = port, deadline = deadline))
   }
@@ -88,10 +94,12 @@ case class ServerDef(routes: Routes) {
   *   }
   * )
   *
-  * Shutdown.run {
-  *   Raise.run {
-  *     Output.run {
-  *       server.run(ServerConfig(port = 8080))
+  * Sync.runBlocking(Duration.Inf) {
+  *   Shutdown.run {
+  *     Raise.run {
+  *       Output.run {
+  *         server.run(ServerConfig(port = 8080))
+  *       }
   *     }
   *   }
   * }
@@ -141,6 +149,8 @@ object YaesServer {
     * **Effect Requirements:**
     *   - Requires [[Log]] context for lifecycle logging
     *   - Requires [[Shutdown]] context for graceful shutdown coordination with JVM signals
+    *   - Requires [[Sync]] context for tracking I/O side effects (socket binding, accepting
+    *     connections, reading/writing)
     *
     * **Request Handling:**
     *   - Each request is handled in a forked fiber via [[Async.fork]]
@@ -171,14 +181,17 @@ object YaesServer {
     * import in.rcard.yaes.Log.given
     * import in.rcard.yaes.http.server.*
     * import scala.concurrent.duration.*
+    * import scala.concurrent.ExecutionContext.Implicits.global
     *
     * val server = YaesServer.route(
     *   GET / "hello" -> { req => Response.ok("Hello!") }
     * )
     *
-    * Shutdown.run {
-    *   Log.run() {
-    *     server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
+    * Sync.runBlocking(Duration.Inf) {
+    *   Shutdown.run {
+    *     Log.run() {
+    *       server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
+    *     }
     *   }
     * }
     * }}}
@@ -191,12 +204,15 @@ object YaesServer {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, config: ServerConfig)(using
       log: Log,
-      shutdown: Shutdown
+      shutdown: Shutdown,
+      sync: Sync
   ): Unit = {
     val logger = Log.getLogger("YaesServer")
     Raise.onError {
@@ -205,7 +221,7 @@ object YaesServer {
         Resource.install({
           Async.withGracefulShutdown(config.deadline) {
             logger.info(s"Starting server on port ${config.port}")
-            val serverSocket = new ServerSocket(config.port)
+            val serverSocket = Sync { new ServerSocket(config.port) }
             logger.info(s"Server ready, listening on port ${config.port}")
 
             // Accept loop - runs as main fiber in structured scope
@@ -214,7 +230,7 @@ object YaesServer {
             try {
               while (!Shutdown.isShuttingDown()) {
                 try {
-                  val socket = serverSocket.accept()
+                  val socket = Sync { serverSocket.accept() }
                   // Fork a fiber to handle this request
                   Async.fork {
                     handleConnection(socket, serverDef.routes, config)
@@ -261,12 +277,15 @@ object YaesServer {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, port: Int, deadline: Deadline)(using
       log: Log,
-      shutdown: Shutdown
+      shutdown: Shutdown,
+      sync: Sync
   ): Unit = {
     run(serverDef, ServerConfig(port = port, deadline = deadline))
   }
@@ -286,7 +305,8 @@ object YaesServer {
     *   Shutdown context to check if server is shutting down
     */
   private def handleConnection(socket: Socket, routes: Routes, config: ServerConfig)(using
-      shutdown: Shutdown
+      shutdown: Shutdown,
+      sync: Sync
   ): Unit = {
     Resource.run {
       Resource.ensuring {
@@ -298,28 +318,28 @@ object YaesServer {
           // Check if server is shutting down
           if (Shutdown.isShuttingDown()) {
             val response = Response.serviceUnavailable("Server is shutting down")
-            HttpWriter.writeResponse(socket.getOutputStream, response)
+            Sync { HttpWriter.writeResponse(socket.getOutputStream, response) }
             break()
           }
 
           // Parse the HTTP request and handle parse errors
           Raise.onError {
-            val request = HttpParser.parseRequest(socket.getInputStream, config)
+            val request = Sync { HttpParser.parseRequest(socket.getInputStream, config) }
 
             // Route the request
             try {
               val response = routes.handle(request)
-              HttpWriter.writeResponse(socket.getOutputStream, response)
+              Sync { HttpWriter.writeResponse(socket.getOutputStream, response) }
             } catch {
               case ex: Exception =>
                 // Handler threw exception - return 500
                 val errorResponse = Response.internalServerError(ex.getMessage)
-                HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+                Sync { HttpWriter.writeResponse(socket.getOutputStream, errorResponse) }
             }
           } { parseError =>
             // Parse error - convert to response and write
             val errorResponse = parseError.toResponse
-            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+            Sync { HttpWriter.writeResponse(socket.getOutputStream, errorResponse) }
           }
         }
       } catch {
@@ -330,7 +350,7 @@ object YaesServer {
           // Unexpected error - try to send 500 if possible, then close
           try {
             val errorResponse = Response.internalServerError("Internal server error")
-            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
+            Sync { HttpWriter.writeResponse(socket.getOutputStream, errorResponse) }
           } catch {
             case _: Exception =>
               // Can't even write the error response - just close
