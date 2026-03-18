@@ -215,53 +215,55 @@ object YaesServer {
       sync: Sync
   ): Unit = {
     val logger = Log.getLogger("YaesServer")
-    Raise.onError {
-      Resource.run {
-        // Install server socket as a resource with automatic cleanup
-        Resource.install({
-          Async.withGracefulShutdown(config.deadline) {
-            logger.info(s"Starting server on port ${config.port}")
-            val serverSocket = Sync { new ServerSocket(config.port) }
-            logger.info(s"Server ready, listening on port ${config.port}")
+    Sync {
+      Raise.onError {
+        Resource.run {
+          // Install server socket as a resource with automatic cleanup
+          Resource.install({
+            Async.withGracefulShutdown(config.deadline) {
+              logger.info(s"Starting server on port ${config.port}")
+              val serverSocket = new ServerSocket(config.port)
+              logger.info(s"Server ready, listening on port ${config.port}")
 
-            // Accept loop - runs as main fiber in structured scope
-            // Each request is handled in a forked fiber
-            // Virtual thread interruption breaks accept() on shutdown
-            try {
-              while (!Shutdown.isShuttingDown()) {
-                try {
-                  val socket = Sync { serverSocket.accept() }
-                  // Fork a fiber to handle this request
-                  Async.fork {
-                    handleConnection(socket, serverDef.routes, config)
+              // Accept loop - runs as main fiber in structured scope
+              // Each request is handled in a forked fiber
+              // Virtual thread interruption breaks accept() on shutdown
+              try {
+                while (!Shutdown.isShuttingDown()) {
+                  try {
+                    val socket = serverSocket.accept()
+                    // Fork a fiber to handle this request
+                    Async.fork {
+                      handleConnection(socket, serverDef.routes, config)
+                    }
+                  } catch {
+                    case _: SocketException if Shutdown.isShuttingDown() =>
+                      // Expected during shutdown - ServerSocket was closed
+                      // Break out of the accept loop
+                      ()
+                    case ex: Exception =>
+                      // Log unexpected errors but continue accepting
+                      logger.error(s"Error accepting connection: ${ex.getMessage}")
                   }
-                } catch {
-                  case _: SocketException if Shutdown.isShuttingDown() =>
-                    // Expected during shutdown - ServerSocket was closed
-                    // Break out of the accept loop
-                    ()
-                  case ex: Exception =>
-                    // Log unexpected errors but continue accepting
-                    logger.error(s"Error accepting connection: ${ex.getMessage}")
                 }
+              } finally {
+                logger.info("Server shutting down...")
               }
-            } finally {
-              logger.info("Server shutting down...")
-            }
 
-            serverSocket // Return the server socket for cleanup
+              serverSocket // Return the server socket for cleanup
+            }
+          }) { serverSocket =>
+            // Cleanup: close the server socket
+            serverSocket.close()
+            logger.info("Server stopped")
           }
-        }) { serverSocket =>
-          // Cleanup: close the server socket
-          serverSocket.close()
-          logger.info("Server stopped")
         }
+      } { (_: Async.ShutdownTimedOut) =>
+        // Shutdown deadline exceeded - log warning and complete normally
+        logger.warn(
+          s"Shutdown deadline (${config.deadline}) exceeded, some requests may not have completed"
+        )
       }
-    } { (_: Async.ShutdownTimedOut) =>
-      // Shutdown deadline exceeded - log warning and complete normally
-      logger.warn(
-        s"Shutdown deadline (${config.deadline}) exceeded, some requests may not have completed"
-      )
     }
   }
 
@@ -307,7 +309,7 @@ object YaesServer {
   private def handleConnection(socket: Socket, routes: Routes, config: ServerConfig)(using
       shutdown: Shutdown,
       sync: Sync
-  ): Unit = {
+  ): Unit = Sync {
     Resource.run {
       Resource.ensuring {
         socket.close()
@@ -318,28 +320,28 @@ object YaesServer {
           // Check if server is shutting down
           if (Shutdown.isShuttingDown()) {
             val response = Response.serviceUnavailable("Server is shutting down")
-            Sync { HttpWriter.writeResponse(socket.getOutputStream, response) }
+            HttpWriter.writeResponse(socket.getOutputStream, response)
             break()
           }
 
           // Parse the HTTP request and handle parse errors
           Raise.onError {
-            val request = Sync { HttpParser.parseRequest(socket.getInputStream, config) }
+            val request = HttpParser.parseRequest(socket.getInputStream, config)
 
             // Route the request
             try {
               val response = routes.handle(request)
-              Sync { HttpWriter.writeResponse(socket.getOutputStream, response) }
+              HttpWriter.writeResponse(socket.getOutputStream, response)
             } catch {
               case ex: Exception =>
                 // Handler threw exception - return 500
                 val errorResponse = Response.internalServerError(ex.getMessage)
-                Sync { HttpWriter.writeResponse(socket.getOutputStream, errorResponse) }
+                HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
             }
           } { parseError =>
             // Parse error - convert to response and write
             val errorResponse = parseError.toResponse
-            Sync { HttpWriter.writeResponse(socket.getOutputStream, errorResponse) }
+            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
           }
         }
       } catch {
@@ -350,7 +352,7 @@ object YaesServer {
           // Unexpected error - try to send 500 if possible, then close
           try {
             val errorResponse = Response.internalServerError("Internal server error")
-            Sync { HttpWriter.writeResponse(socket.getOutputStream, errorResponse) }
+            HttpWriter.writeResponse(socket.getOutputStream, errorResponse)
           } catch {
             case _: Exception =>
               // Can't even write the error response - just close
