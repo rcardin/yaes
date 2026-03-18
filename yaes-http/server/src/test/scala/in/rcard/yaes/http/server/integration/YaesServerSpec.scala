@@ -13,6 +13,7 @@ import org.scalatest.matchers.should.Matchers
 import java.net.ServerSocket
 import java.net.URI
 import java.net.http.HttpClient
+import java.net.http.HttpConnectTimeoutException
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -654,7 +655,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
                 // If the connection sneaks in during the race window, 503 is acceptable
                 response2.statusCode() shouldBe 503
               } catch {
-                case _: java.net.ConnectException | _: java.io.IOException =>
+                case _: java.net.ConnectException | _: HttpConnectTimeoutException =>
                   // Expected: server socket is closed, connection refused
                   succeed
               }
