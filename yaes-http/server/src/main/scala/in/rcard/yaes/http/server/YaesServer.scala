@@ -227,8 +227,10 @@ object YaesServer {
               logger.info(s"Server ready, listening on port ${config.port}")
 
               // Close the server socket on shutdown to unblock accept()
+              // Guard with try-catch since the Resource finalizer may also close the socket
               Shutdown.onShutdown {
-                serverSocket.close()
+                try serverSocket.close()
+                catch { case _: SocketException => () }
               }
 
               // Accept loop - runs as main fiber in structured scope
