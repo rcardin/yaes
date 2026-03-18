@@ -324,7 +324,7 @@ Sync.runBlocking(Duration.Inf) {
       server.run(port = 8080)
     }
   }
-}
+}.get
 ```
 
 ### Shutdown on JVM Termination

@@ -235,7 +235,7 @@ object YaesServer {
 
               // Accept loop - runs as main fiber in structured scope
               // Each request is handled in a forked fiber
-              // Virtual thread interruption breaks accept() on shutdown
+              // Shutdown closes the ServerSocket to break out of accept()
               try {
                 while (!Shutdown.isShuttingDown()) {
                   try {
