@@ -509,6 +509,7 @@ The server requires the `Shutdown` effect context. This enables:
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
