@@ -34,17 +34,20 @@ case class ServerDef(routes: Routes) {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(config: ServerConfig)(using
       Log,
-      Shutdown
+      Shutdown,
+      Sync
   ): Unit = {
     YaesServer.run(this, config)
   }
 
-  /** Run the HTTP server (backward-compatible overload).
+  /** Run the HTTP server (convenience overload).
     *
     * Starts the server on the specified port with a deadline. This is a convenience method that
     * creates a ServerConfig internally.
@@ -58,12 +61,15 @@ case class ServerDef(routes: Routes) {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(port: Int, deadline: Deadline = Deadline.after(30.seconds))(using
       Log,
-      Shutdown
+      Shutdown,
+      Sync
   ): Unit = {
     YaesServer.run(this, ServerConfig(port = port, deadline = deadline))
   }
@@ -79,6 +85,7 @@ case class ServerDef(routes: Routes) {
   * {{{
   * import in.rcard.yaes.http.server.*
   * import scala.concurrent.duration.*
+  * import scala.concurrent.ExecutionContext.Implicits.global
   *
   * val server = YaesServer.route(
   *   GET / "hello" -> { req => Response.ok("Hello!") },
@@ -88,13 +95,15 @@ case class ServerDef(routes: Routes) {
   *   }
   * )
   *
-  * Shutdown.run {
-  *   Raise.run {
-  *     Output.run {
-  *       server.run(ServerConfig(port = 8080))
+  * Sync.runBlocking(Duration.Inf) {
+  *   Shutdown.run {
+  *     Raise.run {
+  *       Output.run {
+  *         server.run(ServerConfig(port = 8080))
+  *       }
   *     }
   *   }
-  * }
+  * }.get
   * }}}
   */
 object YaesServer {
@@ -141,6 +150,8 @@ object YaesServer {
     * **Effect Requirements:**
     *   - Requires [[Log]] context for lifecycle logging
     *   - Requires [[Shutdown]] context for graceful shutdown coordination with JVM signals
+    *   - Requires [[Sync]] context for tracking I/O side effects (socket binding, accepting
+    *     connections, reading/writing)
     *
     * **Request Handling:**
     *   - Each request is handled in a forked fiber via [[Async.fork]]
@@ -171,16 +182,19 @@ object YaesServer {
     * import in.rcard.yaes.Log.given
     * import in.rcard.yaes.http.server.*
     * import scala.concurrent.duration.*
+    * import scala.concurrent.ExecutionContext.Implicits.global
     *
     * val server = YaesServer.route(
     *   GET / "hello" -> { req => Response.ok("Hello!") }
     * )
     *
-    * Shutdown.run {
-    *   Log.run() {
-    *     server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
+    * Sync.runBlocking(Duration.Inf) {
+    *   Shutdown.run {
+    *     Log.run() {
+    *       server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
+    *     }
     *   }
-    * }
+    * }.get
     * }}}
     *
     * @param serverDef
@@ -191,65 +205,80 @@ object YaesServer {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, config: ServerConfig)(using
       log: Log,
-      shutdown: Shutdown
+      shutdown: Shutdown,
+      sync: Sync
   ): Unit = {
     val logger = Log.getLogger("YaesServer")
-    Raise.onError {
-      Resource.run {
-        // Install server socket as a resource with automatic cleanup
-        Resource.install({
-          Async.withGracefulShutdown(config.deadline) {
-            logger.info(s"Starting server on port ${config.port}")
-            val serverSocket = new ServerSocket(config.port)
-            logger.info(s"Server ready, listening on port ${config.port}")
+    Sync {
+      Raise.onError {
+        Resource.run {
+          // Install server socket as a resource with automatic cleanup
+          Resource.install({
+            Async.withGracefulShutdown(config.deadline) {
+              logger.info(s"Starting server on port ${config.port}")
+              val serverSocket = new ServerSocket(config.port)
+              logger.info(s"Server ready, listening on port ${config.port}")
 
-            // Accept loop - runs as main fiber in structured scope
-            // Each request is handled in a forked fiber
-            // Virtual thread interruption breaks accept() on shutdown
-            try {
-              while (!Shutdown.isShuttingDown()) {
-                try {
-                  val socket = serverSocket.accept()
-                  // Fork a fiber to handle this request
-                  Async.fork {
-                    handleConnection(socket, serverDef.routes, config)
-                  }
-                } catch {
-                  case _: SocketException if Shutdown.isShuttingDown() =>
-                    // Expected during shutdown - ServerSocket was closed
-                    // Break out of the accept loop
-                    ()
-                  case ex: Exception =>
-                    // Log unexpected errors but continue accepting
-                    logger.error(s"Error accepting connection: ${ex.getMessage}")
-                }
+              // Close the server socket on shutdown to unblock accept()
+              // Guard with try-catch since the Resource finalizer may also close the socket
+              Shutdown.onShutdown {
+                try serverSocket.close()
+                catch { case _: SocketException => () }
               }
-            } finally {
-              logger.info("Server shutting down...")
-            }
 
-            serverSocket // Return the server socket for cleanup
+              // Accept loop - runs as main fiber in structured scope
+              // Each request is handled in a forked fiber
+              // Shutdown closes the ServerSocket to break out of accept()
+              try {
+                while (!Shutdown.isShuttingDown()) {
+                  try {
+                    val socket = serverSocket.accept()
+                    // Fork a fiber to handle this request
+                    Async.fork {
+                      handleConnection(socket, serverDef.routes, config)
+                    }
+                  } catch {
+                    case _: SocketException if Shutdown.isShuttingDown() =>
+                      // Expected during shutdown - ServerSocket was closed
+                      // Break out of the accept loop
+                      ()
+                    case ex: Exception =>
+                      // Log unexpected errors but continue accepting
+                      logger.error(s"Error accepting connection: ${ex.getMessage}")
+                  }
+                }
+              } finally {
+                logger.info("Server shutting down...")
+              }
+
+              serverSocket // Return the server socket for cleanup
+            }
+          }) { serverSocket =>
+            // Cleanup: close the server socket
+            serverSocket.close()
+            logger.info("Server stopped")
           }
-        }) { serverSocket =>
-          // Cleanup: close the server socket
-          serverSocket.close()
-          logger.info("Server stopped")
         }
+      } { (_: Async.ShutdownTimedOut) =>
+        // Shutdown deadline exceeded - log warning and complete normally
+        logger.warn(
+          s"Shutdown deadline (${config.deadline}) exceeded, some requests may not have completed"
+        )
       }
-    } { (_: Async.ShutdownTimedOut) =>
-      // Shutdown deadline exceeded - log warning and complete normally
-      logger.warn(
-        s"Shutdown deadline (${config.deadline}) exceeded, some requests may not have completed"
-      )
     }
   }
 
-  /** Backward-compatible run method with port and deadline.
+  /** Convenience run method with port and deadline.
+    *
+    * This overload mirrors the older `(serverDef, port, deadline)` calling style while
+    * delegating to the `ServerConfig`-based `run` method.
     *
     * @param serverDef
     *   Server configuration with routes
@@ -261,12 +290,15 @@ object YaesServer {
     *   Log context for lifecycle logging
     * @param shutdown
     *   Shutdown context for graceful shutdown coordination
+    * @param sync
+    *   Sync context for tracking I/O side effects
     * @return
     *   Unit after server stops
     */
   def run(serverDef: ServerDef, port: Int, deadline: Deadline)(using
       log: Log,
-      shutdown: Shutdown
+      shutdown: Shutdown,
+      sync: Sync
   ): Unit = {
     run(serverDef, ServerConfig(port = port, deadline = deadline))
   }
@@ -286,8 +318,9 @@ object YaesServer {
     *   Shutdown context to check if server is shutting down
     */
   private def handleConnection(socket: Socket, routes: Routes, config: ServerConfig)(using
-      shutdown: Shutdown
-  ): Unit = {
+      shutdown: Shutdown,
+      sync: Sync
+  ): Unit = Sync {
     Resource.run {
       Resource.ensuring {
         socket.close()

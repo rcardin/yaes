@@ -49,33 +49,37 @@ import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.circe.given
 import io.circe.{Encoder, Decoder}
+import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext.Implicits.global
 
 case class User(name: String, age: Int) derives Encoder.AsObject, Decoder
 
-Shutdown.run {
-  Log.run() {
-    val server = YaesServer.route(
-      // Response body automatically encoded to JSON
-      GET(p"/users" / param[Int]("id")) { (req, id: Int) =>
-        Response.ok(User("Alice", 30))
-        // Response body: {"name":"Alice","age":30}
-        // Content-Type: application/json
-      },
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Log.run() {
+      val server = YaesServer.route(
+        // Response body automatically encoded to JSON
+        GET(p"/users" / param[Int]("id")) { (req, id: Int) =>
+          Response.ok(User("Alice", 30))
+          // Response body: {"name":"Alice","age":30}
+          // Content-Type: application/json
+        },
 
-      // Request body automatically decoded from JSON
-      POST(p"/users") { req =>
-        Raise.fold {
-          val user = req.as[User]
-          Response.created(user)
-        } { case error: DecodingError =>
-          Response.badRequest(error.message)
+        // Request body automatically decoded from JSON
+        POST(p"/users") { req =>
+          Raise.fold {
+            val user = req.as[User]
+            Response.created(user)
+          } { case error: DecodingError =>
+            Response.badRequest(error.message)
+          }
         }
-      }
-    )
+      )
 
-    server.run(port = 8080)
+      server.run(port = 8080)
+    }
   }
-}
+}.get
 ```
 
 The key import is `in.rcard.yaes.http.circe.given` — this brings the `circeBodyCodec` instance into scope, which automatically provides a `BodyCodec[A]` for any type `A` that has both a Circe `Encoder[A]` and `Decoder[A]` available.
@@ -179,6 +183,8 @@ import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.circe.given
 import io.circe.{Encoder, Decoder}
+import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext.Implicits.global
 
 case class User(id: Int, name: String, email: String) derives Encoder.AsObject, Decoder
 case class CreateUser(name: String, email: String) derives Encoder.AsObject, Decoder
@@ -186,29 +192,31 @@ case class CreateUser(name: String, email: String) derives Encoder.AsObject, Dec
 object JsonServer extends App {
   val userId = param[Int]("userId")
 
-  Shutdown.run {
-    Log.run() {
-      val server = YaesServer.route(
-        // Return a user as JSON
-        GET(p"/users" / userId) { (req, id: Int) =>
-          Response.ok(User(id, "Alice", "alice@example.com"))
-        },
+  Sync.runBlocking(Duration.Inf) {
+    Shutdown.run {
+      Log.run() {
+        val server = YaesServer.route(
+          // Return a user as JSON
+          GET(p"/users" / userId) { (req, id: Int) =>
+            Response.ok(User(id, "Alice", "alice@example.com"))
+          },
 
-        // Parse JSON body and create a user
-        POST(p"/users") { req =>
-          Raise.fold {
-            val newUser = req.as[CreateUser]
-            val created = User(1, newUser.name, newUser.email)
-            Response.created(created)
-          } { case error: DecodingError =>
-            Response.badRequest(error.message)
+          // Parse JSON body and create a user
+          POST(p"/users") { req =>
+            Raise.fold {
+              val newUser = req.as[CreateUser]
+              val created = User(1, newUser.name, newUser.email)
+              Response.created(created)
+            } { case error: DecodingError =>
+              Response.badRequest(error.message)
+            }
           }
-        }
-      )
+        )
 
-      server.run(port = 8080)
+        server.run(port = 8080)
+      }
     }
-  }
+  }.get
 }
 ```
 

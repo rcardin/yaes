@@ -26,7 +26,7 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.15.0"
 - **Socket-Based HTTP/1.1**: Built on java.net.ServerSocket with virtual threads
 - **Virtual Thread Per Request**: Each request runs in its own fiber under structured concurrency
 - **Type-Safe Routing DSL**: Compile-time verified routes with path and query parameters
-- **Effect Integration**: Seamless integration with YAES effects (Async, Resource, Shutdown, Raise)
+- **Effect Integration**: Seamless integration with YAES effects (Async, Resource, Shutdown, Raise, Sync)
 - **Graceful Shutdown**: Coordinated shutdown with configurable deadlines and 503 responses
 - **URL Decoding**: Automatic URL decoding for paths and query parameters
 - **Case-Insensitive Headers**: HTTP/1.1 compliant header handling
@@ -34,26 +34,30 @@ libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.15.0"
 ## Quick Start
 
 ```scala
+import in.rcard.yaes.*
 import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
+import scala.concurrent.ExecutionContext.Implicits.global
 
-// Server requires Log and Shutdown effects
-Shutdown.run {
-  Log.run() {
-    val server = YaesServer.route(
-      GET(p"/hello") { req =>
-        Response.ok("Hello, World!")
-      },
-      POST(p"/echo") { req =>
-        Response.ok(req.body)
-      }
-    )
+// Server requires Sync, Log, and Shutdown effects
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Log.run() {
+      val server = YaesServer.route(
+        GET(p"/hello") { req =>
+          Response.ok("Hello, World!")
+        },
+        POST(p"/echo") { req =>
+          Response.ok(req.body)
+        }
+      )
 
-    server.run(port = 8080)
-    // Server runs until Shutdown.initiateShutdown() is called
+      server.run(port = 8080)
+      // Server runs until Shutdown.initiateShutdown() is called
+    }
   }
-}
+}.get
 ```
 
 ## Routing DSL
@@ -253,30 +257,35 @@ server.run(config)
 The server integrates with YAES's `Shutdown` effect for coordinated graceful shutdown:
 
 ```scala
-Shutdown.run {
-  Log.run() {
-    val server = YaesServer.route(
-      GET(p"/work") { req =>
-        Async.delay(5.seconds)  // Simulate long-running request
-        Response.ok("Done")
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Log.run() {
+      val server = YaesServer.route(
+        GET(p"/work") { req =>
+          Async.delay(5.seconds)  // Simulate long-running request
+          Response.ok("Done")
+        }
+      )
+
+      // Start server in background fiber
+      val serverFiber = Async.fork("server") {
+        server.run(port = 8080)
       }
-    )
 
-    // Start server in background fiber
-    val serverFiber = Async.fork("server") {
-      server.run(port = 8080)
+      // Do other work...
+      Async.delay(10.seconds)
+
+      // Initiate shutdown
+      Shutdown.initiateShutdown()
+
+      // Wait for server to finish
+      serverFiber.join()
     }
-
-    // Do other work...
-    Async.delay(10.seconds)
-
-    // Initiate shutdown
-    Shutdown.initiateShutdown()
-
-    // Wait for server to finish
-    serverFiber.join()
   }
-}
+}.get
 ```
 
 ### Shutdown Behavior
@@ -295,22 +304,27 @@ When `Shutdown.initiateShutdown()` is called:
 Register callbacks to run when shutdown begins:
 
 ```scala
-Shutdown.run {
-  Log.run() {
-    // Register cleanup hooks
-    Shutdown.onShutdown {
-      println("Cleaning up resources...")
-    }
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
-    val server = YaesServer.route(
-      GET(p"/health") { req =>
-        Response.ok("OK")
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Log.run() {
+      // Register cleanup hooks
+      Shutdown.onShutdown {
+        println("Cleaning up resources...")
       }
-    )
 
-    server.run(port = 8080)
+      val server = YaesServer.route(
+        GET(p"/health") { req =>
+          Response.ok("OK")
+        }
+      )
+
+      server.run(port = 8080)
+    }
   }
-}
+}.get
 ```
 
 ### Shutdown on JVM Termination
@@ -386,57 +400,60 @@ Note: JSON libraries (circe, upickle, zio-json, etc.) are not included. Choose y
 import in.rcard.yaes.http.server.*
 import in.rcard.yaes.*
 import scala.concurrent.duration.*
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object MyServer extends App {
   val userId = param[Int]("userId")
 
-  Shutdown.run {
-    Log.run() {
-      val server = YaesServer.route(
-        // Health check
-        GET(p"/health") { req =>
-          Response.ok("OK")
-        },
+  Sync.runBlocking(Duration.Inf) {
+    Shutdown.run {
+      Log.run() {
+        val server = YaesServer.route(
+          // Health check
+          GET(p"/health") { req =>
+            Response.ok("OK")
+          },
 
-        // List users
-        GET(p"/users") { req =>
-          Response(
-            status = 200,
-            headers = Map("Content-Type" -> "application/json"),
-            body = """[{"id": 1, "name": "Alice"}]"""
-          )
-        },
+          // List users
+          GET(p"/users") { req =>
+            Response(
+              status = 200,
+              headers = Map("Content-Type" -> "application/json"),
+              body = """[{"id": 1, "name": "Alice"}]"""
+            )
+          },
 
-        // Get user by ID
-        GET(p"/users" / userId) { (req, id: Int) =>
-          Response(
-            status = 200,
-            headers = Map("Content-Type" -> "application/json"),
-            body = s"""{"id": $id, "name": "User $id"}"""
-          )
-        },
+          // Get user by ID
+          GET(p"/users" / userId) { (req, id: Int) =>
+            Response(
+              status = 200,
+              headers = Map("Content-Type" -> "application/json"),
+              body = s"""{"id": $id, "name": "User $id"}"""
+            )
+          },
 
-        // Search with query parameter
-        GET(p"/search" ? queryParam[String]("q")) { req =>
-          val query = req.queryParam("q").get
-          Response.ok(s"Searching for: $query")
-        },
+          // Search with query parameter
+          GET(p"/search" ? queryParam[String]("q")) { req =>
+            val query = req.queryParam("q").get
+            Response.ok(s"Searching for: $query")
+          },
 
-        // Create user
-        POST(p"/users") { req =>
-          // Parse req.body and create user...
-          Response(
-            status = 201,
-            headers = Map(
-              "Content-Type" -> "application/json",
-              "Location" -> "/users/123"
-            ),
-            body = """{"id": 123, "name": "New User"}"""
-          )
-        }
-      )
+          // Create user
+          POST(p"/users") { req =>
+            // Parse req.body and create user...
+            Response(
+              status = 201,
+              headers = Map(
+                "Content-Type" -> "application/json",
+                "Location" -> "/users/123"
+              ),
+              body = """{"id": 123, "name": "New User"}"""
+            )
+          }
+        )
 
-      server.run(port = 8080)
+        server.run(port = 8080)
+      }
     }
   }
 }

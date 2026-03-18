@@ -12,7 +12,7 @@ A type-safe, effect-based HTTP/1.1 server built on YAES effects and Java virtual
 - **Socket-based HTTP/1.1** - Built on `java.net.ServerSocket` with virtual threads for concurrent request handling
 - **Type-safe routing DSL** - Compile-time verified routes with typed path and query parameters
 - **Virtual threads per request** - Each request runs in its own fiber via `Async.fork` under structured concurrency
-- **Effect integration** - Seamless composition with YAES effects (Async, Resource, Shutdown, Raise, Log)
+- **Effect integration** - Seamless composition with YAES effects (Async, Resource, Shutdown, Raise, Log, Sync)
 - **Graceful shutdown** - Coordinated shutdown with configurable deadlines and automatic 503 responses
 - **Automatic error handling** - HTTP parse errors and parameter validation automatically converted to proper status codes
 
@@ -44,23 +44,27 @@ import in.rcard.yaes.*
 import in.rcard.yaes.Log.given
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
+import scala.concurrent.ExecutionContext.Implicits.global
 
 // Run server with required effect contexts
-Shutdown.run {
-  Log.run() {
-    val server = YaesServer.route(
-      GET(p"/hello") { req =>
-        Response.ok("Hello, World!")
-      }
-    )
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Log.run() {
+      val server = YaesServer.route(
+        GET(p"/hello") { req =>
+          Response.ok("Hello, World!")
+        }
+      )
 
-    server.run(port = 8080)
-    // Server runs until Shutdown.initiateShutdown() is called
+      server.run(port = 8080)
+      // Server runs until Shutdown.initiateShutdown() is called
+    }
   }
-}
+}.get
 ```
 
 **Required Effects:**
+- **`Sync`** - Tracks I/O side effects (socket binding, accepting connections, reading/writing)
 - **`Shutdown`** - Enables graceful shutdown coordination and JVM signal handling
 - **`Log`** - Provides server lifecycle logging (start, ready, shutdown, errors)
 
@@ -504,16 +508,21 @@ The server requires the `Shutdown` effect context. This enables:
 - Coordinated shutdown across multiple components
 
 ```scala
-Shutdown.run {
-  Raise.run {
-    Log.run() {
-      val server = YaesServer.route(
-        GET(p"/health") { req =>
-          Response.ok("OK")
-        }
-      )
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
-      server.run(port = 8080)
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Raise.run {
+      Log.run() {
+        val server = YaesServer.route(
+          GET(p"/health") { req =>
+            Response.ok("OK")
+          }
+        )
+
+        server.run(port = 8080)
+      }
     }
   }
 }
@@ -522,20 +531,24 @@ Shutdown.run {
 **Triggering shutdown manually:**
 
 ```scala
-Shutdown.run {
-  Raise.run {
-    Log.run() {
-      val server = YaesServer.route(
-        GET(p"/shutdown") { req =>
-          Shutdown.initiateShutdown()  // Trigger graceful shutdown
-          Response.ok("Shutdown initiated")
-        }
-      )
+import scala.concurrent.ExecutionContext.Implicits.global
 
-      server.run(port = 8080)
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Raise.run {
+      Log.run() {
+        val server = YaesServer.route(
+          GET(p"/shutdown") { req =>
+            Shutdown.initiateShutdown()  // Trigger graceful shutdown
+            Response.ok("Shutdown initiated")
+          }
+        )
+
+        server.run(port = 8080)
+      }
     }
   }
-}
+}.get
 ```
 
 > See [Step 5: Concurrency](/yaes/learn/5-concurrency/) for more details on shutdown coordination.
@@ -577,18 +590,24 @@ This ensures the server shuts down gracefully when:
 If in-flight requests do not complete within the configured deadline, the server logs a warning and completes shutdown normally.
 
 ```scala
-Shutdown.run {
-  Log.run() {
-    val server = YaesServer.route(
-      GET(p"/slow") { req =>
-        Async.delay(10.seconds)  // Longer than deadline
-        Response.ok("Completed")
-      }
-    )
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
 
-    server.run(ServerConfig(port = 8080, deadline = Deadline.after(5.seconds)))
+val result = Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Log.run() {
+      val server = YaesServer.route(
+        GET(p"/slow") { req =>
+          Async.delay(10.seconds)  // Longer than deadline
+          Response.ok("Completed")
+        }
+      )
+
+      server.run(ServerConfig(port = 8080, deadline = Deadline.after(5.seconds)))
+    }
   }
 }
+result.get
 // If shutdown exceeds deadline, server logs:
 // "Shutdown deadline (5 seconds) exceeded, some requests may not have completed"
 ```
@@ -702,19 +721,24 @@ The HTTP server integrates with the YAES `Log` effect for structured lifecycle l
 The server requires the `Log` effect context for logging server lifecycle events:
 
 ```scala
-Shutdown.run {
-  Raise.run {
-    Log.run() {  // Provides logging context
-      val server = YaesServer.route(
-        GET(p"/health") { req =>
-          Response.ok("OK")
-        }
-      )
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
-      server.run(port = 8080)
+Sync.runBlocking(Duration.Inf) {
+  Shutdown.run {
+    Raise.run {
+      Log.run() {  // Provides logging context
+        val server = YaesServer.route(
+          GET(p"/health") { req =>
+            Response.ok("OK")
+          }
+        )
+
+        server.run(port = 8080)
+      }
     }
   }
-}
+}.get
 ```
 
 > See [SLF4J Logging](/yaes/integrations/slf4j-logging/) for details on log levels, formatting, and custom loggers.
@@ -803,6 +827,7 @@ Here's a production-ready HTTP server demonstrating all key features:
 import in.rcard.yaes.*
 import in.rcard.yaes.http.server.*
 import scala.concurrent.duration.*
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object MyApiServer {
 
@@ -820,10 +845,11 @@ object MyApiServer {
     )
 
     // Run server with all required effects
-    Shutdown.run {
-      Raise.run {
-        Log.run() {
-          val server = YaesServer.route(
+    Sync.runBlocking(Duration.Inf) {
+      Shutdown.run {
+        Raise.run {
+          Log.run() {
+            val server = YaesServer.route(
             // Health check endpoint
             GET(p"/health") { req =>
               Response.ok("OK")
@@ -899,9 +925,10 @@ object MyApiServer {
 
           // Server runs until shutdown signal received
           server.run(config)
+          }
         }
       }
-    }
+    }.get
   }
 }
 ```
