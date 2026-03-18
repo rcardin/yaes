@@ -194,7 +194,7 @@ object YaesServer {
     *       server.run(ServerConfig(port = 8080, maxBodySize = 5.megabytes))
     *     }
     *   }
-    * }
+    * }.get
     * }}}
     *
     * @param serverDef
