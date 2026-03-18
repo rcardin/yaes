@@ -85,6 +85,7 @@ case class ServerDef(routes: Routes) {
   * {{{
   * import in.rcard.yaes.http.server.*
   * import scala.concurrent.duration.*
+  * import scala.concurrent.ExecutionContext.Implicits.global
   *
   * val server = YaesServer.route(
   *   GET / "hello" -> { req => Response.ok("Hello!") },
