@@ -57,7 +57,7 @@ Sync.runBlocking(Duration.Inf) {
       // Server runs until Shutdown.initiateShutdown() is called
     }
   }
-}
+}.get
 ```
 
 ## Routing DSL
