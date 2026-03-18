@@ -79,7 +79,7 @@ Sync.runBlocking(Duration.Inf) {
       server.run(port = 8080)
     }
   }
-}
+}.get
 ```
 
 The key import is `in.rcard.yaes.http.circe.given` — this brings the `circeBodyCodec` instance into scope, which automatically provides a `BodyCodec[A]` for any type `A` that has both a Circe `Encoder[A]` and `Decoder[A]` available.
