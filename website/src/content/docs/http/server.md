@@ -927,7 +927,7 @@ object MyApiServer {
           }
         }
       }
-    }
+    }.get
   }
 }
 ```
