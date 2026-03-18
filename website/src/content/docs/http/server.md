@@ -738,7 +738,7 @@ Sync.runBlocking(Duration.Inf) {
       }
     }
   }
-}
+}.get
 ```
 
 > See [SLF4J Logging](/yaes/integrations/slf4j-logging/) for details on log levels, formatting, and custom loggers.
