@@ -548,7 +548,7 @@ Sync.runBlocking(Duration.Inf) {
       }
     }
   }
-}
+}.get
 ```
 
 > See [Step 5: Concurrency](/yaes/learn/5-concurrency/) for more details on shutdown coordination.
