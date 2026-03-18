@@ -47,7 +47,7 @@ case class ServerDef(routes: Routes) {
     YaesServer.run(this, config)
   }
 
-  /** Run the HTTP server (backward-compatible overload).
+  /** Run the HTTP server (convenience overload).
     *
     * Starts the server on the specified port with a deadline. This is a convenience method that
     * creates a ServerConfig internally.
