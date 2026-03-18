@@ -285,7 +285,7 @@ Sync.runBlocking(Duration.Inf) {
       serverFiber.join()
     }
   }
-}
+}.get
 ```
 
 ### Shutdown Behavior
