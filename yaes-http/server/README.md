@@ -258,6 +258,7 @@ The server integrates with YAES's `Shutdown` effect for coordinated graceful shu
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
@@ -304,6 +305,7 @@ Register callbacks to run when shutdown begins:
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {

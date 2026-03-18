@@ -509,6 +509,7 @@ The server requires the `Shutdown` effect context. This enables:
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
@@ -590,6 +591,7 @@ If in-flight requests do not complete within the configured deadline, the server
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
@@ -719,6 +721,7 @@ The server requires the `Log` effect context for logging server lifecycle events
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {

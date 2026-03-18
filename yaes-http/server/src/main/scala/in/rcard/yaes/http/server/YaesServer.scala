@@ -47,7 +47,7 @@ case class ServerDef(routes: Routes) {
     YaesServer.run(this, config)
   }
 
-  /** Run the HTTP server (backward-compatible overload).
+  /** Run the HTTP server (convenience overload).
     *
     * Starts the server on the specified port with a deadline. This is a convenience method that
     * creates a ServerConfig internally.
@@ -85,6 +85,7 @@ case class ServerDef(routes: Routes) {
   * {{{
   * import in.rcard.yaes.http.server.*
   * import scala.concurrent.duration.*
+  * import scala.concurrent.ExecutionContext.Implicits.global
   *
   * val server = YaesServer.route(
   *   GET / "hello" -> { req => Response.ok("Hello!") },
@@ -267,7 +268,10 @@ object YaesServer {
     }
   }
 
-  /** Backward-compatible run method with port and deadline.
+  /** Convenience run method with port and deadline.
+    *
+    * This overload mirrors the older `(serverDef, port, deadline)` calling style while
+    * delegating to the `ServerConfig`-based `run` method.
     *
     * @param serverDef
     *   Server configuration with routes
