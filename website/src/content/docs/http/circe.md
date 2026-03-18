@@ -216,7 +216,7 @@ object JsonServer extends App {
         server.run(port = 8080)
       }
     }
-  }
+  }.get
 }
 ```
 
