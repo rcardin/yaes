@@ -721,6 +721,7 @@ The server requires the `Log` effect context for logging server lifecycle events
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
