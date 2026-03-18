@@ -605,7 +605,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     }.get
   }
 
-  it should "return 503 Service Unavailable for new requests during shutdown" in {
+  it should "refuse new connections after shutdown is initiated" in {
     val port = findFreePort()
 
     Sync.runBlocking(30.seconds) {
@@ -636,22 +636,28 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               val response1 = client.send(request1, HttpResponse.BodyHandlers.ofString())
               response1.statusCode() shouldBe 200
 
-              // Initiate shutdown
+              // Initiate shutdown — this closes the server socket
               Shutdown.initiateShutdown()
 
-              // Give shutdown time to register
+              // Give shutdown time to close the server socket
               Async.delay(50.millis)
 
-              // Try to make a new request after shutdown initiated
-              val request2 = HttpRequest
-                .newBuilder()
-                .uri(URI.create(s"http://localhost:$port/test"))
-                .GET()
-                .build()
-              val response2 = client.send(request2, HttpResponse.BodyHandlers.ofString())
-
-              // Verify 503 response
-              response2.statusCode() shouldBe 503
+              // New connections after shutdown should be refused
+              // (server socket is closed, so no new connections can be accepted)
+              try {
+                val request2 = HttpRequest
+                  .newBuilder()
+                  .uri(URI.create(s"http://localhost:$port/test"))
+                  .GET()
+                  .build()
+                val response2 = client.send(request2, HttpResponse.BodyHandlers.ofString())
+                // If the connection sneaks in during the race window, 503 is acceptable
+                response2.statusCode() shouldBe 503
+              } catch {
+                case _: java.net.ConnectException | _: java.io.IOException =>
+                  // Expected: server socket is closed, connection refused
+                  succeed
+              }
 
               // Wait for server to stop
               serverFiber.join()
@@ -768,6 +774,48 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               // Shutdown
               Shutdown.initiateShutdown()
               serverFiber.join()
+            }
+          }
+        }
+      }
+    }.get
+  }
+
+  it should "shut down promptly when no requests are in flight" in {
+    val port = findFreePort()
+
+    val startTime = java.lang.System.nanoTime()
+
+    Sync.runBlocking(30.seconds) {
+      Shutdown.run {
+        Raise.run {
+          Async.run {
+            Log.run(level = Log.Level.Info) {
+              val server = YaesServer.route(
+                GET(p"/test") { req =>
+                  Response.ok("Test")
+                }
+              )
+
+              // Start server in a background fiber with short deadline
+              val serverFiber = Async.fork("server") {
+                server.run(ServerConfig(port = port, deadline = testDeadline))
+              }
+
+              // Wait for server to be ready
+              waitForServer(port)
+
+              // Initiate shutdown while server is idle (blocked on accept())
+              Shutdown.initiateShutdown()
+
+              // Server should shut down promptly — well under the 2-second deadline
+              serverFiber.join()
+
+              val elapsedMillis = (java.lang.System.nanoTime() - startTime) / 1_000_000
+
+              // If the bug exists, this will take ~2 seconds (the deadline).
+              // With the fix, it should complete in under 500ms.
+              elapsedMillis should be < 1500L
             }
           }
         }

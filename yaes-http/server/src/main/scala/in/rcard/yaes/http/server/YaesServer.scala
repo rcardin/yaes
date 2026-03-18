@@ -226,6 +226,11 @@ object YaesServer {
               val serverSocket = new ServerSocket(config.port)
               logger.info(s"Server ready, listening on port ${config.port}")
 
+              // Close the server socket on shutdown to unblock accept()
+              Shutdown.onShutdown {
+                serverSocket.close()
+              }
+
               // Accept loop - runs as main fiber in structured scope
               // Each request is handled in a forked fiber
               // Virtual thread interruption breaks accept() on shutdown
