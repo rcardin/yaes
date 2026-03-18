@@ -591,6 +591,7 @@ If in-flight requests do not complete within the configured deadline, the server
 
 ```scala
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
 
 Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
