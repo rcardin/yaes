@@ -593,7 +593,7 @@ If in-flight requests do not complete within the configured deadline, the server
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
 
-Sync.runBlocking(Duration.Inf) {
+val result = Sync.runBlocking(Duration.Inf) {
   Shutdown.run {
     Log.run() {
       val server = YaesServer.route(
@@ -607,6 +607,7 @@ Sync.runBlocking(Duration.Inf) {
     }
   }
 }
+result.get
 // If shutdown exceeds deadline, server logs:
 // "Shutdown deadline (5 seconds) exceeded, some requests may not have completed"
 ```
