@@ -265,7 +265,10 @@ object YaesServer {
     }
   }
 
-  /** Backward-compatible run method with port and deadline.
+  /** Convenience run method with port and deadline.
+    *
+    * This overload mirrors the older `(serverDef, port, deadline)` calling style while
+    * delegating to the `ServerConfig`-based `run` method.
     *
     * @param serverDef
     *   Server configuration with routes
