@@ -145,8 +145,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               waitForServer(port)
 
               // Make multiple concurrent requests using Java's HttpClient which supports concurrent requests
-              import scala.jdk.CollectionConverters.*
-              val requests = (1 to 5).map { i =>
+              val requests = (1 to 5).map { _ =>
                 HttpRequest
                   .newBuilder()
                   .uri(URI.create(s"http://localhost:$port/concurrent"))
