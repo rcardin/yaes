@@ -103,7 +103,7 @@ case class ServerDef(routes: Routes) {
   *       }
   *     }
   *   }
-  * }
+  * }.get
   * }}}
   */
 object YaesServer {
