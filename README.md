@@ -4,15 +4,20 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)
 [![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-core_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-core_3)
 
-<p align="center">
-  <img src="./logo.svg" width="200" alt="logo" />
-</p>
-
 # Yet Another Effect System (λÆS)
-
-λÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 [context parameters](https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html) and [context functions](https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html), it provides a way to define and handle effects in a modular and composable manner.
-
-You can visit the dedicated website 🌐 at [https://rcardin.github.io/yaes/](https://rcardin.github.io/yaes/).
+<table cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td style="padding:0">
+      <p>λÆS is an experimental effect system in Scala inspired by the ideas behind Algebraic Effects. Using Scala 3 <a href="https://docs.scala-lang.org/scala3/reference/contextual/using-clauses.html">context parameters</a> and <a href="https://docs.scala-lang.org/scala3/reference/contextual/context-functions.html">context functions</a>, it provides a way to define and handle effects in a modular and composable manner.</p>
+      <p>
+      You can visit the dedicated <a href="https://rcardin.github.io/yaes/">website 🌐</a>.
+      </p>
+    </td>
+    <td style="padding:0">
+      <img src="./logo.svg" width="1000" alt="logo" />
+    </td>
+  </tr>
+</table>
 
 Here is the talk I gave at the **Scalar 2025** about the main concepts behind the library: 
 
