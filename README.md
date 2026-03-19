@@ -4,7 +4,9 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/rcardin/yaes)
 [![javadoc](https://javadoc.io/badge2/in.rcard.yaes/yaes-core_3/javadoc.svg)](https://javadoc.io/doc/in.rcard.yaes/yaes-core_3)
 
-![logo](./logo.svg)
+<p align="center">
+  <img src="./logo.svg" width="200" alt="logo" />
+</p>
 
 # Yet Another Effect System (λÆS)
 
