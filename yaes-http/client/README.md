@@ -14,7 +14,7 @@ Effect-based HTTP client built on YAES effects and Java's `java.net.http.HttpCli
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-client" % "0.15.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-client" % "0.16.0"
 ```
 
 ## Overview
@@ -312,7 +312,7 @@ The client uses the `BodyCodec[A]` typeclass for encoding request bodies and dec
 For JSON support, use the `yaes-http-circe` module which provides automatic `BodyCodec` instances for types with Circe `Encoder` and `Decoder`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-circe" % "0.15.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-circe" % "0.16.0"
 ```
 
 ```scala
