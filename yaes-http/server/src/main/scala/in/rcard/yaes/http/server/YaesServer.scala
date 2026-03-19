@@ -4,6 +4,7 @@ import in.rcard.yaes.*
 import in.rcard.yaes.Async.Deadline
 import in.rcard.yaes.http.server.parsing.{HttpParser, HttpWriter}
 import in.rcard.yaes.http.server.routing.Route
+import java.io.IOException
 import java.net.{ServerSocket, Socket, SocketException}
 import scala.concurrent.duration.DurationInt
 import scala.util.boundary
@@ -230,7 +231,7 @@ object YaesServer {
               // Guard with try-catch since the Resource finalizer may also close the socket
               Shutdown.onShutdown {
                 try serverSocket.close()
-                catch { case _: SocketException => () }
+                catch { case _: IOException => () }
               }
 
               // Accept loop - runs as main fiber in structured scope
