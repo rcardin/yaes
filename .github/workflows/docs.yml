@@ -8,6 +8,8 @@ on:
       - 'website/**'
   # Allow manual trigger
   workflow_dispatch:
+  # Allow being called from other workflows (e.g., release.yml)
+  workflow_call:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
