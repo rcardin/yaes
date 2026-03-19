@@ -1,5 +1,7 @@
 package in.rcard.yaes.http.server
 
+import in.rcard.yaes.http.core.BodyCodec
+
 /** HTTP response representation.
   *
   * Immutable case class representing an HTTP response to be sent back to the client.

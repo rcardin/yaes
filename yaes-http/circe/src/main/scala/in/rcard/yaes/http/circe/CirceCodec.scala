@@ -1,7 +1,7 @@
 package in.rcard.yaes.http.circe
 
 import in.rcard.yaes.*
-import in.rcard.yaes.http.server.{BodyCodec, DecodingError}
+import in.rcard.yaes.http.core.{BodyCodec, DecodingError}
 import io.circe.{Encoder, Decoder, ParsingFailure, DecodingFailure}
 import io.circe.syntax.*
 import io.circe.parser.decode as circeDecode
@@ -15,10 +15,10 @@ import io.circe.parser.decode as circeDecode
  *   - Sets the HTTP `Content-Type` header to `application/json`.
  *   - Decodes JSON bodies using Circe's `decode`, mapping failures to:
  *     - If Circe returns a [[io.circe.ParsingFailure]] (invalid JSON syntax), it is mapped to
- *       [[in.rcard.yaes.http.server.DecodingError.ParseError]] with the original message and
+ *       [[in.rcard.yaes.http.core.DecodingError.ParseError]] with the original message and
  *       exception attached.
  *     - If Circe returns a [[io.circe.DecodingFailure]] (valid JSON but wrong shape, e.g. missing
- *       fields), it is mapped to [[in.rcard.yaes.http.server.DecodingError.ValidationError]]
+ *       fields), it is mapped to [[in.rcard.yaes.http.core.DecodingError.ValidationError]]
  *       with the original message.
  * Usage:
  * {{{
@@ -39,10 +39,10 @@ import io.circe.parser.decode as circeDecode
  * Error mapping:
  *   - If Circe successfully decodes the JSON, the resulting value of type `A` is returned.
  *   - If Circe returns a [[io.circe.ParsingFailure]] (invalid JSON syntax), it is mapped to
- *     [[in.rcard.yaes.http.server.DecodingError.ParseError]] with the original message and
+ *     [[in.rcard.yaes.http.core.DecodingError.ParseError]] with the original message and
  *     exception attached.
  *   - If Circe returns a [[io.circe.DecodingFailure]] (valid JSON but wrong shape, e.g. missing
- *     fields), it is mapped to [[in.rcard.yaes.http.server.DecodingError.ValidationError]]
+ *     fields), it is mapped to [[in.rcard.yaes.http.core.DecodingError.ValidationError]]
  *     with the original message.
  */
 given circeBodyCodec[A](using encoder: Encoder[A], decoder: Decoder[A]): BodyCodec[A] with {

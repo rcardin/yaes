@@ -2,6 +2,7 @@ package in.rcard.yaes.http.server
 
 
 import in.rcard.yaes.*
+import in.rcard.yaes.http.core.Method
 import in.rcard.yaes.http.server.*
 import in.rcard.yaes.http.server.PathBuilder.given
 import org.scalatest.flatspec.AnyFlatSpec

@@ -6,7 +6,7 @@
 
 ## Build and Test
 
-Use SBT with `-batch --no-colors --error` flags for tests. Use `-batch --no-colors` when searching for errors. Prefer testing a single class or module for faster feedback.
+Use SBT with `-batch --no-colors` flags for tests. Prefer testing a single class or module for faster feedback.
 
 ## Error Handling Philosophy
 

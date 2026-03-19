@@ -1,0 +1,123 @@
+/* ========================================
+   λÆS Documentation - Catppuccin Theme
+   Starlight CSS custom properties port
+   ======================================== */
+
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ========================================
+   Catppuccin Mocha (dark)
+   ======================================== */
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #1e3a5f;
+  --sl-color-accent: #89b4fa;
+  --sl-color-accent-high: #b4d0fb;
+  --sl-color-white: #cdd6f4;
+  --sl-color-gray-1: #cdd6f4;
+  --sl-color-gray-2: #a6adc8;
+  --sl-color-gray-3: #6c7086;
+  --sl-color-gray-4: #45475a;
+  --sl-color-gray-5: #313244;
+  --sl-color-gray-6: #181825;
+  --sl-color-black: #1e1e2e;
+  --sl-color-bg: #1e1e2e;
+  --sl-color-bg-nav: #181825;
+  --sl-color-bg-sidebar: #181825;
+  --sl-color-bg-inline-code: #11111b;
+  --sl-color-text: #cdd6f4;
+  --sl-color-text-accent: #89b4fa;
+  --sl-color-hairline-light: #313244;
+  --sl-color-hairline-shade: #45475a;
+
+  /* Code block */
+  --astro-code-color-background: #11111b;
+  --astro-code-color-text: #cdd6f4;
+}
+
+/* ========================================
+   Catppuccin Latte (light)
+   ======================================== */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #c2d3f8;
+  --sl-color-accent: #1e66f5;
+  --sl-color-accent-high: #1650c0;
+  --sl-color-white: #4c4f69;
+  --sl-color-gray-1: #4c4f69;
+  --sl-color-gray-2: #5c5f77;
+  --sl-color-gray-3: #8c8fa1;
+  --sl-color-gray-4: #bcc0cc;
+  --sl-color-gray-5: #ccd0da;
+  --sl-color-gray-6: #e6e9ef;
+  --sl-color-black: #eff1f5;
+  --sl-color-bg: #eff1f5;
+  --sl-color-bg-nav: #e6e9ef;
+  --sl-color-bg-sidebar: #e6e9ef;
+  --sl-color-bg-inline-code: #e6e9ef;
+  --sl-color-text: #4c4f69;
+  --sl-color-text-accent: #1e66f5;
+  --sl-color-hairline-light: #ccd0da;
+  --sl-color-hairline-shade: #bcc0cc;
+
+  /* Code block */
+  --astro-code-color-background: #e6e9ef;
+  --astro-code-color-text: #4c4f69;
+}
+
+/* ========================================
+   Typography
+   ======================================== */
+:root {
+  --sl-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ========================================
+   Homepage hero customization
+   ======================================== */
+.hero {
+  padding-block: 3rem;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+/* ========================================
+   Learning path steps grid
+   ======================================== */
+.learning-path {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-block: 2rem;
+}
+
+.learning-path-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid var(--sl-color-hairline-shade);
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.learning-path-step:hover {
+  border-color: var(--sl-color-accent);
+  background-color: var(--sl-color-gray-6);
+}
+
+.learning-path-step .step-number {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sl-color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.learning-path-step .step-title {
+  font-weight: 600;
+  color: var(--sl-color-text);
+}
