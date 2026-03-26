@@ -115,9 +115,9 @@ object Writer {
     * }}}
     */
   def capture[W, A](block: Writer[W] ?=> A)(using interpreter: Writer[W]): (Vector[W], A) = {
-    val snapshot = interpreter.unsafe.snapshot
+    val mark     = interpreter.unsafe.size
     val result   = block
-    val captured = interpreter.unsafe.snapshot.drop(snapshot.size)
+    val captured = interpreter.unsafe.snapshotFrom(mark)
     (captured, result)
   }
 
@@ -162,6 +162,12 @@ object Writer {
 
           override def snapshot: Vector[W] =
             buffer.toVector
+
+          override private[yaes] def size: Int =
+            buffer.size
+
+          override private[yaes] def snapshotFrom(start: Int): Vector[W] =
+            buffer.drop(start).toVector
         }
         program(using Yaes(interpreter))
       }
@@ -203,5 +209,23 @@ object Writer {
       *   the accumulated values as a `Vector[W]`
       */
     def snapshot: Vector[W]
+
+    /** Returns the number of values accumulated so far. Used internally by `capture` to avoid
+      * copying the full buffer for checkpoint operations.
+      *
+      * @return
+      *   the current number of accumulated values
+      */
+    private[yaes] def size: Int = snapshot.size
+
+    /** Returns a snapshot of accumulated values starting from the given offset. Used internally by
+      * `capture` to read only the suffix since a checkpoint.
+      *
+      * @param start
+      *   the index from which to start the snapshot
+      * @return
+      *   the accumulated values from index `start` onward
+      */
+    private[yaes] def snapshotFrom(start: Int): Vector[W] = snapshot.drop(start)
   }
 }
