@@ -28,7 +28,7 @@ A type-safe, effect-based HTTP/1.1 server built on YAES effects and Java virtual
 Add `yaes-http-server` to your project dependencies:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.17.0"
 ```
 
 > Check [Maven Central](https://central.sonatype.com/artifact/in.rcard.yaes/yaes-http-server_3) for the latest version.
