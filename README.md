@@ -135,6 +135,7 @@ The library provides a set of effects and handlers that can be used to define an
 - [`Clock`](#the-clock-effect): Allows for managing time.
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
+- [`Writer`](#the-writer-effect): Allows for pure, append-only value accumulation.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
 
 The library also provides the following handlers that orchestrate existing effects:
@@ -1145,6 +1146,94 @@ The `State` effect provides the following operations:
 - `State.update[S](f: S => S)`: Updates the state using a transformation function and returns the new state value
 - `State.use[S, A](f: S => A)`: Applies a function to the current state and returns the result without modifying the state
 - `State.run[S, A](initialState: S)(block: State[S] ?=> A)`: Runs a stateful computation with an initial state value, returning both the final state and the computation result
+
+### The `Writer` Effect
+
+The `Writer[W]` effect enables pure, append-only value accumulation during computations. Values are collected into a `Vector[W]` and returned alongside the computation result as a tuple `(Vector[W], A)`. This is useful for collecting logs, events, metrics, or any other data during a computation.
+
+**Note:** The Writer effect is not thread-safe. Use appropriate synchronization mechanisms when accessing from multiple threads.
+
+#### Basic Usage
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+val (log, result) = Writer.run[String, Int] {
+  Writer.write("starting")
+  Writer.write("computing")
+  42
+}
+// log = Vector("starting", "computing"), result = 42
+```
+
+For more concise syntax, you can use the `writes` infix type:
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+def computation: Int writes String = {
+  Writer.write("log entry")
+  42
+}
+```
+
+#### Writing Multiple Values
+
+Use `writeAll` to append multiple values at once:
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+val (log, _) = Writer.run[Int, Unit] {
+  Writer.write(1)
+  Writer.writeAll(List(2, 3, 4))
+  Writer.write(5)
+}
+// log = Vector(1, 2, 3, 4, 5)
+```
+
+#### Capturing Writes
+
+The `capture` operation records writes from a block, returning them alongside the block's result. Writes are also forwarded to the outer scope:
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+val (outerLog, (innerLog, result)) = Writer.run[String, (Vector[String], Int)] {
+  Writer.write("before")
+  val captured = Writer.capture[String, Int] {
+    Writer.write("inside")
+    99
+  }
+  Writer.write("after")
+  captured
+}
+// outerLog = Vector("before", "inside", "after")
+// innerLog = Vector("inside"), result = 99
+```
+
+#### Combining with Other Effects
+
+```scala 3
+import in.rcard.yaes.Writer.*
+import in.rcard.yaes.State.*
+
+val (state, (log, result)) = State.run(0) {
+  Writer.run[String, Int] {
+    Writer.write("start")
+    State.update[Int](_ + 1)
+    Writer.write(s"count=${State.get[Int]}")
+    State.get[Int]
+  }
+}
+// state = 1, log = Vector("start", "count=1"), result = 1
+```
+
+The `Writer` effect provides the following operations:
+- `Writer.write[W](w: W)`: Appends a single value to the accumulated output
+- `Writer.writeAll[W](ws: IterableOnce[W])`: Appends multiple values at once
+- `Writer.capture[W, A](block: Writer[W] ?=> A)`: Captures writes from a block, forwarding them to the outer scope, and returns `(Vector[W], A)`
+- `Writer.run[W, A](block: Writer[W] ?=> A)`: Runs a computation with the Writer effect, returning `(Vector[W], A)`
 
 ### The `Log` Effect
 

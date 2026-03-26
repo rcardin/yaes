@@ -1,12 +1,12 @@
 ---
-title: State & Resources
-description: Learn stateful computations with the State effect and safe resource lifecycle management with the Resource effect.
+title: State, Writer & Resources
+description: Learn stateful computations with State, pure value accumulation with Writer, and safe resource lifecycle management with Resource.
 sidebar:
-  label: "6. State & Resources"
+  label: "6. State, Writer & Resources"
   order: 6
 ---
 
-λÆS provides two complementary effects for managing mutable data and external resources: the `State` effect for functional stateful computations, and the `Resource` effect for guaranteed cleanup of acquired resources.
+λÆS provides three complementary effects for managing mutable data and external resources: the `State` effect for functional stateful computations, the `Writer` effect for pure append-only value accumulation, and the `Resource` effect for guaranteed cleanup of acquired resources.
 
 ---
 
@@ -162,6 +162,151 @@ val thread2Result = Future {
   State.run(0) { /* stateful computation */ }
 }
 ```
+
+---
+
+## Writer Effect
+
+The `Writer[W]` effect enables pure, append-only value accumulation during computations. Values are collected into a `Vector[W]` and returned alongside the computation result as a tuple `(Vector[W], A)`. This is useful for collecting logs, events, metrics, or any other data during a computation.
+
+> **Note:** The Writer effect is not thread-safe. Use appropriate synchronization mechanisms when accessing from multiple threads.
+
+### Writing Values
+
+Use `Writer.write` to append a single value and `Writer.writeAll` to append multiple values at once:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (log, result) = Writer.run[String, Int] {
+  Writer.write("starting")
+  Writer.write("computing")
+  42
+}
+// log = Vector("starting", "computing"), result = 42
+```
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (log, _) = Writer.run[Int, Unit] {
+  Writer.write(1)
+  Writer.writeAll(List(2, 3, 4))
+  Writer.write(5)
+}
+// log = Vector(1, 2, 3, 4, 5)
+```
+
+### The `writes` Infix Type
+
+For more concise syntax, you can use the `writes` infix type, similar to `raises` for the Raise effect:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+def computation: Int writes String = {
+  Writer.write("log entry")
+  42
+}
+
+val (log, result) = Writer.run[String, Int] {
+  computation
+}
+// log = Vector("log entry"), result = 42
+```
+
+### Capturing Writes
+
+The `capture` operation records writes from a block, returning them alongside the block's result. Writes are also forwarded to the outer scope:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (outerLog, (innerLog, result)) = Writer.run[String, (Vector[String], Int)] {
+  Writer.write("before")
+  val captured = Writer.capture[String, Int] {
+    Writer.write("inside")
+    99
+  }
+  Writer.write("after")
+  captured
+}
+// outerLog = Vector("before", "inside", "after")
+// innerLog = Vector("inside"), result = 99
+```
+
+Captures can be nested — each level records its own writes while forwarding to the outer scope:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (outerLog, (middleLog, (innerLog, result))) =
+  Writer.run[String, (Vector[String], (Vector[String], Int))] {
+    Writer.write("outer")
+    Writer.capture[String, (Vector[String], Int)] {
+      Writer.write("middle")
+      Writer.capture[String, Int] {
+        Writer.write("inner")
+        42
+      }
+    }
+  }
+// outerLog  = Vector("outer", "middle", "inner")
+// middleLog = Vector("middle", "inner")
+// innerLog  = Vector("inner"), result = 42
+```
+
+### Combining Writer with Other Effects
+
+`Writer` composes naturally with other λÆS effects:
+
+```scala
+import in.rcard.yaes.Writer.*
+import in.rcard.yaes.State.*
+
+val (state, (log, result)) = State.run(0) {
+  Writer.run[String, Int] {
+    Writer.write("start")
+    State.update[Int](_ + 1)
+    Writer.write(s"count=${State.get[Int]}")
+    State.get[Int]
+  }
+}
+// state = 1, log = Vector("start", "count=1"), result = 1
+```
+
+```scala
+import in.rcard.yaes.Writer.*
+import in.rcard.yaes.Raise.*
+
+val (log, result) = Writer.run[String, Either[String, Int]] {
+  Writer.write("before")
+  val either = Raise.either[String, Int] {
+    Writer.write("inside-raise")
+    Raise.raise("error")
+  }
+  Writer.write("after")
+  either
+}
+// result = Left("error")
+// log = Vector("before", "inside-raise", "after")
+```
+
+### Writer API Reference
+
+| Operation | Signature | Description |
+|-----------|-----------|-------------|
+| `Writer.write` | `(W) => Writer[W] ?=> Unit` | Append a single value |
+| `Writer.writeAll` | `(IterableOnce[W]) => Writer[W] ?=> Unit` | Append multiple values at once |
+| `Writer.capture` | `(Writer[W] ?=> A) => Writer[W] ?=> (Vector[W], A)` | Capture writes from a block, forwarding to outer scope |
+| `Writer.run` | `(Writer[W] ?=> A) => (Vector[W], A)` | Run computation, return accumulated values and result |
+
+### Thread Safety
+
+The Writer effect is not thread-safe. For concurrent scenarios:
+
+- Use separate `Writer.run` blocks per thread — each gets isolated accumulation
+- Implement synchronization if shared accumulation is required
 
 ---
 
@@ -338,4 +483,4 @@ def downloadAndProcess(url: String, outputFile: String)(using Resource): Unit = 
 
 ---
 
-With State and Resource in your toolkit, you have everything you need for managing mutable data and external dependencies safely. Next, we'll look at the most powerful data-flow primitives: **Streams & Channels**.
+With State, Writer, and Resource in your toolkit, you have everything you need for managing mutable data, value accumulation, and external dependencies safely. Next, we'll look at the most powerful data-flow primitives: **Streams & Channels**.
