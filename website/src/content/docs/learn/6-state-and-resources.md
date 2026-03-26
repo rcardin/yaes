@@ -202,7 +202,7 @@ val (log, _) = Writer.run[Int, Unit] {
 For more concise syntax, you can use the `writes` infix type, similar to `raises` for the Raise effect:
 
 ```scala
-import in.rcard.yaes.Writer.*
+import in.rcard.yaes.Writer.{Writer, writes}
 
 def computation: Int writes String = {
   Writer.write("log entry")

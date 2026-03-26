@@ -9,6 +9,23 @@ import scala.collection.mutable.ArrayBuffer
   */
 type Writer[W] = Yaes[Writer.Unsafe[W]]
 
+/** Infix type alias for Writer effect. `A writes W` is equivalent to `Writer[W] ?=> A`.
+  *
+  * @tparam A
+  *   the result type of the computation
+  * @tparam W
+  *   the type of the values to accumulate
+  *
+  * @example
+  * {{{
+  * def computation: Int writes String = {
+  *   Writer.write("log entry")
+  *   42
+  * }
+  * }}}
+  */
+infix type writes[A, W] = Writer[W] ?=> A
+
 /** Writer effect for pure, append-only value accumulation.
   *
   * The Writer effect allows computations to accumulate values (such as logs, events, or metrics) in
@@ -16,33 +33,16 @@ type Writer[W] = Yaes[Writer.Unsafe[W]]
   * computation result as a tuple `(Vector[W], A)`.
   *
   * @example
-  *   {{{
+  * {{{
   * val (log, result) = Writer.run[String, Int] {
   *   Writer.write("starting")
   *   Writer.write("computing")
   *   42
   * }
   * // log = Vector("starting", "computing"), result = 42
-  *   }}}
+  * }}}
   */
 object Writer {
-
-  /** Infix type alias for Writer effect. `A writes W` is equivalent to `Writer[W] ?=> A`.
-    *
-    * @tparam A
-    *   the result type of the computation
-    * @tparam W
-    *   the type of the values to accumulate
-    *
-    * @example
-    *   {{{
-    * def computation: Int writes String = {
-    *   Writer.write("log entry")
-    *   42
-    * }
-    *   }}}
-    */
-  infix type writes[A, W] = Writer[W] ?=> A
 
   /** Appends a single value to the accumulated output.
     *
@@ -54,13 +54,13 @@ object Writer {
     *   the Writer effect interpreter
     *
     * @example
-    *   {{{
+    * {{{
     * Writer.run[String, Unit] {
     *   Writer.write("hello")
     *   Writer.write("world")
     * }
     * // (Vector("hello", "world"), ())
-    *   }}}
+    * }}}
     */
   def write[W](w: W)(using interpreter: Writer[W]): Unit =
     interpreter.unsafe.write(w)
@@ -75,12 +75,12 @@ object Writer {
     *   the Writer effect interpreter
     *
     * @example
-    *   {{{
+    * {{{
     * Writer.run[Int, Unit] {
     *   Writer.writeAll(List(1, 2, 3))
     * }
     * // (Vector(1, 2, 3), ())
-    *   }}}
+    * }}}
     */
   def writeAll[W](ws: IterableOnce[W])(using interpreter: Writer[W]): Unit =
     interpreter.unsafe.writeAll(ws)
@@ -100,7 +100,7 @@ object Writer {
     *   a tuple of the captured writes and the block's result
     *
     * @example
-    *   {{{
+    * {{{
     * val (outerLog, (innerLog, result)) = Writer.run[String, (Vector[String], Int)] {
     *   Writer.write("before")
     *   val captured = Writer.capture[String, Int] {
@@ -112,7 +112,7 @@ object Writer {
     * }
     * // outerLog = Vector("before", "inside", "after")
     * // innerLog = Vector("inside"), result = 99
-    *   }}}
+    * }}}
     */
   def capture[W, A](block: Writer[W] ?=> A)(using interpreter: Writer[W]): (Vector[W], A) = {
     val mark     = interpreter.unsafe.size
@@ -136,14 +136,14 @@ object Writer {
     *   a tuple containing the accumulated values as a `Vector[W]` and the computation result
     *
     * @example
-    *   {{{
+    * {{{
     * val (log, result) = Writer.run[String, Int] {
     *   Writer.write("start")
     *   Writer.writeAll(List("a", "b"))
     *   42
     * }
     * // log = Vector("start", "a", "b"), result = 42
-    *   }}}
+    * }}}
     */
   def run[W, A](block: Writer[W] ?=> A): (Vector[W], A) = {
 
@@ -181,8 +181,8 @@ object Writer {
     *
     * This trait defines the low-level interface for writer operations. It is marked as "Unsafe"
     * because it provides direct access to mutable state without the safety guarantees provided by
-    * the higher-level Writer effect API. Users should typically use the safe Writer effect
-    * operations instead of implementing this trait directly.
+    * the higher-level Writer effect API. Users should typically use the safe Writer effect operations
+    * instead of implementing this trait directly.
     *
     * @tparam W
     *   the type of the values to accumulate
