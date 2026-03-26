@@ -1169,7 +1169,7 @@ val (log, result) = Writer.run[String, Int] {
 For more concise syntax, you can use the `writes` infix type:
 
 ```scala 3
-import in.rcard.yaes.Writer.{Writer, writes}
+import in.rcard.yaes.{Writer, writes}
 
 def computation: Int writes String = {
   Writer.write("log entry")
