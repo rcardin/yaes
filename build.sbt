@@ -111,7 +111,7 @@ lazy val yaes = (project in file("."))
 
 lazy val dependencies =
   new {
-    val scalatestVersion  = "3.2.19"
+    val scalatestVersion  = "3.2.20"
     val scalatest         = "org.scalatest"     %% "scalatest"       % scalatestVersion
     val scalacheckVersion = "3.2.19.0"
     val scalacheck        = "org.scalatestplus" %% "scalacheck-1-18" % scalacheckVersion
