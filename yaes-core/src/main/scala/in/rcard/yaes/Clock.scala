@@ -5,7 +5,7 @@ import java.lang.System as JSystem
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.DurationLong
 
-type Clock = Yaes[Clock.Unsafe]
+type Clock = Clock.Unsafe
 
 /** Companion object for the [[Clock]] effect, providing utility methods and handlers.
   *
@@ -41,7 +41,7 @@ object Clock {
     * @see
     *   [[nowMonotonic]] for measuring elapsed time between events
     */
-  def now(using clock: Clock): Instant = clock.unsafe.now
+  def now(using clock: Clock): Instant = clock.now
 
   /** Gets the current monotonic duration. Monotonic time is a time measurement that always
     * increases and never goes backward. It's independent of the system clock, so it's not affected
@@ -52,7 +52,7 @@ object Clock {
     * @return
     *   The current monotonic duration as a [[Duration]]
     */
-  def nowMonotonic(using clock: Clock): Duration = clock.unsafe.nowMonotonic
+  def nowMonotonic(using clock: Clock): Duration = clock.nowMonotonic
 
   /** Runs a program that requires Clock effect.
     *
@@ -73,12 +73,7 @@ object Clock {
     * @see
     *   [[now]] for calendar time/date operations
     */
-  def run[A](block: Clock ?=> A): A = {
-    val handler = new Yaes.Handler[Clock.Unsafe, A, A] {
-      override def handle(program: Clock ?=> A): A = program(using Yaes(Clock.unsafe))
-    }
-    Yaes.handle(block)(using handler)
-  }
+  def run[A](block: Clock ?=> A): A = block(using Clock.unsafe)
 
   private val unsafe: Unsafe = new Unsafe {
     def now: Instant           = Instant.now()

@@ -1,6 +1,6 @@
 package in.rcard.yaes
 
-type Random = Yaes[Random.Unsafe]
+type Random = Random.Unsafe
 
 /** Companion object for the Random effect providing utility methods and handlers.
   *
@@ -29,7 +29,7 @@ object Random {
     * @return
     *   A random integer
     */
-  def nextInt(using r: Random): Int = r.unsafe.nextInt()
+  def nextInt(using r: Random): Int = r.nextInt()
 
   /** Generates a random boolean using the current Random effect.
     *
@@ -38,7 +38,7 @@ object Random {
     * @return
     *   A random boolean
     */
-  def nextBoolean(using r: Random): Boolean = r.unsafe.nextBoolean()
+  def nextBoolean(using r: Random): Boolean = r.nextBoolean()
 
   /** Generates a random double using the current Random effect.
     *
@@ -47,7 +47,7 @@ object Random {
     * @return
     *   A random double
     */
-  def nextDouble(using r: Random): Double = r.unsafe.nextDouble()
+  def nextDouble(using r: Random): Double = r.nextDouble()
 
   /** Generates a random long using the current Random effect.
     *
@@ -56,7 +56,7 @@ object Random {
     * @return
     *   A random long
     */
-  def nextLong(using r: Random): Long     = r.unsafe.nextLong()
+  def nextLong(using r: Random): Long     = r.nextLong()
 
   /** Runs a computation that requires the Random effect.
     *
@@ -70,14 +70,7 @@ object Random {
     * @return
     *   The result of the computation
     */
-  def run[A](block: Random ?=> A): A = {
-    val handler = new Yaes.Handler[Random.Unsafe, A, A] {
-      override def handle(program: Random ?=> A): A = program(using
-        new Yaes(Random.unsafe)
-      )
-    }
-    Yaes.handle(block)(using handler)
-  }
+  def run[A](block: Random ?=> A): A = block(using Random.unsafe)
 
   private val unsafe = new Random.Unsafe {
     override def nextInt(): Int         = scala.util.Random.nextInt()
