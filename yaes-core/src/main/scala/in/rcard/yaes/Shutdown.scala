@@ -3,7 +3,7 @@ package in.rcard.yaes
 import scala.collection.mutable.ListBuffer
 import java.util.concurrent.locks.ReentrantLock
 
-type Shutdown = Yaes[Shutdown.Unsafe]
+type Shutdown = Shutdown.Unsafe
 
 private enum ShutdownState:
   case RUNNING, SHUTTING_DOWN
@@ -87,7 +87,7 @@ object Shutdown {
     *   the Shutdown effect context
     */
   def initiateShutdown()(using shutdown: Shutdown): Unit =
-    shutdown.unsafe.requestShutdown()
+    shutdown.requestShutdown()
 
   /** Checks if shutdown has been initiated.
     *
@@ -109,7 +109,7 @@ object Shutdown {
     *   true if shutdown has been initiated, false otherwise
     */
   def isShuttingDown()(using shutdown: Shutdown): Boolean =
-    shutdown.unsafe.checkShuttingDown()
+    shutdown.checkShuttingDown()
 
   /** Registers a callback to be invoked when shutdown is initiated.
     *
@@ -143,7 +143,7 @@ object Shutdown {
     *   the Shutdown effect context
     */
   def onShutdown(hook: => Unit)(using shutdown: Shutdown): Unit =
-    shutdown.unsafe.registerHook(hook)
+    shutdown.registerHook(hook)
 
   /** Runs a program with shutdown coordination.
     *
@@ -158,79 +158,74 @@ object Shutdown {
     *   the result of the program
     */
   def run[A](program: Shutdown ?=> A): A = {
-    val handler = new Yaes.Handler[Shutdown.Unsafe, A, A] {
-      override def handle(prog: Shutdown ?=> A): A = {
-        var state: ShutdownState = ShutdownState.RUNNING
-        val hooks = ListBuffer[() => Unit]()
-        val lock = new ReentrantLock()
+    var state: ShutdownState = ShutdownState.RUNNING
+    val hooks = ListBuffer[() => Unit]()
+    val lock = new ReentrantLock()
 
-        val shutdownImpl = new Unsafe {
-          override def requestShutdown(): Unit = {
-            lock.lock()
-            val hooksToExecute =
-              try {
-                if (state == ShutdownState.RUNNING) {
-                  state = ShutdownState.SHUTTING_DOWN
-                  hooks.toList // Create immutable snapshot
-                } else {
-                  List.empty[() => Unit]
-                }
-              } finally {
-                lock.unlock()
-              }
-
-            // Execute hooks outside the lock to prevent deadlock
-            hooksToExecute.foreach { hook =>
-              try {
-                hook()
-              } catch {
-                case t: Throwable =>
-                  java.lang.System.err.println(s"Shutdown hook failed: ${t.getClass.getName}: ${t.getMessage}")
-              }
-            }
-          }
-
-          override def registerHook(hook: => Unit): Unit = {
-            lock.lock()
-            try {
-              if (state == ShutdownState.RUNNING) {
-                hooks += (() => hook)
-              }
-              // Silently ignore hooks registered after shutdown has started
-            } finally {
-              lock.unlock()
-            }
-          }
-
-          override def checkShuttingDown(): Boolean = {
-            lock.lock()
-            try {
-              state == ShutdownState.SHUTTING_DOWN
-            } finally {
-              lock.unlock()
-            }
-          }
-        }
-
-        // Register JVM shutdown hook (triggers shutdown on SIGTERM/SIGINT)
-        val jvmHook = new Thread(() => {
-          shutdownImpl.requestShutdown()
-        }, "yaes-shutdown-hook")
-
-        Runtime.getRuntime.addShutdownHook(jvmHook)
-
-        try {
-          prog(using Yaes(shutdownImpl))
-        } finally {
+    val shutdownImpl = new Unsafe {
+      override def requestShutdown(): Unit = {
+        lock.lock()
+        val hooksToExecute =
           try {
-            Runtime.getRuntime.removeShutdownHook(jvmHook)
+            if (state == ShutdownState.RUNNING) {
+              state = ShutdownState.SHUTTING_DOWN
+              hooks.toList // Create immutable snapshot
+            } else {
+              List.empty[() => Unit]
+            }
+          } finally {
+            lock.unlock()
+          }
+
+        // Execute hooks outside the lock to prevent deadlock
+        hooksToExecute.foreach { hook =>
+          try {
+            hook()
           } catch {
-            case _: IllegalStateException => () // JVM already shutting down
+            case t: Throwable =>
+              java.lang.System.err.println(s"Shutdown hook failed: ${t.getClass.getName}: ${t.getMessage}")
           }
         }
       }
+
+      override def registerHook(hook: => Unit): Unit = {
+        lock.lock()
+        try {
+          if (state == ShutdownState.RUNNING) {
+            hooks += (() => hook)
+          }
+          // Silently ignore hooks registered after shutdown has started
+        } finally {
+          lock.unlock()
+        }
+      }
+
+      override def checkShuttingDown(): Boolean = {
+        lock.lock()
+        try {
+          state == ShutdownState.SHUTTING_DOWN
+        } finally {
+          lock.unlock()
+        }
+      }
     }
-    Yaes.handle(program)(using handler)
+
+    // Register JVM shutdown hook (triggers shutdown on SIGTERM/SIGINT)
+    val jvmHook = new Thread(() => {
+      shutdownImpl.requestShutdown()
+    }, "yaes-shutdown-hook")
+
+    Runtime.getRuntime.addShutdownHook(jvmHook)
+
+    try {
+      program(using shutdownImpl)
+    } finally {
+      try {
+        Runtime.getRuntime.removeShutdownHook(jvmHook)
+      } catch {
+        case _: IllegalStateException => () // JVM already shutting down
+      }
+    }
   }
 
   /** Unsafe implementation of the Shutdown effect.
