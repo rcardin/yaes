@@ -87,7 +87,7 @@ object catseffect {
     */
   def blocking[F[_]: CatsSync, A](yaesProgram: (in.rcard.yaes.Sync, Raise[Throwable]) ?=> A): F[A] = {
     CatsSync[F].blocking {
-      yaesProgram(using new in.rcard.yaes.Yaes(syncUnsafe), Raise.rethrowError)
+      yaesProgram(using syncUnsafe, Raise.rethrowError)
     }
   }
 
@@ -112,7 +112,7 @@ object catseffect {
     */
   def delay[F[_]: CatsSync, A](yaesProgram: (in.rcard.yaes.Sync, Raise[Throwable]) ?=> A): F[A] = {
     CatsSync[F].delay {
-      yaesProgram(using new in.rcard.yaes.Yaes(syncUnsafe), Raise.rethrowError)
+      yaesProgram(using syncUnsafe, Raise.rethrowError)
     }
   }
 
