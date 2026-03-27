@@ -12,7 +12,7 @@ import ju.concurrent.CountDownLatch
 import ju.concurrent.StructuredTaskScope.Joiner
 import ju.concurrent.StructuredTaskScope.FailedException
 
-type Async = Yaes[Async.Unsafe]
+type Async = Async.Unsafe
 
 /** Represents an asynchronous computation that can be controlled.
   *
@@ -285,7 +285,7 @@ object Async {
     *   the async context
     */
   def delay(duration: Duration)(using async: Async): Unit = {
-    async.unsafe.delay(duration)
+    async.delay(duration)
   }
 
   /** Creates a new fiber with a specified name.
@@ -300,7 +300,7 @@ object Async {
     *   a [[Fiber]] representing the forked computation
     */
   def fork[A](name: String)(block: => A)(using async: Async): Fiber[A] =
-    async.unsafe.fork(name)(block)
+    async.fork(name)(block)
 
   /** Creates a new fiber with an automatically generated name.
     *
@@ -312,7 +312,7 @@ object Async {
     *   a [[Fiber]] representing the forked computation
     */
   def fork[A](block: => A)(using async: Async): Fiber[A] =
-    async.unsafe.fork(s"fiber-${scala.util.Random.nextString(10)}")(block)
+    async.fork(s"fiber-${scala.util.Random.nextString(10)}")(block)
 
   /** Executes a block of code with a timeout.
     *
@@ -520,37 +520,30 @@ object Async {
     *   the result of the computation
     */
   inline def run[A](block: Async ?=> A): A = {
-    Yaes.handle(block)(using handler)
-  }
-
-  def handler[A]: Yaes.Handler[Async.Unsafe, A, A] =
-    new Yaes.Handler[Async.Unsafe, A, A] {
-      override inline def handle(program: Yaes[Async.Unsafe] ?=> A): A = {
-        val async     = new JvmAsync()
-        val loomScope = StructuredTaskScope.open[A, Void](
-          Joiner.awaitAllSuccessfulOrThrow(),
-          configure => configure.withName("yaes-async-handler")
-        )
-        // In JDK 25, fork() can only be called by the scope owner. Run program directly on
-        // the calling thread so it is the owner and can fork child fibers on loomScope.
-        JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
-        try {
-          val result = program(using new Yaes(async))
-          loomScope.join()
-          result
-        } catch {
-          case fe: FailedException =>
-            throw fe.getCause
-          case t: Throwable =>
-            JvmAsync.ensureJoined(loomScope)
-            Thread.interrupted()
-            throw t
-        } finally {
-          JvmAsync.scope.remove()
-          loomScope.close()
-        }
-      }
+    val async     = new JvmAsync()
+    val loomScope = StructuredTaskScope.open[A, Void](
+      Joiner.awaitAllSuccessfulOrThrow(),
+      configure => configure.withName("yaes-async-handler")
+    )
+    // In JDK 25, fork() can only be called by the scope owner. Run program directly on
+    // the calling thread so it is the owner and can fork child fibers on loomScope.
+    JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
+    try {
+      val result = block(using async)
+      loomScope.join()
+      result
+    } catch {
+      case fe: FailedException =>
+        throw fe.getCause
+      case t: Throwable =>
+        JvmAsync.ensureJoined(loomScope)
+        Thread.interrupted()
+        throw t
+    } finally {
+      JvmAsync.scope.remove()
+      loomScope.close()
     }
+  }
 
   opaque type Deadline = Duration
   object Deadline {
