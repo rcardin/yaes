@@ -1,6 +1,5 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Yaes.*
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -33,11 +32,12 @@ class SyncSpec extends AsyncFlatSpec with Matchers {
     } yield actualResult should have message "Boom!"
   }
 
-  it should "be use map and flatMap from Effect type" in {
-    val fortyThree: Sync ?=> Int = for {
-      a <- Sync(42)
-      b <- Sync(1)
-    } yield a + b
+  it should "compose multiple Sync effects" in {
+    val fortyThree: Sync ?=> Int = {
+      val a = Sync(42)
+      val b = Sync(1)
+      a + b
+    }
 
     for {
       actualResult <- Sync.run(fortyThree)
