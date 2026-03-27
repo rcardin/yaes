@@ -22,20 +22,7 @@ Available modules are:
  * `yaes-cats`: Integration with Cats and Cats Effect, providing interoperability and typeclass instances.
  * `yaes-slf4j`: SLF4J integration for the `Log` effect, enabling any SLF4J-compatible logging backend.
 
-What's new in λÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
-
-```scala 3
-import in.rcard.yaes.Random.*
-import in.rcard.yaes.Raise.*
-import in.rcard.yaes.Yaes.*
-
-def drunkFlip(using Random, Raise[String]): String = for {
-  caught <- Random.nextBoolean
-  heads  <- if (caught) Random.nextBoolean else Raise.raise("We dropped the coin")
-} yield if (heads) "Heads" else "Tails"
-```
-
-Or a more direct style like this:
+What's new in λÆS when compared to other effect systems? Well, λÆS embraces direct style — no monads, no for-comprehensions, just plain Scala:
 
 ```scala 3
 import in.rcard.yaes.Random.*
