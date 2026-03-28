@@ -44,6 +44,7 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 For more concise syntax, use the `raises` infix type instead of `using Raise[E]`:
 
 ```scala
+import in.rcard.yaes.raises
 import in.rcard.yaes.Raise.*
 
 def divide(a: Int, b: Int): Int raises DivisionByZero =
