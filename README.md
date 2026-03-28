@@ -436,9 +436,10 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 For more concise syntax, you can use the `raises` infix type:
 
 ```scala 3
+import in.rcard.yaes.raises
 import in.rcard.yaes.Raise.*
 
-// Using the raises infix type  
+// Using the raises infix type
 def divide(a: Int, b: Int): Int raises DivisionByZero =
   if (b == 0) Raise.raise(DivisionByZero)
   else a / b
@@ -1274,6 +1275,7 @@ val result = Reader.run(Config(3, 5000)) {
 #### Combining with Other Effects
 
 ```scala 3
+import in.rcard.yaes.{raises, reads}
 import in.rcard.yaes.Reader.*
 import in.rcard.yaes.Raise.*
 

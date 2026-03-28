@@ -398,6 +398,7 @@ val result = Reader.run(1) {
 `Reader` composes naturally with other λÆS effects:
 
 ```scala
+import in.rcard.yaes.{raises, reads}
 import in.rcard.yaes.Reader.*
 import in.rcard.yaes.Raise.*
 
@@ -417,6 +418,7 @@ val result = Reader.run(Config(5)) {
 ```
 
 ```scala
+import in.rcard.yaes.{reads, writes}
 import in.rcard.yaes.Reader.*
 import in.rcard.yaes.Writer.*
 

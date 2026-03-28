@@ -395,6 +395,7 @@ trait BodyCodec[A] {
 **Example - JSON codec using an external library:**
 
 ```scala
+import in.rcard.yaes.raises
 import io.circe.{Decoder, Encoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
