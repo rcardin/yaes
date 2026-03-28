@@ -6,16 +6,16 @@ Contains all effect implementations — the foundation layer with no yaes depend
 
 The canonical pattern for implementing effects:
 ```scala
-type EffectName = Yaes[EffectName.Unsafe]
+type EffectName = EffectName.Unsafe
 
 object EffectName {
   // DSL methods using context parameters
   def operation(using eff: EffectName): Result =
-    eff.unsafe.operationImpl(...)
+    eff.operationImpl(...)
 
   // Handler to run effects
-  def run[A](program: EffectName ?=> A): Result = {
-    Yaes.handle(program)(using handler)
+  def run[A](program: EffectName ?=> A): A = {
+    program(using unsafeImpl)
   }
 
   trait Unsafe {

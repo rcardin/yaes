@@ -3,7 +3,7 @@ package in.rcard.yaes
 import java.time.Clock as JClock
 import java.time.LocalDateTime
 
-type Log = Yaes[Log.Unsafe]
+type Log = Log.Unsafe
 
 /** Represents a logging effect.
   *
@@ -101,7 +101,7 @@ object Log {
     * @return
     *   A [[Logger]] instance.
     */
-  def getLogger(name: String)(using log: Log): Logger = log.unsafe.getLogger(name)
+  def getLogger(name: String)(using log: Log): Logger = log.getLogger(name)
 
   /** Runs a computation that requires the [[Log]] effect, using a provided level and clock.
     *
@@ -131,12 +131,7 @@ object Log {
     *   The result of the computation `block`.
     */
   def run[A](level: Level = Level.Debug)(block: Log ?=> A)(using clock: JClock): A =
-    val handler = new Yaes.Handler[Log.Unsafe, A, A] {
-      override def handle(program: Log ?=> A): A = program(using
-        Yaes(Log.unsafe(clock, level))
-      )
-    }
-    Yaes.handle(block)(using handler)
+    block(using Log.unsafe(clock, level))
 
   private def unsafe(clock: java.time.Clock, level: Level) = new Unsafe {
     override def getLogger(name: String): Logger =

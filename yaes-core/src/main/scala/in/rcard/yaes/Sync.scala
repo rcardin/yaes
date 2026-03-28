@@ -6,14 +6,14 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
-import scala.concurrent.ExecutionException
+
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.jdk.FutureConverters.*
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
-import scala.util.Using
+
 
 /** The executor service used to run the side-effecting operation. */
 trait Executor {
@@ -37,7 +37,7 @@ class JvmExecutor extends Executor {
   }
 }
 
-type Sync = Yaes[Sync.Unsafe]
+type Sync = Sync.Unsafe
 
 /** The `Sync` effect represents a side-effecting operation that can be run in a controlled
   * environment. This effect is useful to represent operations that can fail with uncotrolled
@@ -70,7 +70,10 @@ object Sync {
   inline def runBlocking[A](
       timeout: Duration
   )(program: Sync ?=> A)(implicit ec: ExecutionContext): Try[A] = {
-    Yaes.handle(program)(using blockingHandler(timeout))
+    val futureResult: Future[A] = run(program)
+    Try {
+      Await.result(futureResult, timeout)
+    }
   }
 
   /** Runs the given side-effecting operation in a controlled environment. The method does not block
@@ -82,30 +85,14 @@ object Sync {
     *   A `Future` with the result of the operation.
     */
   inline def run[A](program: Sync ?=> A)(implicit ec: ExecutionContext): Future[A] = {
-    Yaes.handle(program)(using handler)
-  }
-
-  def blockingHandler[A](timeout: Duration)(implicit ec: ExecutionContext) =
-    new Yaes.Handler[Sync.Unsafe, A, Try[A]] {
-      override def handle(program: Yaes[Sync.Unsafe] ?=> A): Try[A] = {
-        val futureResult: Future[A] = handler.handle(program)
-        Try {
-          Await.result(futureResult, timeout)
+    val executor = Sync.unsafe.executor
+    executor.submit(program(using Sync.unsafe)).transform {
+      case s @ Success(_) => s
+      case Failure(ex) =>
+        ex match {
+          case e: CompletionException => Failure(e.getCause)
+          case otherEx                => Failure(otherEx)
         }
-      }
-    }
-
-  def handler[A](implicit ec: ExecutionContext) = new Yaes.Handler[Sync.Unsafe, A, Future[A]] {
-    override def handle(program: Yaes[Sync.Unsafe] ?=> A): Future[A] = {
-      val executor = Sync.unsafe.executor
-      executor.submit(program(using new Yaes(Sync.unsafe))).transform {
-        case s @ Success(_) => s
-        case Failure(ex) =>
-          ex match {
-            case e: CompletionException => Failure(e.getCause)
-            case otherEx                => Failure(otherEx)
-          }
-      }
     }
   }
 

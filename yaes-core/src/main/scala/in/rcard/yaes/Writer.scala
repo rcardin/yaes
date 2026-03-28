@@ -7,7 +7,7 @@ import scala.collection.mutable.ArrayBuffer
   * @tparam W
   *   the type of the values to accumulate
   */
-type Writer[W] = Yaes[Writer.Unsafe[W]]
+type Writer[W] = Writer.Unsafe[W]
 
 /** Infix type alias for Writer effect. `A writes W` is equivalent to `Writer[W] ?=> A`.
   *
@@ -63,7 +63,7 @@ object Writer {
     * }}}
     */
   def write[W](w: W)(using interpreter: Writer[W]): Unit =
-    interpreter.unsafe.write(w)
+    interpreter.write(w)
 
   /** Appends multiple values to the accumulated output.
     *
@@ -83,7 +83,7 @@ object Writer {
     * }}}
     */
   def writeAll[W](ws: IterableOnce[W])(using interpreter: Writer[W]): Unit =
-    interpreter.unsafe.writeAll(ws)
+    interpreter.writeAll(ws)
 
   /** Captures the writes from a block, returning them alongside the block's result. Writes are also
     * forwarded to the outer Writer scope.
@@ -115,9 +115,9 @@ object Writer {
     * }}}
     */
   def capture[W, A](block: Writer[W] ?=> A)(using interpreter: Writer[W]): (Vector[W], A) = {
-    val mark     = interpreter.unsafe.size
+    val mark     = interpreter.size
     val result   = block
-    val captured = interpreter.unsafe.snapshotFrom(mark)
+    val captured = interpreter.snapshotFrom(mark)
     (captured, result)
   }
 
@@ -149,31 +149,25 @@ object Writer {
 
     val buffer = ArrayBuffer.empty[W]
 
-    val handler = new Yaes.Handler[Writer.Unsafe[W], A, A] {
+    val interpreter = new Unsafe[W] {
 
-      override def handle(program: Writer[W] ?=> A): A = {
-        val interpreter = new Unsafe[W] {
+      override def write(w: W): Unit =
+        buffer += w
 
-          override def write(w: W): Unit =
-            buffer += w
+      override def writeAll(ws: IterableOnce[W]): Unit =
+        buffer ++= ws
 
-          override def writeAll(ws: IterableOnce[W]): Unit =
-            buffer ++= ws
+      override def snapshot: Vector[W] =
+        buffer.toVector
 
-          override def snapshot: Vector[W] =
-            buffer.toVector
+      override private[yaes] def size: Int =
+        buffer.size
 
-          override private[yaes] def size: Int =
-            buffer.size
-
-          override private[yaes] def snapshotFrom(start: Int): Vector[W] =
-            buffer.iterator.drop(start).toVector
-        }
-        program(using Yaes(interpreter))
-      }
+      override private[yaes] def snapshotFrom(start: Int): Vector[W] =
+        buffer.iterator.drop(start).toVector
     }
 
-    val result = Yaes.handle(block)(using handler)
+    val result = block(using interpreter)
     (buffer.toVector, result)
   }
 

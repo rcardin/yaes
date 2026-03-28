@@ -1,6 +1,6 @@
 package in.rcard.yaes
 
-type Output = Yaes[Output.Unsafe]
+type Output = Output.Unsafe
 
 /** Companion object providing convenient methods for working with the Output effect.
   *
@@ -44,7 +44,7 @@ object Output {
     * @param console
     *   The Output effect provided through context parameters
     */
-  def printLn(text: String)(using console: Output): Unit = console.unsafe.printLn(text)
+  def printLn(text: String)(using console: Output): Unit = console.printLn(text)
 
   /** Prints `text` to the console.
     *
@@ -53,7 +53,7 @@ object Output {
     * @param console
     *   The Output effect provided through context parameters
     */
-  def print(text: String)(using console: Output): Unit = console.unsafe.print(text)
+  def print(text: String)(using console: Output): Unit = console.print(text)
 
   /** Prints an error line of `text` to the console.
     *
@@ -62,7 +62,7 @@ object Output {
     * @param console
     *   The Output effect provided through context parameters
     */
-  def printErrLn(text: String)(using console: Output): Unit = console.unsafe.printErrLn(text)
+  def printErrLn(text: String)(using console: Output): Unit = console.printErrLn(text)
 
   /** Prints an error `text` to the console.
     *
@@ -71,7 +71,7 @@ object Output {
     * @param console
     *   The Output effect provided through context parameters
     */
-  def printErr(text: String)(using console: Output): Unit = console.unsafe.printErr(text)
+  def printErr(text: String)(using console: Output): Unit = console.printErr(text)
 
   /** Runs a block of code that requires Output effect by providing a concrete implementation.
     *
@@ -98,12 +98,7 @@ object Output {
     *   }
     * }}}
     */
-  def run[A](block: Output ?=> A): A = {
-    val handler = new Yaes.Handler[Output.Unsafe, A, A] {
-      override def handle(program: Output ?=> A): A = program(using new Yaes(Output.unsafe))
-    }
-    Yaes.handle(block)(using handler)
-  }
+  def run[A](block: Output ?=> A): A = block(using Output.unsafe)
 
   private val unsafe = new Output.Unsafe {
     override def printErr(text: String): Unit = scala.Console.err.print(text)

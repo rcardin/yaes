@@ -1,8 +1,6 @@
 package in.rcard.yaes
 
-import in.rcard.yaes.Yaes.Handler
-
-type State[S] = Yaes[State.Unsafe[S]]
+type State[S] = State.Unsafe[S]
 
 /**
  * State effect for managing stateful computations in a functional way.
@@ -40,7 +38,7 @@ object State {
    * }}}
    */
   def get[S](using interpreter: State[S]): S = {
-    interpreter.unsafe.run(StateOp.Get())
+    interpreter.run(StateOp.Get())
   }
 
   /**
@@ -60,7 +58,7 @@ object State {
    * }}}
    */
   def set[S](value: S)(using interpreter: State[S]): S = {
-    interpreter.unsafe.run(StateOp.Set(value))
+    interpreter.run(StateOp.Set(value))
   }
 
   /**
@@ -79,7 +77,7 @@ object State {
    * }}}
    */
   def update[S](f: S => S)(using interpreter: State[S]): S = {
-    interpreter.unsafe.run(StateOp.Update(f))
+    interpreter.run(StateOp.Update(f))
   }
 
   /**
@@ -100,7 +98,7 @@ object State {
    * }}}
    */
   def use[S, A](f: S => A)(using interpreter: State[S]): A = {
-    interpreter.unsafe.run(StateOp.Use(f))
+    interpreter.run(StateOp.Use(f))
   }
 
   /**
@@ -151,30 +149,24 @@ object State {
 
     var currentState = initialState
 
-    val handler = new Yaes.Handler[State.Unsafe[S], A, A] {
+    val interpreter = new Unsafe[S] {
 
-      override def handle(program: State[S] ?=> A): A = {
-        val interpreter = new Unsafe[S] {
-
-          override def run[A](op: StateOp[S, A]): A = op match {
-            case StateOp.Get() =>
-              currentState
-            case StateOp.Set(value) =>
-              val oldState = currentState
-              currentState = value
-              oldState
-            case StateOp.Update(f) =>
-              currentState = f(currentState)
-              currentState
-            case StateOp.Use(f) =>
-              f(currentState)
-          }
-        }
-        program(using Yaes(interpreter))
+      override def run[A](op: StateOp[S, A]): A = op match {
+        case StateOp.Get() =>
+          currentState
+        case StateOp.Set(value) =>
+          val oldState = currentState
+          currentState = value
+          oldState
+        case StateOp.Update(f) =>
+          currentState = f(currentState)
+          currentState
+        case StateOp.Use(f) =>
+          f(currentState)
       }
     }
 
-    val result = Yaes.handle(block)(using handler)
+    val result = block(using interpreter)
     (currentState, result)
   }
 

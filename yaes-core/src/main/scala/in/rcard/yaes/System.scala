@@ -2,7 +2,7 @@ package in.rcard.yaes
 
 import java.lang.System as JSystem
 
-type System = Yaes[System.Unsafe]
+type System = System.Unsafe
 
 /** Companion object providing convenient methods for working with the `System` effect.
   *
@@ -202,12 +202,7 @@ object System {
     * @return
     *   The result of the code block
     */
-  def run[A](block: System ?=> A): A = {
-    val handler = new Yaes.Handler[System.Unsafe, A, A] {
-      override def handle(program: System ?=> A): A = program(using Yaes(System.unsafe))
-    }
-    Yaes.handle(block)(using handler)
-  }
+  def run[A](block: System ?=> A): A = block(using System.unsafe)
 
   private val unsafe: Unsafe = new Unsafe {
 
