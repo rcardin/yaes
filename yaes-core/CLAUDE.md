@@ -14,7 +14,7 @@ object EffectName {
     eff.operationImpl(...)
 
   // Handler to run effects
-  def run[A](program: EffectName ?=> A): Result = {
+  def run[A](program: EffectName ?=> A): A = {
     program(using unsafeImpl)
   }
 
