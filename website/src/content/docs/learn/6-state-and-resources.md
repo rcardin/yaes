@@ -1,12 +1,12 @@
 ---
-title: State, Writer & Resources
-description: Learn stateful computations with State, pure value accumulation with Writer, and safe resource lifecycle management with Resource.
+title: State, Writer, Reader & Resources
+description: Learn stateful computations with State, pure value accumulation with Writer, read-only environment access with Reader, and safe resource lifecycle management with Resource.
 sidebar:
-  label: "6. State, Writer & Resources"
+  label: "6. State, Writer, Reader & Resources"
   order: 6
 ---
 
-λÆS provides three complementary effects for managing mutable data and external resources: the `State` effect for functional stateful computations, the `Writer` effect for pure append-only value accumulation, and the `Resource` effect for guaranteed cleanup of acquired resources.
+λÆS provides four complementary effects for managing mutable data, environment access, and external resources: the `State` effect for functional stateful computations, the `Writer` effect for pure append-only value accumulation, the `Reader` effect for read-only access to environment values, and the `Resource` effect for guaranteed cleanup of acquired resources.
 
 ---
 
@@ -310,6 +310,140 @@ The Writer effect is not thread-safe. For concurrent scenarios:
 
 ---
 
+## Reader Effect
+
+The `Reader[R]` effect provides read-only access to an environment value of type `R`. It allows computations to read a shared value and temporarily override it via `local`, completing the classic Reader/Writer/State trio.
+
+### Overview
+
+The `Reader` effect manages a single immutable environment value of type `R`. Computations can read this value with `Reader.read` and temporarily modify it for a sub-scope with `Reader.local`. The original value is automatically restored after the block completes.
+
+> **Thread-safe by construction:** `local` creates a fresh `Reader` instance for the inner block rather than mutating shared state, so concurrent fibers each see their own values.
+
+### Reading Values
+
+Use `Reader.read` to access the current environment value:
+
+```scala
+import in.rcard.yaes.Reader.*
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  val retries = Reader.read[Config].maxRetries
+  val timeout = Reader.read[Config].timeout
+  (retries, timeout)
+}
+// result = (3, 5000)
+```
+
+### The `reads` Infix Type
+
+For more concise syntax, use the `reads` infix type, similar to `raises` and `writes`:
+
+```scala
+import in.rcard.yaes.{Reader, reads}
+
+case class Config(maxRetries: Int, timeout: Int)
+
+def getRetries: Int reads Config =
+  Reader.read[Config].maxRetries
+
+val result = Reader.run(Config(3, 5000)) {
+  getRetries
+}
+// result = 3
+```
+
+### Local Overrides
+
+The `local` operation runs a block with a modified environment value. The original value is restored after the block completes:
+
+```scala
+import in.rcard.yaes.Reader.*
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  val before = Reader.read[Config].maxRetries        // 3
+  val during = Reader.local(_.copy(maxRetries = 10)) {
+    Reader.read[Config].maxRetries                    // 10
+  }
+  val after = Reader.read[Config].maxRetries          // 3 (restored)
+  (before, during, after)
+}
+// result = (3, 10, 3)
+```
+
+Local overrides can be nested — each scope sees its own value, and all restore correctly:
+
+```scala
+import in.rcard.yaes.Reader.*
+
+val result = Reader.run(1) {
+  val a = Reader.read[Int]                        // 1
+  val b = Reader.local[Int, Int](_ + 10) {
+    val inner = Reader.read[Int]                  // 11
+    val deeper = Reader.local[Int, Int](_ + 100) {
+      Reader.read[Int]                            // 111
+    }
+    Reader.read[Int]                              // 11 (restored)
+  }
+  Reader.read[Int]                                // 1 (restored)
+}
+```
+
+### Combining Reader with Other Effects
+
+`Reader` composes naturally with other λÆS effects:
+
+```scala
+import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Raise.*
+
+case class Config(maxRetries: Int)
+
+def validate(value: Int): Unit raises String reads Config = {
+  val max = Reader.read[Config].maxRetries
+  if (value > max) Raise.raise(s"$value exceeds max $max")
+}
+
+val result = Reader.run(Config(5)) {
+  Raise.either[String, Unit] {
+    validate(10)
+  }
+}
+// result = Left("10 exceeds max 5")
+```
+
+```scala
+import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Writer.*
+
+case class Config(prefix: String)
+
+def logWithPrefix(msg: String): Unit writes String reads Config =
+  Writer.write(s"${Reader.read[Config].prefix}: $msg")
+
+val (log, _) = Reader.run(Config("[APP]")) {
+  Writer.run[String, Unit] {
+    logWithPrefix("starting")
+    logWithPrefix("done")
+  }
+}
+// log = Vector("[APP]: starting", "[APP]: done")
+```
+
+### Reader API Reference
+
+| Operation | Signature | Description |
+|-----------|-----------|-------------|
+| `Reader.read` | `Reader[R] ?=> R` | Read the current environment value |
+| `Reader.local` | `(R => R) => (Reader[R] ?=> A) => Reader[R] ?=> A` | Run block with modified value, restore after |
+| `Reader.run` | `(R) => (Reader[R] ?=> A) => A` | Run computation with environment value, return `A` |
+
+---
+
 ## Resource Effect
 
 The `Resource` effect provides automatic resource management with guaranteed cleanup. It ensures that all acquired resources are properly released in LIFO (Last In, First Out) order, even when exceptions occur.
@@ -483,4 +617,4 @@ def downloadAndProcess(url: String, outputFile: String)(using Resource): Unit = 
 
 ---
 
-With State, Writer, and Resource in your toolkit, you have everything you need for managing mutable data, value accumulation, and external dependencies safely. Next, we'll look at the most powerful data-flow primitives: **Streams & Channels**.
+With State, Writer, Reader, and Resource in your toolkit, you have everything you need for managing mutable data, value accumulation, environment access, and external dependencies safely. Next, we'll look at the most powerful data-flow primitives: **Streams & Channels**.
