@@ -228,14 +228,12 @@ object Resource {
           finalizer.release(finalizer.resource)
         } catch {
           case releaseError: Throwable =>
-            if (originalReleaseError == null) {
-              originalReleaseError = releaseError
-            }
             if (originalError != null) {
-              // FIXME Should we use an effect here?
-              println(s"Error during resource release")
-              releaseError.printStackTrace()
-              originalReleaseError = originalError
+              originalError.addSuppressed(releaseError)
+            } else if (originalReleaseError == null) {
+              originalReleaseError = releaseError
+            } else {
+              originalReleaseError.addSuppressed(releaseError)
             }
         }
       }

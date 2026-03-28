@@ -102,8 +102,51 @@ class ResourceSpec extends AnyFlatSpec with Matchers {
 
     actualException shouldBe a[RuntimeException]
     actualException.getMessage shouldEqual "Usage exception"
+    actualException.getSuppressed should have length 1
+    actualException.getSuppressed.head.getMessage shouldEqual "Release exception"
 
     results shouldEqual List("1", "2", "3")
+  }
+
+  it should "attach multiple release errors as suppressed to the original usage exception" in {
+    val usageException    = new RuntimeException("Usage exception")
+    val releaseException1 = new RuntimeException("Release exception 1")
+    val releaseException2 = new RuntimeException("Release exception 2")
+    val actualException   = intercept[RuntimeException] {
+      Resource.run {
+        Resource.install("Resource 1") { _ =>
+          throw releaseException2
+        }
+        Resource.install("Resource 2") { _ =>
+          throw releaseException1
+        }
+        throw usageException
+      }
+    }
+
+    actualException shouldBe usageException
+    actualException.getSuppressed should have length 2
+    actualException.getSuppressed.apply(0).getMessage shouldEqual "Release exception 1"
+    actualException.getSuppressed.apply(1).getMessage shouldEqual "Release exception 2"
+  }
+
+  it should "attach subsequent release errors as suppressed to the first release error when no usage error" in {
+    val releaseException1 = new RuntimeException("Release exception 1")
+    val releaseException2 = new RuntimeException("Release exception 2")
+    val actualException   = intercept[RuntimeException] {
+      Resource.run {
+        Resource.install("Resource 1") { _ =>
+          throw releaseException2
+        }
+        Resource.install("Resource 2") { _ =>
+          throw releaseException1
+        }
+      }
+    }
+
+    actualException shouldBe releaseException1
+    actualException.getSuppressed should have length 1
+    actualException.getSuppressed.head.getMessage shouldEqual "Release exception 2"
   }
 
   it should "release resources in the reverse order of acquisition" in {
