@@ -6,7 +6,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks {
 
@@ -109,10 +109,11 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
               flow1.zipWith(flow2)((_, _)).collect { pair =>
                 result.add(pair)
                 pairsEmitted.countDown()
+                Thread.sleep(1)
               }
             },
             {
-              pairsEmitted.await()
+              pairsEmitted.await(5, TimeUnit.SECONDS)
             }
           )
 
