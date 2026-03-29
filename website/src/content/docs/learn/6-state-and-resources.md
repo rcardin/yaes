@@ -325,7 +325,7 @@ The `Reader` effect manages a single immutable environment value of type `R`. Co
 Use `Reader.read` to access the current environment value:
 
 ```scala
-import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Reader
 
 case class Config(maxRetries: Int, timeout: Int)
 
@@ -360,7 +360,7 @@ val result = Reader.run(Config(3, 5000)) {
 The `local` operation runs a block with a modified environment value. The original value is restored after the block completes:
 
 ```scala
-import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Reader
 
 case class Config(maxRetries: Int, timeout: Int)
 
@@ -378,7 +378,7 @@ val result = Reader.run(Config(3, 5000)) {
 Local overrides can be nested — each scope sees its own value, and all restore correctly:
 
 ```scala
-import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Reader
 
 val result = Reader.run(1) {
   val a = Reader.read[Int]                        // 1
@@ -398,9 +398,7 @@ val result = Reader.run(1) {
 `Reader` composes naturally with other λÆS effects:
 
 ```scala
-import in.rcard.yaes.{raises, reads}
-import in.rcard.yaes.Reader.*
-import in.rcard.yaes.Raise.*
+import in.rcard.yaes.{Raise, Reader, raises, reads}
 
 case class Config(maxRetries: Int)
 
@@ -418,9 +416,7 @@ val result = Reader.run(Config(5)) {
 ```
 
 ```scala
-import in.rcard.yaes.{reads, writes}
-import in.rcard.yaes.Reader.*
-import in.rcard.yaes.Writer.*
+import in.rcard.yaes.{Reader, Writer, reads, writes}
 
 case class Config(prefix: String)
 

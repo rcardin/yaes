@@ -30,8 +30,7 @@ The infix types `raises`, `reads`, and `writes` are defined at the **package lev
 
 ```scala
 // ✅ CORRECT — import the infix type separately
-import in.rcard.yaes.raises
-import in.rcard.yaes.Raise.*
+import in.rcard.yaes.{Raise, raises}
 
 def divide(a: Int, b: Int): Int raises DivisionByZero = ...
 

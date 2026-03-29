@@ -436,8 +436,7 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 For more concise syntax, you can use the `raises` infix type:
 
 ```scala 3
-import in.rcard.yaes.raises
-import in.rcard.yaes.Raise.*
+import in.rcard.yaes.{Raise, raises}
 
 // Using the raises infix type
 def divide(a: Int, b: Int): Int raises DivisionByZero =
@@ -1233,7 +1232,7 @@ The environment value is immutable within a scope. The `local` operation creates
 #### Basic Usage
 
 ```scala 3
-import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Reader
 
 case class Config(maxRetries: Int, timeout: Int)
 
@@ -1257,7 +1256,7 @@ def getRetries: Int reads Config =
 Use `local` to temporarily modify the environment value for a block:
 
 ```scala 3
-import in.rcard.yaes.Reader.*
+import in.rcard.yaes.Reader
 
 case class Config(maxRetries: Int, timeout: Int)
 
@@ -1275,9 +1274,7 @@ val result = Reader.run(Config(3, 5000)) {
 #### Combining with Other Effects
 
 ```scala 3
-import in.rcard.yaes.{raises, reads}
-import in.rcard.yaes.Reader.*
-import in.rcard.yaes.Raise.*
+import in.rcard.yaes.{Raise, Reader, raises, reads}
 
 case class Config(maxRetries: Int)
 
