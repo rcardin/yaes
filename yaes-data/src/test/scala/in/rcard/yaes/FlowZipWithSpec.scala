@@ -119,6 +119,8 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
 
           val collected = result.toArray(Array.empty[(Char, Int)])
           collected.length should be >= cancelAfter
+          // Ensure that cancellation actually stops further emission and we don't get all possible pairs
+          collected.length should be < chars.zip(ints).length
           val expected = chars.zip(ints).take(cancelAfter)
           collected.take(cancelAfter) should contain theSameElementsInOrderAs expected
       }
