@@ -359,6 +359,7 @@ To use JSON, implement `BodyCodec[A]` for your types:
 ```scala
 // Example with circe (not included)
 import in.rcard.yaes.raises
+import in.rcard.yaes.Raise
 import io.circe.{Encoder, Decoder}
 import io.circe.syntax.*
 import io.circe.parser.decode
