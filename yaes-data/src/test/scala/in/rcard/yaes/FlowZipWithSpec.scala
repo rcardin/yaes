@@ -6,7 +6,9 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
+
+import scala.concurrent.duration.*
 
 class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks {
 
@@ -109,16 +111,19 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
               flow1.zipWith(flow2)((_, _)).collect { pair =>
                 result.add(pair)
                 pairsEmitted.countDown()
-                Thread.sleep(1)
+                Async.delay(1.millis)
               }
             },
             {
-              pairsEmitted.await(5, TimeUnit.SECONDS)
+              val completed = pairsEmitted.await(5, java.util.concurrent.TimeUnit.SECONDS)
+              assert(completed, "Timed out waiting for pairs to be emitted")
             }
           )
 
           val collected = result.toArray(Array.empty[(Char, Int)])
           collected.length should be >= cancelAfter
+          // Ensure that cancellation actually stops further emission and we don't get all possible pairs
+          collected.length should be < chars.zip(ints).length
           val expected = chars.zip(ints).take(cancelAfter)
           collected.take(cancelAfter) should contain theSameElementsInOrderAs expected
       }
