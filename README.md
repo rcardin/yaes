@@ -123,6 +123,7 @@ The library provides a set of effects and handlers that can be used to define an
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
 - [`Writer`](#the-writer-effect): Allows for pure, append-only value accumulation.
+- [`Reader`](#the-reader-effect): Allows for read-only access to environment values.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
 
 The library also provides the following handlers that orchestrate existing effects:
@@ -435,9 +436,9 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 For more concise syntax, you can use the `raises` infix type:
 
 ```scala 3
-import in.rcard.yaes.Raise.*
+import in.rcard.yaes.{Raise, raises}
 
-// Using the raises infix type  
+// Using the raises infix type
 def divide(a: Int, b: Int): Int raises DivisionByZero =
   if (b == 0) Raise.raise(DivisionByZero)
   else a / b
@@ -1221,6 +1222,79 @@ The `Writer` effect provides the following operations:
 - `Writer.writeAll[W](ws: IterableOnce[W])`: Appends multiple values at once
 - `Writer.capture[W, A](block: Writer[W] ?=> A)`: Captures writes from a block, forwarding them to the outer scope, and returns `(Vector[W], A)`
 - `Writer.run[W, A](block: Writer[W] ?=> A)`: Runs a computation with the Writer effect, returning `(Vector[W], A)`
+
+### The `Reader` Effect
+
+The `Reader[R]` effect provides read-only access to an environment value of type `R`. It allows computations to read a shared value and temporarily override it via `local`, completing the classic Reader/Writer/State trio.
+
+The environment value is immutable within a scope. The `local` operation creates a fresh scope with a modified value, restoring the original after the block completes. This makes `Reader` thread-safe by construction.
+
+#### Basic Usage
+
+```scala 3
+import in.rcard.yaes.Reader
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  Reader.read[Config].maxRetries
+}
+// result = 3
+```
+
+For more concise syntax, you can use the `reads` infix type:
+
+```scala 3
+import in.rcard.yaes.{Reader, reads}
+
+def getRetries: Int reads Config =
+  Reader.read[Config].maxRetries
+```
+
+#### Local Overrides
+
+Use `local` to temporarily modify the environment value for a block:
+
+```scala 3
+import in.rcard.yaes.Reader
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  val before = Reader.read[Config].maxRetries        // 3
+  val during = Reader.local(_.copy(maxRetries = 10)) {
+    Reader.read[Config].maxRetries                    // 10
+  }
+  val after = Reader.read[Config].maxRetries          // 3 (restored)
+  (before, during, after)
+}
+// result = (3, 10, 3)
+```
+
+#### Combining with Other Effects
+
+```scala 3
+import in.rcard.yaes.{Raise, Reader, raises, reads}
+
+case class Config(maxRetries: Int)
+
+def validate(value: Int): Unit raises String reads Config = {
+  val max = Reader.read[Config].maxRetries
+  if (value > max) Raise.raise(s"$value exceeds max $max")
+}
+
+val result = Reader.run(Config(5)) {
+  Raise.either[String, Unit] {
+    validate(10)
+  }
+}
+// result = Left("10 exceeds max 5")
+```
+
+The `Reader` effect provides the following operations:
+- `Reader.read[R]`: Returns the current environment value
+- `Reader.local[R, A](f: R => R)(block: Reader[R] ?=> A)`: Runs a block with a modified environment value, restoring the original after
+- `Reader.run[R, A](value: R)(block: Reader[R] ?=> A)`: Runs a computation with the Reader effect, returning `A` directly
 
 ### The `Log` Effect
 
