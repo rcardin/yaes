@@ -58,13 +58,16 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   }
 
   it should "zip two flows of equal length" in {
+    val genEqualLengthPairs = for {
+      n     <- Gen.choose(1, 10)
+      chars <- Gen.listOfN(n, Gen.alphaChar)
+      ints  <- Gen.listOfN(n, Gen.choose(1, 100))
+    } yield (chars, ints)
+
     Async.run {
-      forAll(genChars.suchThat(_.nonEmpty), genInts.suchThat(_.nonEmpty)) { (chars, ints) =>
-        val minLen   = chars.length.min(ints.length)
-        val left     = chars.take(minLen)
-        val right    = ints.take(minLen)
-        val expected = left.zip(right)
-        zipToArray(Flow(left*), Flow(right*)) should contain theSameElementsInOrderAs expected
+      forAll(genEqualLengthPairs) { (chars, ints) =>
+        val expected = chars.zip(ints)
+        zipToArray(Flow(chars*), Flow(ints*)) should contain theSameElementsInOrderAs expected
       }
     }
   }
@@ -95,37 +98,42 @@ class FlowZipWithSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   }
 
   it should "stop zipping when the operation is cancelled externally" in {
+    val cancelAfter = 3
+    val minSize     = cancelAfter + 4
+
+    val genLargeChars = Gen.choose(minSize, 20).flatMap(n => Gen.listOfN(n, Gen.alphaChar))
+    val genLargeInts  = Gen.choose(minSize, 20).flatMap(n => Gen.listOfN(n, Gen.choose(1, 100)))
+
     Async.run {
-      val cancelAfter = 3
+      forAll(genLargeChars, genLargeInts) { (chars, ints) =>
+        val result       = new ConcurrentLinkedQueue[(Char, Int)]()
+        val pairsEmitted = new CountDownLatch(cancelAfter)
 
-      forAll(genChars.suchThat(_.length > cancelAfter), genInts.suchThat(_.length > cancelAfter)) {
-        (chars, ints) =>
-          val result       = new ConcurrentLinkedQueue[(Char, Int)]()
-          val pairsEmitted = new CountDownLatch(cancelAfter)
+        val flow1 = Flow(chars*)
+        val flow2 = Flow(ints*)
 
-          val flow1 = Flow(chars*)
-          val flow2 = Flow(ints*)
-
-          Async.race(
-            {
-              flow1.zipWith(flow2)((_, _)).collect { pair =>
-                result.add(pair)
-                pairsEmitted.countDown()
-                Async.delay(1.millis)
-              }
-            },
-            {
-              val completed = pairsEmitted.await(5, java.util.concurrent.TimeUnit.SECONDS)
-              assert(completed, "Timed out waiting for pairs to be emitted")
+        Async.racePair(
+          {
+            flow1.zipWith(flow2)((_, _)).collect { pair =>
+              result.add(pair)
+              pairsEmitted.countDown()
+              Async.delay(1.millis)
             }
-          )
+          },
+          {
+            val completed = pairsEmitted.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            assert(completed, "Timed out waiting for pairs to be emitted")
+          }
+        ) match {
+          case Left((_, fiber))  => fiber.cancel(); fiber.join()
+          case Right((fiber, _)) => fiber.cancel(); fiber.join()
+        }
 
-          val collected = result.toArray(Array.empty[(Char, Int)])
-          collected.length should be >= cancelAfter
-          // Ensure that cancellation actually stops further emission and we don't get all possible pairs
-          collected.length should be < chars.zip(ints).length
-          val expected = chars.zip(ints).take(cancelAfter)
-          collected.take(cancelAfter) should contain theSameElementsInOrderAs expected
+        val collected = result.toArray(Array.empty[(Char, Int)])
+        collected.length should be >= cancelAfter
+        collected.length should be < chars.zip(ints).length
+        val expected = chars.zip(ints).take(cancelAfter)
+        collected.take(cancelAfter) should contain theSameElementsInOrderAs expected
       }
     }
   }
