@@ -18,7 +18,7 @@ type Res[R] = Res.Unsafe[R]
 
 object Res {
 
-  inline def install[R](inline acquire: => R)(inline release: R => Unit)(using res: Res[R]): R =
+  inline def install[R](inline acquire: => R)(inline release: R => Unit)(using res: Res[R]): R^ =
     res.install(acquire)(release)
 
   def run[R, A](block: Res[R] ?=> A): A = {
@@ -58,7 +58,7 @@ object Res {
 
     override val finalizers: Deque[Finalizer[?]] = new ConcurrentLinkedDeque()
 
-    override def install[R1 <: R](acquire: => R1)(release: R1 => Unit): R1 = {
+    override def install[R](acquire: => R)(release: R => Unit): R^ = {
 
       val acquired  = acquire
       val finalizer = Finalizer(acquired, release)
@@ -69,9 +69,9 @@ object Res {
 
   private[yaes] case class Finalizer[R](val resource: R, release: R => Unit)
 
-  trait Unsafe[-R] extends SharedCapability {
+  trait Unsafe[R] extends SharedCapability {
 
-    def install[R1 <: R](acquire: => R1)(release: R1 => Unit): R1
+    def install[R](acquire: => R)(release: R => Unit): R^
 
     private[yaes] val finalizers: Deque[Finalizer[?]]
   }
@@ -84,18 +84,15 @@ object Res {
         println("3")
         r.close()
     }))
-    val os = Res.install(new BufferedOutputStream(fis))((r => {
-        println("4")
-        r.close()
-    }))
-    os.write(42)
-    
+    fis.write(42)
+    fis.flush()
+
     println("2")
-    () => (fis, os)
+    () => fis
   }
   println("5")
-  val (fis, os) = result()
+  val fis = result()
   println("6") 
-  os.flush()
+  fis.flush()
   println("7")
 }
