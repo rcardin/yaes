@@ -7,7 +7,7 @@ import java.util.Queue
 import java.util.Deque
 import java.util.concurrent.ConcurrentLinkedDeque
 
-type Resource = Yaes[Resource.Unsafe]
+type Resource = Resource.Unsafe
 
 /** Companion object providing convenient methods for working with the `Resource` effect.
   *
@@ -98,7 +98,7 @@ object Resource {
     *   The type of the resource
     */
   inline def install[A](inline acquire: => A)(inline release: A => Unit)(using res: Resource): A = {
-    res.unsafe.install(acquire)(release)
+    res.install(acquire)(release)
   }
 
   /** Acquires a `Closeable` resource and ensures it is automatically closed.
@@ -131,7 +131,7 @@ object Resource {
     *   The type of the Closeable resource
     */
   inline def acquire[A <: Closeable](inline acquire: => A)(using res: Resource): A = {
-    res.unsafe.install(acquire)(c => c.close())
+    res.install(acquire)(c => c.close())
   }
 
   /** Registers a finalizer action to be executed when the resource scope ends.
@@ -168,7 +168,7 @@ object Resource {
     *   The Resource effect provided through context parameters
     */
   inline def ensuring(inline finalizer: => Unit)(using res: Resource): Unit = {
-    res.unsafe.install(())(_ => finalizer)
+    res.install(())(_ => finalizer)
   }
 
   /** Runs a program that requires the `Resource` effect.
@@ -212,45 +212,36 @@ object Resource {
     *   The return type of the code block
     */
   def run[A](block: Resource ?=> A): A = {
-    val handler = new Yaes.Handler[Resource.Unsafe, A, A] {
-      override def handle(program: Resource ?=> A): A = {
-
-        val resourceHandler          = unsafe
-        var originalError: Throwable = null
+    val resourceHandler          = unsafe
+    var originalError: Throwable = null
+    try {
+      block(using resourceHandler)
+    } catch {
+      case error: Throwable =>
+        originalError = error
+        throw error
+    } finally {
+      var originalReleaseError: Throwable = null
+      while (!resourceHandler.finalizers.isEmpty()) {
+        val finalizer = resourceHandler.finalizers.pop()
         try {
-          program(using Yaes(resourceHandler))
+          finalizer.release(finalizer.resource)
         } catch {
-          case error: Throwable =>
-            originalError = error
-            throw error
-        } finally {
-          var originalReleaseError: Throwable = null
-          while (!resourceHandler.finalizers.isEmpty()) {
-            val finalizer = resourceHandler.finalizers.pop()
-            try {
-              finalizer.release(finalizer.resource)
-            } catch {
-              case releaseError: Throwable =>
-                if (originalReleaseError == null) {
-                  originalReleaseError = releaseError
-                }
-                if (originalError != null) {
-                  // FIXME Should we use an effect here?
-                  println(s"Error during resource release")
-                  releaseError.printStackTrace()
-                  originalReleaseError = originalError
-                }
+          case releaseError: Throwable =>
+            if (originalError != null) {
+              originalError.addSuppressed(releaseError)
+            } else if (originalReleaseError == null) {
+              originalReleaseError = releaseError
+            } else {
+              originalReleaseError.addSuppressed(releaseError)
             }
-          }
-
-          if (originalReleaseError != null) {
-            throw originalReleaseError
-          }
         }
       }
 
+      if (originalReleaseError != null) {
+        throw originalReleaseError
+      }
     }
-    Yaes.handle(block)(using handler)
   }
 
   private def unsafe: Resource.Unsafe = new Resource.Unsafe {

@@ -19,12 +19,12 @@ The library is available on Maven Central. Add the following dependencies to you
 
 ```scala
 libraryDependencies ++= Seq(
-  "in.rcard.yaes" %% "yaes-core"        % "0.16.0",
-  "in.rcard.yaes" %% "yaes-data"        % "0.16.0", // Optional: Flow and data structures
-  "in.rcard.yaes" %% "yaes-cats"        % "0.16.0", // Optional: Cats Effect integration
-  "in.rcard.yaes" %% "yaes-slf4j"       % "0.16.0", // Optional: SLF4J logging backend
-  "in.rcard.yaes" %% "yaes-http-server" % "0.16.0", // Optional: HTTP server
-  "in.rcard.yaes" %% "yaes-http-circe"  % "0.16.0"  // Optional: Circe JSON for HTTP
+  "in.rcard.yaes" %% "yaes-core"        % "0.17.0",
+  "in.rcard.yaes" %% "yaes-data"        % "0.17.0", // Optional: Flow and data structures
+  "in.rcard.yaes" %% "yaes-cats"        % "0.17.0", // Optional: Cats Effect integration
+  "in.rcard.yaes" %% "yaes-slf4j"       % "0.17.0", // Optional: SLF4J logging backend
+  "in.rcard.yaes" %% "yaes-http-server" % "0.17.0", // Optional: HTTP server
+  "in.rcard.yaes" %% "yaes-http-circe"  % "0.17.0"  // Optional: Circe JSON for HTTP
 )
 ```
 

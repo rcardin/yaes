@@ -30,7 +30,7 @@ This integration enables you to:
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.17.0"
 ```
 
 ## Cats Effect Integration
@@ -332,6 +332,7 @@ The `MonadError` instance enables seamless integration with Cats-based libraries
 
 ```scala
 import cats.implicits.*
+import in.rcard.yaes.raises
 import in.rcard.yaes.instances.raise.given
 
 def validateAge(age: Int): Int raises String =
@@ -489,6 +490,7 @@ Works with `NonEmptyList` too:
 
 ```scala
 import cats.data.NonEmptyList
+import in.rcard.yaes.raises
 
 val nelResult: NonEmptyList[Int] raises MyError =
   accumulate.mapAccumulatingS(NonEmptyList.of(1, 2, 3, 4, 5)) { value =>
@@ -540,6 +542,7 @@ val nelResult: NonEmptyList[Int] raises NonEmptyList[String] =
 Use fluent syntax for error combination:
 
 ```scala
+import in.rcard.yaes.raises
 import in.rcard.yaes.syntax.accumulate.given
 import cats.Semigroup
 import cats.data.NonEmptyList
@@ -563,6 +566,8 @@ val resultsNel: List[Int] raises NonEmptyList[String] = computations.combineErro
 Works with `NonEmptyList` of computations:
 
 ```scala
+import in.rcard.yaes.raises
+
 val nelComputations: NonEmptyList[Int raises String] = NonEmptyList.of(
   if (condition1) 1 else Raise.raise("error1"),
   if (condition2) 2 else Raise.raise("error2")
@@ -861,6 +866,6 @@ val result = YaesSync.run {
 - **Java Version**: 25+ (for Virtual Threads)
 - **Cats Effect Version**: 3.6.3+
 - **Cats Version**: 2.13.0+
-- **λÆS Core**: 0.16.0+
+- **λÆS Core**: 0.17.0+
 
 > This page is coming soon. Content will be added in a subsequent migration step.

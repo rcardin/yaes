@@ -20,7 +20,7 @@ Both are part of the `yaes-data` module and integrate seamlessly with λÆS effe
 Add the following dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.17.0"
 ```
 
 ---

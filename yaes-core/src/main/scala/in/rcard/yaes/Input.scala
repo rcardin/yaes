@@ -2,7 +2,7 @@ package in.rcard.yaes
 
 import java.io.IOException
 
-type Input = Yaes[Input.Unsafe]
+type Input = Input.Unsafe
 
 /** Companion object for the Input effect, providing utility methods and handlers.
   *
@@ -40,7 +40,7 @@ object Input {
     * @return
     *   The line of input read from the console
     */
-  def readLn()(using input: Input)(using t: Raise[IOException]): String = input.unsafe.readLn()
+  def readLn()(using input: Input)(using t: Raise[IOException]): String = input.readLn()
 
   /** Runs a program that requires Input effect.
     *
@@ -59,12 +59,7 @@ object Input {
     * @return
     *   The result of the program
     */
-  def run[A](block: Input ?=> A): A = {
-    val handler = new Yaes.Handler[Input.Unsafe, A, A] {
-      override def handle(program: Input ?=> A): A = program(using Yaes(Input.unsafe))
-    }
-    Yaes.handle(block)(using handler)
-  }
+  def run[A](block: Input ?=> A): A = block(using Input.unsafe)
 
   val unsafe = new Input.Unsafe {
     override def readLn()(using t: Raise[IOException]): String = Raise {

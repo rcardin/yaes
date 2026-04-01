@@ -6,16 +6,16 @@ Contains all effect implementations — the foundation layer with no yaes depend
 
 The canonical pattern for implementing effects:
 ```scala
-type EffectName = Yaes[EffectName.Unsafe]
+type EffectName = EffectName.Unsafe
 
 object EffectName {
   // DSL methods using context parameters
   def operation(using eff: EffectName): Result =
-    eff.unsafe.operationImpl(...)
+    eff.operationImpl(...)
 
   // Handler to run effects
-  def run[A](program: EffectName ?=> A): Result = {
-    Yaes.handle(program)(using handler)
+  def run[A](program: EffectName ?=> A): A = {
+    program(using unsafeImpl)
   }
 
   trait Unsafe {
@@ -23,6 +23,24 @@ object EffectName {
   }
 }
 ```
+
+### Infix Type Aliases Require Separate Imports
+
+The infix types `raises`, `reads`, and `writes` are defined at the **package level** in `in.rcard.yaes`, not inside their companion objects. Importing `Raise.*`, `Reader.*`, or `Writer.*` does **not** bring them into scope:
+
+```scala
+// ✅ CORRECT — import the infix type separately
+import in.rcard.yaes.{Raise, raises}
+
+def divide(a: Int, b: Int): Int raises DivisionByZero = ...
+
+// ❌ INCORRECT — Raise.* does not include the `raises` infix type
+import in.rcard.yaes.Raise.*
+
+def divide(a: Int, b: Int): Int raises DivisionByZero = ... // won't compile
+```
+
+When writing documentation or code snippets that use infix types, always include the explicit import (e.g., `import in.rcard.yaes.{raises, reads}`) alongside the companion object import.
 
 ### Key Implementation Details
 

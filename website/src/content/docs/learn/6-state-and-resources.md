@@ -1,12 +1,12 @@
 ---
-title: State & Resources
-description: Learn stateful computations with the State effect and safe resource lifecycle management with the Resource effect.
+title: State, Writer, Reader & Resources
+description: Learn stateful computations with State, pure value accumulation with Writer, read-only environment access with Reader, and safe resource lifecycle management with Resource.
 sidebar:
-  label: "6. State & Resources"
+  label: "6. State, Writer, Reader & Resources"
   order: 6
 ---
 
-λÆS provides two complementary effects for managing mutable data and external resources: the `State` effect for functional stateful computations, and the `Resource` effect for guaranteed cleanup of acquired resources.
+λÆS provides four complementary effects for managing mutable data, environment access, and external resources: the `State` effect for functional stateful computations, the `Writer` effect for pure append-only value accumulation, the `Reader` effect for read-only access to environment values, and the `Resource` effect for guaranteed cleanup of acquired resources.
 
 ---
 
@@ -162,6 +162,283 @@ val thread2Result = Future {
   State.run(0) { /* stateful computation */ }
 }
 ```
+
+---
+
+## Writer Effect
+
+The `Writer[W]` effect enables pure, append-only value accumulation during computations. Values are collected into a `Vector[W]` and returned alongside the computation result as a tuple `(Vector[W], A)`. This is useful for collecting logs, events, metrics, or any other data during a computation.
+
+> **Note:** The Writer effect is not thread-safe. Use appropriate synchronization mechanisms when accessing from multiple threads.
+
+### Writing Values
+
+Use `Writer.write` to append a single value and `Writer.writeAll` to append multiple values at once:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (log, result) = Writer.run[String, Int] {
+  Writer.write("starting")
+  Writer.write("computing")
+  42
+}
+// log = Vector("starting", "computing"), result = 42
+```
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (log, _) = Writer.run[Int, Unit] {
+  Writer.write(1)
+  Writer.writeAll(List(2, 3, 4))
+  Writer.write(5)
+}
+// log = Vector(1, 2, 3, 4, 5)
+```
+
+### The `writes` Infix Type
+
+For more concise syntax, you can use the `writes` infix type, similar to `raises` for the Raise effect:
+
+```scala
+import in.rcard.yaes.{Writer, writes}
+
+def computation: Int writes String = {
+  Writer.write("log entry")
+  42
+}
+
+val (log, result) = Writer.run[String, Int] {
+  computation
+}
+// log = Vector("log entry"), result = 42
+```
+
+### Capturing Writes
+
+The `capture` operation records writes from a block, returning them alongside the block's result. Writes are also forwarded to the outer scope:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (outerLog, (innerLog, result)) = Writer.run[String, (Vector[String], Int)] {
+  Writer.write("before")
+  val captured = Writer.capture[String, Int] {
+    Writer.write("inside")
+    99
+  }
+  Writer.write("after")
+  captured
+}
+// outerLog = Vector("before", "inside", "after")
+// innerLog = Vector("inside"), result = 99
+```
+
+Captures can be nested — each level records its own writes while forwarding to the outer scope:
+
+```scala
+import in.rcard.yaes.Writer.*
+
+val (outerLog, (middleLog, (innerLog, result))) =
+  Writer.run[String, (Vector[String], (Vector[String], Int))] {
+    Writer.write("outer")
+    Writer.capture[String, (Vector[String], Int)] {
+      Writer.write("middle")
+      Writer.capture[String, Int] {
+        Writer.write("inner")
+        42
+      }
+    }
+  }
+// outerLog  = Vector("outer", "middle", "inner")
+// middleLog = Vector("middle", "inner")
+// innerLog  = Vector("inner"), result = 42
+```
+
+### Combining Writer with Other Effects
+
+`Writer` composes naturally with other λÆS effects:
+
+```scala
+import in.rcard.yaes.Writer.*
+import in.rcard.yaes.State.*
+
+val (state, (log, result)) = State.run(0) {
+  Writer.run[String, Int] {
+    Writer.write("start")
+    State.update[Int](_ + 1)
+    Writer.write(s"count=${State.get[Int]}")
+    State.get[Int]
+  }
+}
+// state = 1, log = Vector("start", "count=1"), result = 1
+```
+
+```scala
+import in.rcard.yaes.Writer.*
+import in.rcard.yaes.Raise.*
+
+val (log, result) = Writer.run[String, Either[String, Int]] {
+  Writer.write("before")
+  val either = Raise.either[String, Int] {
+    Writer.write("inside-raise")
+    Raise.raise("error")
+  }
+  Writer.write("after")
+  either
+}
+// result = Left("error")
+// log = Vector("before", "inside-raise", "after")
+```
+
+### Writer API Reference
+
+| Operation | Signature | Description |
+|-----------|-----------|-------------|
+| `Writer.write` | `(W) => Writer[W] ?=> Unit` | Append a single value |
+| `Writer.writeAll` | `(IterableOnce[W]) => Writer[W] ?=> Unit` | Append multiple values at once |
+| `Writer.capture` | `(Writer[W] ?=> A) => Writer[W] ?=> (Vector[W], A)` | Capture writes from a block, forwarding to outer scope |
+| `Writer.run` | `(Writer[W] ?=> A) => (Vector[W], A)` | Run computation, return accumulated values and result |
+
+### Thread Safety
+
+The Writer effect is not thread-safe. For concurrent scenarios:
+
+- Use separate `Writer.run` blocks per thread — each gets isolated accumulation
+- Implement synchronization if shared accumulation is required
+
+---
+
+## Reader Effect
+
+The `Reader[R]` effect provides read-only access to an environment value of type `R`. It allows computations to read a shared value and temporarily override it via `local`, completing the classic Reader/Writer/State trio.
+
+### Overview
+
+The `Reader` effect manages a single immutable environment value of type `R`. Computations can read this value with `Reader.read` and temporarily modify it for a sub-scope with `Reader.local`. The original value is automatically restored after the block completes.
+
+> **Thread-safe by construction:** `local` creates a fresh `Reader` instance for the inner block rather than mutating shared state, so concurrent fibers each see their own values.
+
+### Reading Values
+
+Use `Reader.read` to access the current environment value:
+
+```scala
+import in.rcard.yaes.Reader
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  val retries = Reader.read[Config].maxRetries
+  val timeout = Reader.read[Config].timeout
+  (retries, timeout)
+}
+// result = (3, 5000)
+```
+
+### The `reads` Infix Type
+
+For more concise syntax, use the `reads` infix type, similar to `raises` and `writes`:
+
+```scala
+import in.rcard.yaes.{Reader, reads}
+
+case class Config(maxRetries: Int, timeout: Int)
+
+def getRetries: Int reads Config =
+  Reader.read[Config].maxRetries
+
+val result = Reader.run(Config(3, 5000)) {
+  getRetries
+}
+// result = 3
+```
+
+### Local Overrides
+
+The `local` operation runs a block with a modified environment value. The original value is restored after the block completes:
+
+```scala
+import in.rcard.yaes.Reader
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  val before = Reader.read[Config].maxRetries        // 3
+  val during = Reader.local(_.copy(maxRetries = 10)) {
+    Reader.read[Config].maxRetries                    // 10
+  }
+  val after = Reader.read[Config].maxRetries          // 3 (restored)
+  (before, during, after)
+}
+// result = (3, 10, 3)
+```
+
+Local overrides can be nested — each scope sees its own value, and all restore correctly:
+
+```scala
+import in.rcard.yaes.Reader
+
+val result = Reader.run(1) {
+  val a = Reader.read[Int]                        // 1
+  val b = Reader.local[Int, Int](_ + 10) {
+    val inner = Reader.read[Int]                  // 11
+    val deeper = Reader.local[Int, Int](_ + 100) {
+      Reader.read[Int]                            // 111
+    }
+    Reader.read[Int]                              // 11 (restored)
+  }
+  Reader.read[Int]                                // 1 (restored)
+}
+```
+
+### Combining Reader with Other Effects
+
+`Reader` composes naturally with other λÆS effects:
+
+```scala
+import in.rcard.yaes.{Raise, Reader, raises, reads}
+
+case class Config(maxRetries: Int)
+
+def validate(value: Int): Unit raises String reads Config = {
+  val max = Reader.read[Config].maxRetries
+  if (value > max) Raise.raise(s"$value exceeds max $max")
+}
+
+val result = Reader.run(Config(5)) {
+  Raise.either[String, Unit] {
+    validate(10)
+  }
+}
+// result = Left("10 exceeds max 5")
+```
+
+```scala
+import in.rcard.yaes.{Reader, Writer, reads, writes}
+
+case class Config(prefix: String)
+
+def logWithPrefix(msg: String): Unit writes String reads Config =
+  Writer.write(s"${Reader.read[Config].prefix}: $msg")
+
+val (log, _) = Reader.run(Config("[APP]")) {
+  Writer.run[String, Unit] {
+    logWithPrefix("starting")
+    logWithPrefix("done")
+  }
+}
+// log = Vector("[APP]: starting", "[APP]: done")
+```
+
+### Reader API Reference
+
+| Operation | Signature | Description |
+|-----------|-----------|-------------|
+| `Reader.read` | `Reader[R] ?=> R` | Read the current environment value |
+| `Reader.local` | `(R => R) => (Reader[R] ?=> A) => Reader[R] ?=> A` | Run block with modified value, restore after |
+| `Reader.run` | `(R) => (Reader[R] ?=> A) => A` | Run computation with environment value, return `A` |
 
 ---
 
@@ -338,4 +615,4 @@ def downloadAndProcess(url: String, outputFile: String)(using Resource): Unit = 
 
 ---
 
-With State and Resource in your toolkit, you have everything you need for managing mutable data and external dependencies safely. Next, we'll look at the most powerful data-flow primitives: **Streams & Channels**.
+With State, Writer, Reader, and Resource in your toolkit, you have everything you need for managing mutable data, value accumulation, environment access, and external dependencies safely. Next, we'll look at the most powerful data-flow primitives: **Streams & Channels**.

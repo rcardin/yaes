@@ -12,7 +12,7 @@ import scala.util.Failure
 import scala.collection.mutable.ArrayBuffer
 import scala.util.boundary.Label
 
-type Raise[E] = Yaes[Raise.Unsafe[E]]
+type Raise[E] = Raise.Unsafe[E]
 
 infix type raises[A, Error] = Raise[Error] ?=> A
 
@@ -70,7 +70,7 @@ object Raise {
     * @tparam A
     *   the type of the result of the block
     */
-  def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.unsafe.raise(error)
+  def raise[E, A](error: E)(using eff: Raise[E]): Nothing = eff.raise(error)
 
   /** Handles both success and error cases of a computation that may raise an error.
     *
@@ -112,19 +112,13 @@ object Raise {
     *   the type of the result of the handler
     */
   def fold[E, A, B](block: Raise[E] ?=> A)(onError: E => B)(onSuccess: A => B): B = {
-    val handler = new Yaes.Handler[Raise.Unsafe[E], A, B] {
-
-      override def handle(program: (Raise[E]) ?=> A): B = {
-        boundary[B] {
-          given eff: Raise[E] = new Yaes(new Raise.Unsafe[E] {
-            def raise(error: => E): Nothing =
-              break(onError(error))
-          })
-          onSuccess(block)
-        }
+    boundary[B] {
+      given eff: Raise[E] = new Raise.Unsafe[E] {
+        def raise(error: => E): Nothing =
+          break(onError(error))
       }
+      onSuccess(block)
     }
-    Yaes.handle(block)(using handler)
   }
 
   /** Runs a computation that may raise an error and returns the result or the error.
@@ -484,12 +478,12 @@ object Raise {
     * program(using Raise.rethrowError)
     * }}}
     */
-  val rethrowError: Raise[Throwable] = new Yaes(new Unsafe[Throwable] {
+  val rethrowError: Raise[Throwable] = new Unsafe[Throwable] {
     override def raise(error: => Throwable): Nothing = throw error
-  })
+  }
 
   /** Utility type alias for mapping errors. */
-  type MapError[From, To] = Yaes[Raise.UnsafeMapError[From, To]]
+  type MapError[From, To] = Raise.UnsafeMapError[From, To]
 
   /** A strategy that allows to map an error to another one. As a strategy, it should be used as a
     * `given` instance. Its behavior is comparable to the [[Raise.withError]] method.
@@ -530,12 +524,10 @@ object Raise {
       *   The mapping strategy
       */
     def apply[From, To](mapper: From => To)(using outer: Raise[To]): MapError[From, To] =
-      new Yaes(new UnsafeMapError[From, To] {
-
-        override def raise(error: => From): Nothing = outer.unsafe.raise(map(error))
-
+      new UnsafeMapError[From, To] {
+        override def raise(error: => From): Nothing = outer.raise(map(error))
         override def map(error: From): To = mapper(error)
-      })
+      }
   }
 
   extension [Error, A](either: Either[Error, A]) {
@@ -1044,7 +1036,7 @@ object Raise {
       inline block: Raise[Error] ?=> A
   )(using inline tracing: TraceWith[Error]): Raise[Error] ?=> A = {
     try {
-      given tracedRaise: Raise[Error] = new Yaes(new UnsafeTrace[Error])
+      given tracedRaise: Raise[Error] = new UnsafeTrace[Error]
       block
     } catch
       case traced: Traced[_] =>

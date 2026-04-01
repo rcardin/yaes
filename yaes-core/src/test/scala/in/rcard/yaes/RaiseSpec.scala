@@ -3,7 +3,6 @@ package in.rcard.yaes
 import in.rcard.yaes.Raise.*
 import in.rcard.yaes.Raise.given
 import in.rcard.yaes.Random.*
-import in.rcard.yaes.Yaes.*
 import org.scalatest.TryValues.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.flatspec.AsyncFlatSpec

@@ -1,6 +1,6 @@
 package in.rcard.yaes.slf4j
 
-import in.rcard.yaes.{Log, Logger, Yaes}
+import in.rcard.yaes.{Log, Logger}
 import org.slf4j.LoggerFactory
 
 /** Handler that provides the [[Log]] effect backed by SLF4J.
@@ -34,12 +34,7 @@ object Slf4jLog {
     *   The result of the computation `block`.
     */
   def run[A](block: Log ?=> A): A =
-    val handler = new Yaes.Handler[Log.Unsafe, A, A] {
-      override def handle(program: Log ?=> A): A = program(using
-        Yaes(unsafe)
-      )
-    }
-    Yaes.handle(block)(using handler)
+    block(using unsafe)
 
   private val unsafe: Log.Unsafe = new Log.Unsafe {
     override def getLogger(name: String): Logger =

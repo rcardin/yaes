@@ -22,20 +22,7 @@ Available modules are:
  * `yaes-cats`: Integration with Cats and Cats Effect, providing interoperability and typeclass instances.
  * `yaes-slf4j`: SLF4J integration for the `Log` effect, enabling any SLF4J-compatible logging backend.
 
-What's new in λÆS when compared to other effect systems? Well, you can choose to use a monadic style like the following:
-
-```scala 3
-import in.rcard.yaes.Random.*
-import in.rcard.yaes.Raise.*
-import in.rcard.yaes.Yaes.*
-
-def drunkFlip(using Random, Raise[String]): String = for {
-  caught <- Random.nextBoolean
-  heads  <- if (caught) Random.nextBoolean else Raise.raise("We dropped the coin")
-} yield if (heads) "Heads" else "Tails"
-```
-
-Or a more direct style like this:
+What's new in λÆS when compared to other effect systems? Well, λÆS embraces direct style — no monads, no for-comprehensions, just plain Scala:
 
 ```scala 3
 import in.rcard.yaes.Random.*
@@ -87,31 +74,31 @@ The library is available on Maven Central. To use it, add the following dependen
 **For effects only** (Raise, Async, Sync, etc.):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-core" % "0.17.0"
 ```
 
 **For effects + data structures** (Flow, Channel, and reactive streams):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-data" % "0.17.0"
 ```
 
 **For Cats integration** (includes all effects and data structures):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-cats" % "0.17.0"
 ```
 
 **For SLF4J logging integration** (delegates `Log` effect to any SLF4J backend):
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-slf4j" % "0.17.0"
 ```
 
 **For HTTP Server based on λÆS effects**:
 
 ```sbt
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.17.0"
 ```
 
 The library is only available for Scala 3 and is currently in an experimental stage. The API is subject to change.
@@ -135,6 +122,8 @@ The library provides a set of effects and handlers that can be used to define an
 - [`Clock`](#the-clock-effect): Allows for managing time.
 - [`System`](#the-system-effect): Allows for managing system properties and environment variables.
 - [`State`](#the-state-effect): Allows for stateful computations in a purely functional manner.
+- [`Writer`](#the-writer-effect): Allows for pure, append-only value accumulation.
+- [`Reader`](#the-reader-effect): Allows for read-only access to environment values.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
 
 The library also provides the following handlers that orchestrate existing effects:
@@ -447,9 +436,9 @@ def divide(a: Int, b: Int)(using Raise[DivisionByZero]): Int =
 For more concise syntax, you can use the `raises` infix type:
 
 ```scala 3
-import in.rcard.yaes.Raise.*
+import in.rcard.yaes.{Raise, raises}
 
-// Using the raises infix type  
+// Using the raises infix type
 def divide(a: Int, b: Int): Int raises DivisionByZero =
   if (b == 0) Raise.raise(DivisionByZero)
   else a / b
@@ -1145,6 +1134,167 @@ The `State` effect provides the following operations:
 - `State.update[S](f: S => S)`: Updates the state using a transformation function and returns the new state value
 - `State.use[S, A](f: S => A)`: Applies a function to the current state and returns the result without modifying the state
 - `State.run[S, A](initialState: S)(block: State[S] ?=> A)`: Runs a stateful computation with an initial state value, returning both the final state and the computation result
+
+### The `Writer` Effect
+
+The `Writer[W]` effect enables pure, append-only value accumulation during computations. Values are collected into a `Vector[W]` and returned alongside the computation result as a tuple `(Vector[W], A)`. This is useful for collecting logs, events, metrics, or any other data during a computation.
+
+**Note:** The Writer effect is not thread-safe. Use appropriate synchronization mechanisms when accessing from multiple threads.
+
+#### Basic Usage
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+val (log, result) = Writer.run[String, Int] {
+  Writer.write("starting")
+  Writer.write("computing")
+  42
+}
+// log = Vector("starting", "computing"), result = 42
+```
+
+For more concise syntax, you can use the `writes` infix type:
+
+```scala 3
+import in.rcard.yaes.{Writer, writes}
+
+def computation: Int writes String = {
+  Writer.write("log entry")
+  42
+}
+```
+
+#### Writing Multiple Values
+
+Use `writeAll` to append multiple values at once:
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+val (log, _) = Writer.run[Int, Unit] {
+  Writer.write(1)
+  Writer.writeAll(List(2, 3, 4))
+  Writer.write(5)
+}
+// log = Vector(1, 2, 3, 4, 5)
+```
+
+#### Capturing Writes
+
+The `capture` operation records writes from a block, returning them alongside the block's result. Writes are also forwarded to the outer scope:
+
+```scala 3
+import in.rcard.yaes.Writer.*
+
+val (outerLog, (innerLog, result)) = Writer.run[String, (Vector[String], Int)] {
+  Writer.write("before")
+  val captured = Writer.capture[String, Int] {
+    Writer.write("inside")
+    99
+  }
+  Writer.write("after")
+  captured
+}
+// outerLog = Vector("before", "inside", "after")
+// innerLog = Vector("inside"), result = 99
+```
+
+#### Combining with Other Effects
+
+```scala 3
+import in.rcard.yaes.Writer.*
+import in.rcard.yaes.State.*
+
+val (state, (log, result)) = State.run(0) {
+  Writer.run[String, Int] {
+    Writer.write("start")
+    State.update[Int](_ + 1)
+    Writer.write(s"count=${State.get[Int]}")
+    State.get[Int]
+  }
+}
+// state = 1, log = Vector("start", "count=1"), result = 1
+```
+
+The `Writer` effect provides the following operations:
+- `Writer.write[W](w: W)`: Appends a single value to the accumulated output
+- `Writer.writeAll[W](ws: IterableOnce[W])`: Appends multiple values at once
+- `Writer.capture[W, A](block: Writer[W] ?=> A)`: Captures writes from a block, forwarding them to the outer scope, and returns `(Vector[W], A)`
+- `Writer.run[W, A](block: Writer[W] ?=> A)`: Runs a computation with the Writer effect, returning `(Vector[W], A)`
+
+### The `Reader` Effect
+
+The `Reader[R]` effect provides read-only access to an environment value of type `R`. It allows computations to read a shared value and temporarily override it via `local`, completing the classic Reader/Writer/State trio.
+
+The environment value is immutable within a scope. The `local` operation creates a fresh scope with a modified value, restoring the original after the block completes. This makes `Reader` thread-safe by construction.
+
+#### Basic Usage
+
+```scala 3
+import in.rcard.yaes.Reader
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  Reader.read[Config].maxRetries
+}
+// result = 3
+```
+
+For more concise syntax, you can use the `reads` infix type:
+
+```scala 3
+import in.rcard.yaes.{Reader, reads}
+
+def getRetries: Int reads Config =
+  Reader.read[Config].maxRetries
+```
+
+#### Local Overrides
+
+Use `local` to temporarily modify the environment value for a block:
+
+```scala 3
+import in.rcard.yaes.Reader
+
+case class Config(maxRetries: Int, timeout: Int)
+
+val result = Reader.run(Config(3, 5000)) {
+  val before = Reader.read[Config].maxRetries        // 3
+  val during = Reader.local(_.copy(maxRetries = 10)) {
+    Reader.read[Config].maxRetries                    // 10
+  }
+  val after = Reader.read[Config].maxRetries          // 3 (restored)
+  (before, during, after)
+}
+// result = (3, 10, 3)
+```
+
+#### Combining with Other Effects
+
+```scala 3
+import in.rcard.yaes.{Raise, Reader, raises, reads}
+
+case class Config(maxRetries: Int)
+
+def validate(value: Int): Unit raises String reads Config = {
+  val max = Reader.read[Config].maxRetries
+  if (value > max) Raise.raise(s"$value exceeds max $max")
+}
+
+val result = Reader.run(Config(5)) {
+  Raise.either[String, Unit] {
+    validate(10)
+  }
+}
+// result = Left("10 exceeds max 5")
+```
+
+The `Reader` effect provides the following operations:
+- `Reader.read[R]`: Returns the current environment value
+- `Reader.local[R, A](f: R => R)(block: Reader[R] ?=> A)`: Runs a block with a modified environment value, restoring the original after
+- `Reader.run[R, A](value: R)(block: Reader[R] ?=> A)`: Runs a computation with the Reader effect, returning `A` directly
 
 ### The `Log` Effect
 

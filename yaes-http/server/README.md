@@ -14,7 +14,7 @@ Type-safe HTTP/1.1 server built on YAES effects and virtual threads.
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.16.0"
+libraryDependencies += "in.rcard.yaes" %% "yaes-http-server" % "0.17.0"
 ```
 
 ## Overview
@@ -358,6 +358,8 @@ To use JSON, implement `BodyCodec[A]` for your types:
 
 ```scala
 // Example with circe (not included)
+import in.rcard.yaes.raises
+import in.rcard.yaes.Raise
 import io.circe.{Encoder, Decoder}
 import io.circe.syntax.*
 import io.circe.parser.decode
