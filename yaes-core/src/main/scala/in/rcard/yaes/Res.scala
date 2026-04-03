@@ -7,18 +7,18 @@ import java.util.Queue
 import java.util.Deque
 import java.util.concurrent.ConcurrentLinkedDeque
 import scala.caps.SharedCapability
-
 import language.experimental.captureChecking
 import java.io.File
 import java.io.FileInputStream
 import java.io.BufferedOutputStream
 import java.io.FileOutputStream
+import java.net.http.HttpClient
 
 type Res[R] = Res.Unsafe[R]
 
 object Res {
 
-  inline def install[R](inline acquire: => R)(inline release: R => Unit)(using res: Res[R]): R^ =
+  inline def install[R](using res: Res[R])(inline acquire: => R)(inline release: R => Unit): R^ =
     res.install(acquire)(release)
 
   def run[R, A](block: Res[R] ?=> A): A = {
@@ -56,43 +56,45 @@ object Res {
 
   private def unsafe[R] = new Res.Unsafe[R] {
 
-    override val finalizers: Deque[Finalizer[?]] = new ConcurrentLinkedDeque()
+    override val finalizers: Deque[Finalizer] = new ConcurrentLinkedDeque()
 
-    override def install[R](acquire: => R)(release: R => Unit): R^ = {
+    override def install[R1 <: R](acquire: => R1)(release: R1 => Unit): R1^ = {
 
       val acquired  = acquire
-      val finalizer = Finalizer(acquired, release)
+      val finalizer = Finalizer(acquired, release.asInstanceOf[Any -> Unit])
       finalizers.push(finalizer)
       acquired
     }
   }
 
-  private[yaes] case class Finalizer[R](val resource: R, release: R => Unit)
+  private[yaes] class Finalizer(val resource: Any, val release: Any -> Unit)
 
-  trait Unsafe[R] extends SharedCapability {
+  trait Unsafe[-R] extends SharedCapability {
 
-    def install[R](acquire: => R)(release: R => Unit): R^
+    def install[R1 <: R](acquire: => R1)(release: R1 => Unit): R1^
 
-    private[yaes] val finalizers: Deque[Finalizer[?]]
+    private[yaes] val finalizers: Deque[Finalizer]
   }
 }
 
+class Client
+
 @main def res(): Unit = {
   println("1")
+  var fos: FileOutputStream = null
   val result = Res.run {
     val fis = Res.install(new FileOutputStream("test.txt"))((r => {
-        println("3")
+        println("4")
+        fos = r
         r.close()
+    }))
+    val os = Res.install(new Client())((r => {
+        println("3")
     }))
     fis.write(42)
     fis.flush()
 
     println("2")
-    () => fis
   }
   println("5")
-  val fis = result()
-  println("6") 
-  fis.flush()
-  println("7")
 }
