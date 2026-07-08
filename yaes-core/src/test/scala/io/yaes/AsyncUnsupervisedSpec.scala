@@ -137,4 +137,58 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
     result shouldBe "done"
     queue.toArray should contain theSameElementsAs List("forked", "main")
   }
+
+  it should "propagate a joined fiber's exception to the caller" in {
+    val thrown = intercept[RuntimeException] {
+      Async.run {
+        Async.unsupervised {
+          val fiber = Async.fork {
+            throw new RuntimeException("joined boom")
+          }
+          fiber.join()
+          99
+        }
+      }
+    }
+
+    thrown.getMessage shouldBe "joined boom"
+  }
+
+  it should "return a joined fiber's value via fiber.value" in {
+    val result = Raise.run {
+      Async.run {
+        Async.unsupervised {
+          val fiber = Async.fork {
+            Async.delay(100.millis)
+            7
+          }
+          fiber.join()
+          fiber.value
+        }
+      }
+    }
+
+    result shouldBe 7
+  }
+
+  it should "not raise when a cancelled fiber is joined" in {
+    val started = new CountDownLatch(1)
+
+    val result = Async.run {
+      Async.unsupervised {
+        val fiber = Async.fork {
+          started.countDown()
+          Async.delay(10.seconds)
+          "unreached"
+        }
+        // Cancel only after the fiber is actually running so the interrupt lands.
+        started.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        fiber.cancel()
+        fiber.join()
+        "ok"
+      }
+    }
+
+    result shouldBe "ok"
+  }
 }
