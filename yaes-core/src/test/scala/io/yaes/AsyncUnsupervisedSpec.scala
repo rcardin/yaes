@@ -68,6 +68,41 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
     result shouldBe 123
   }
 
+  it should "keep sibling fibers running to completion when one forked fiber fails" in {
+    val queue        = new ConcurrentLinkedQueue[String]()
+    val failed       = new CountDownLatch(1)
+    val siblingsDone = new CountDownLatch(2)
+
+    val result = Async.run {
+      Async.unsupervised {
+        // A fiber that fails after a short delay and is never joined.
+        Async.fork {
+          try {
+            Async.delay(100.millis)
+            throw new RuntimeException("fiber boom")
+          } finally failed.countDown()
+        }
+        // Sibling fibers that complete successfully and must not be cancelled.
+        Async.fork {
+          queue.add("sibling-1")
+          siblingsDone.countDown()
+        }
+        Async.fork {
+          queue.add("sibling-2")
+          siblingsDone.countDown()
+        }
+        // Wait for the failing fiber to fail and the siblings to finish before leaving.
+        failed.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        siblingsDone.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        "ok"
+      }
+    }
+
+    // The unjoined failure did not propagate, and both siblings ran to completion.
+    result shouldBe "ok"
+    queue.toArray should contain theSameElementsAs List("sibling-1", "sibling-2")
+  }
+
   it should "run Async.fork inside the scope without modification and return the block result" in {
     val queue = new ConcurrentLinkedQueue[String]()
 
