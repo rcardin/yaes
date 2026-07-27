@@ -4,8 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration.*
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import io.yaes.Async.*
 
@@ -26,14 +25,14 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
           }
         }
         // Wait until the fiber is actually running before leaving the block.
-        started.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        started.await(5, TimeUnit.SECONDS) shouldBe true
         42
       }
     }
 
     result shouldBe 42
     // The block returned without waiting for the 10-second delay, and the fiber was cancelled.
-    cancelled.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+    cancelled.await(5, TimeUnit.SECONDS) shouldBe true
   }
 
   it should "propagate an exception thrown from the main body of the block" in {
@@ -60,7 +59,7 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
           try throw new RuntimeException("fiber boom")
           finally failed.countDown()
         }
-        failed.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        failed.await(5, TimeUnit.SECONDS) shouldBe true
         123
       }
     }
@@ -69,31 +68,45 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "keep sibling fibers running to completion when one forked fiber fails" in {
-    val queue        = new ConcurrentLinkedQueue[String]()
-    val failed       = new CountDownLatch(1)
-    val siblingsDone = new CountDownLatch(2)
+    val queue           = new ConcurrentLinkedQueue[String]()
+    val siblingsStarted = new CountDownLatch(2)
+    val failed          = new CountDownLatch(1)
+    val siblingsDone    = new CountDownLatch(2)
+
+    // Every fiber only signals progress through latches, so the interleaving is fully
+    // determined by the handshake below and never by wall-clock timing:
+    //   1. both siblings start and then park on `failed`
+    //   2. only once both are parked does the third fiber throw
+    //   3. the siblings wake up and do their work
+    // Reaching step 3 is what proves a sibling was alive at the moment a peer failed
+    // and was not cancelled because of it.
+    def sibling(name: String)(using Async): Unit = {
+      Async.fork {
+        siblingsStarted.countDown()
+        // The sibling is alive and waiting while the peer fiber fails.
+        if (failed.await(5, TimeUnit.SECONDS)) {
+          queue.add(name)
+          siblingsDone.countDown()
+        }
+      }
+      ()
+    }
 
     val result = Async.run {
       Async.unsupervised {
-        // A fiber that fails after a short delay and is never joined.
+        sibling("sibling-1")
+        sibling("sibling-2")
+        // A fiber that fails once both siblings are running, and is never joined.
         Async.fork {
           try {
-            Async.delay(100.millis)
+            siblingsStarted.await(5, TimeUnit.SECONDS)
             throw new RuntimeException("fiber boom")
           } finally failed.countDown()
         }
-        // Sibling fibers that complete successfully and must not be cancelled.
-        Async.fork {
-          queue.add("sibling-1")
-          siblingsDone.countDown()
-        }
-        Async.fork {
-          queue.add("sibling-2")
-          siblingsDone.countDown()
-        }
-        // Wait for the failing fiber to fail and the siblings to finish before leaving.
-        failed.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
-        siblingsDone.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        // Leaving the block cancels whatever is still running, so wait for the failure
+        // to happen and for the siblings to finish their work afterwards.
+        failed.await(5, TimeUnit.SECONDS) shouldBe true
+        siblingsDone.await(5, TimeUnit.SECONDS) shouldBe true
         "ok"
       }
     }
