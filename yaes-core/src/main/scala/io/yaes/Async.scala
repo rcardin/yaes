@@ -519,6 +519,9 @@ object Async {
     * }
     * }}}
     *
+    * It can also be nested inside an existing scope (e.g. an [[unsupervised]] block); the enclosing
+    * scope is saved and restored so it is left untouched.
+    *
     * @param block
     *   the async computation to run
     * @return
@@ -532,6 +535,7 @@ object Async {
     )
     // In JDK 25, fork() can only be called by the scope owner. Run program directly on
     // the calling thread so it is the owner and can fork child fibers on loomScope.
+    val prev = JvmAsync.scope.get()
     JvmAsync.scope.set(loomScope.asInstanceOf[StructuredTaskScope[Any, Any]])
     try {
       val result = block(using async)
@@ -545,7 +549,9 @@ object Async {
         Thread.interrupted()
         throw t
     } finally {
-      JvmAsync.scope.remove()
+      // Restore the enclosing scope (if any) so a nested `run` leaves the outer scope usable.
+      if (prev != null) JvmAsync.scope.set(prev)
+      else JvmAsync.scope.remove()
       loomScope.close()
     }
   }
