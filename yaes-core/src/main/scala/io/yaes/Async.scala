@@ -360,6 +360,71 @@ object Async {
     async.delay(duration)
   }
 
+  /** Blocks the calling fiber indefinitely, never returning on its own.
+    *
+    * `never` parks the fiber efficiently (a blocking wait, not a busy loop) until the fiber is
+    * cancelled, either explicitly via [[Fiber.cancel]] or because the enclosing scope (e.g.
+    * [[run]]) is torn down. Cancellation reaches it exactly the same way it reaches any other
+    * blocking `Async` operation such as [[delay]]: cooperative interruption. Since the calling
+    * thread only ever leaves the park by being interrupted, no exception it raises escapes to user
+    * code as an untracked failure; it flows through the same handling [[fork]] already applies to
+    * an interrupted fiber.
+    *
+    * This is useful for a computation that must "run until cancelled", or for a branch of [[race]],
+    * [[par]], or [[timeout]] that should never complete on its own.
+    *
+    * Example:
+    * {{{
+    * val result = Async.run {
+    *   Async.race(
+    *     Async.never, // never completes on its own
+    *     {
+    *       Async.delay(1.second)
+    *       42
+    *     }
+    *   )
+    * }
+    * // result == 42; the `never` branch is cancelled once the other one wins
+    * }}}
+    *
+    * @param async
+    *   the async context; required for API consistency with every other `Async` operation, even
+    *   though parking forever has no backend-specific behavior for this implementation to delegate
+    *   to
+    * @tparam A
+    *   the type of value this method would produce, if it ever returned one
+    * @return
+    *   never returns; the calling fiber parks until it is cancelled
+    * @see
+    *   [[race]], [[timeout]] for typical use sites of a branch that never completes on its own
+    */
+  def never[A](using async: Async): A = parkForever()
+
+  /** Parks the calling thread forever on a [[CountDownLatch]] that is never counted down.
+    *
+    * `await()` on a latch stuck at one can only return by throwing `InterruptedException` once the
+    * thread is interrupted. That is the same signal `Thread.sleep` (used by [[JvmAsync.delay]])
+    * raises on interruption, so it flows through the identical cancellation path already handled by
+    * [[JvmAsync.forkImpl]], which turns it into the fiber's promise being cancelled. Unlike
+    * `LockSupport.park()`, `CountDownLatch.await()` cannot wake up spuriously, so no wrapping loop
+    * is needed here; a loop would only be needed to guard against a wakeup that isn't the real
+    * interruption, which this call cannot produce.
+    *
+    * The statement after `await()` is unreachable in practice: the latch is never counted down, so
+    * the only way execution continues past it is via the exception the JVM raises on interrupt.
+    * The `Nothing` return type documents that explicitly, rather than silently returning a bogus
+    * value typed as whatever the caller expected.
+    *
+    * @return
+    *   never returns normally
+    */
+  private def parkForever(): Nothing = {
+    new CountDownLatch(1).await()
+    throw new IllegalStateException(
+      "unreachable: an uncounted CountDownLatch.await() only returns via InterruptedException"
+    )
+  }
+
   /** Creates a new fiber with a specified name.
     *
     * This method is deliberately not an overload of [[fork]]: a block whose type conforms to
