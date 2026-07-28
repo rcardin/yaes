@@ -1,0 +1,203 @@
+package io.yaes
+
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.concurrent.Signaler
+import org.scalatest.concurrent.ThreadSignaler
+import org.scalatest.time.Seconds
+import org.scalatest.time.Span
+
+import scala.concurrent.duration.*
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicReference
+
+class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
+
+  /** Interrupts the test thread when a `failAfter` limit expires.
+    *
+    * `Async.never` is designed to block forever. A regression (e.g. the park getting swallowed, or
+    * cancellation not reaching it) would hang `Async.run`'s `join()` forever instead of failing the
+    * test. Interrupting the test thread unwinds that `join()`, whose `close()` then cancels any
+    * still-parked fiber, turning a regression into a clean test failure instead of an unbounded
+    * hang.
+    */
+  private given Signaler = ThreadSignaler
+
+  /** Upper bound for every test in this spec. Generous enough to absorb CI jitter. */
+  private val unblockTimeLimit: Span = Span(30, Seconds)
+
+  "Async.never" should "not return on its own, keeping the fiber alive until cancelled" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    Async.run {
+      val fiber = Async.fork {
+        Async.never[Int]
+      }
+      // Give the fiber ample time to reach the park; if `never` returned on its own, this
+      // callback would have already fired.
+      Async.delay(300.millis)
+      actualQueue.add("still-running")
+      fiber.cancel()
+      fiber.join()
+    }
+
+    actualQueue.toArray should contain theSameElementsInOrderAs List("still-running")
+  }
+
+  it should "park the fiber instead of busy-waiting, observable as a blocked thread state" in failAfter(
+    unblockTimeLimit
+  ) {
+    val threadRef = new AtomicReference[Thread]()
+    Async.run {
+      val fiber = Async.fork {
+        threadRef.set(Thread.currentThread())
+        Async.never[Int]
+      }
+      // Give the fiber time to reach the park.
+      Async.delay(300.millis)
+      val state = threadRef.get().getState
+      // A busy-wait / spin loop would observe RUNNABLE here. A real park reports WAITING or
+      // TIMED_WAITING (CountDownLatch.await() is a Condition await internally).
+      (state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING) shouldBe true
+      fiber.cancel()
+      fiber.join()
+    }
+  }
+
+  it should "stop promptly through the standard interruption path when the fiber is cancelled" in failAfter(
+    unblockTimeLimit
+  ) {
+    val start = java.lang.System.nanoTime()
+    Async.run {
+      val fiber = Async.fork {
+        Async.never[Int]
+      }
+      Async.delay(200.millis)
+      fiber.cancel()
+      fiber.join()
+    }
+    val elapsedMillis = (java.lang.System.nanoTime() - start) / 1000000L
+
+    // Cancellation should be near-instant; well under the generous failAfter ceiling.
+    elapsedMillis should be < 5000L
+  }
+
+  it should "stop promptly when an unsupervised scope exits, without an explicit cancel()" in failAfter(
+    unblockTimeLimit
+  ) {
+    // `Async.run` waits for every forked fiber via structured-concurrency join semantics, so a
+    // `never` fiber left un-cancelled there is expected to block `run` forever (that's the
+    // documented behavior of a supervised scope, not something `never` should defeat). An
+    // `unsupervised` scope, by contrast, is documented to cancel any fiber still running as soon
+    // as its block returns, without waiting on it first; that is the scope-exit cancellation path
+    // this test exercises.
+    val start = java.lang.System.nanoTime()
+    Async.run {
+      Async.unsupervised {
+        Async.fork {
+          Async.never[Int]
+        }
+        // Never joined or cancelled explicitly; unsupervised scope teardown must cancel it.
+        42
+      }
+    } shouldBe 42
+    val elapsedMillis = (java.lang.System.nanoTime() - start) / 1000000L
+
+    elapsedMillis should be < 5000L
+  }
+
+  it should "not throw any exception when joining a fiber cancelled while parked in never" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualResult = Async.run {
+      val fiber = Async.fork {
+        Async.never[Int]
+      }
+      Async.delay(200.millis)
+      fiber.cancel()
+      fiber.join()
+      42
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "raise Cancelled (not an untracked exception) when asking for the value of a fiber cancelled while parked in never" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualResult: Int | Async.Cancelled = Raise.run {
+      Async.run {
+        val fiber = Async.fork {
+          Async.never[Int]
+        }
+        Async.delay(200.millis)
+        fiber.cancel()
+        fiber.value
+      }
+    }
+
+    actualResult shouldBe Async.Cancelled
+  }
+
+  it should "lose a race against a fast computation, which is cancelled once the fast one wins" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualResult: Int = Async.run {
+      Async.race(
+        Async.never[Int],
+        {
+          Async.delay(200.millis)
+          42
+        }
+      )
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "lose a race regardless of argument order" in failAfter(unblockTimeLimit) {
+    val actualResult: Int = Async.run {
+      Async.race(
+        {
+          Async.delay(200.millis)
+          42
+        },
+        Async.never[Int]
+      )
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "time out through Async.timeout, raising TimedOut" in failAfter(unblockTimeLimit) {
+    val actualResult: Int | Async.TimedOut = Raise.run {
+      Async.run {
+        Async.timeout(200.millis) {
+          Async.never[Int]
+        }
+      }
+    }
+
+    actualResult shouldBe Async.TimedOut
+  }
+
+  it should "be usable directly as the block's result type without an explicit call site cast" in failAfter(
+    unblockTimeLimit
+  ) {
+    // Compilation-level proof that `never[A]` unifies with any `A`, including a losing branch of
+    // `race` paired with a concrete, unrelated result type (String here, Int in other tests).
+    val actualResult: String = Async.run {
+      Async.race(
+        Async.never[String],
+        {
+          Async.delay(150.millis)
+          "done"
+        }
+      )
+    }
+
+    actualResult shouldBe "done"
+  }
+}
