@@ -546,6 +546,42 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     }.get
   }
 
+  it should "stop the accept loop when the server fiber is cancelled without shutdown" in {
+    val port = findFreePort()
+
+    // Logging is muted: before the fix the accept loop spun on the closed
+    // ServerSocket and flooded the output with millions of error lines.
+    val outcome = Sync.runBlocking(10.seconds) {
+      Shutdown.run {
+        Raise.run {
+          Async.run {
+            Log.run(level = Log.Level.Fatal) {
+              val server = YaesServer.route(
+                GET(p"/test") { req =>
+                  Response.ok("Test")
+                }
+              )
+
+              val serverFiber = Async.forkNamed("server") {
+                server.run(ServerConfig(port = port, deadline = testDeadline))
+              }
+
+              waitForServer(port)
+
+              // Cancel the accept loop without initiating shutdown: the
+              // interrupt closes the ServerSocket, and the loop must stop
+              // instead of spinning on "Socket is closed".
+              serverFiber.cancel()
+              serverFiber.join()
+            }
+          }
+        }
+      }
+    }
+
+    outcome.isSuccess shouldBe true
+  }
+
   // Shutdown Tests
 
   it should "complete in-flight requests during graceful shutdown" in {
