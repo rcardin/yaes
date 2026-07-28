@@ -549,7 +549,7 @@ object Async {
         Thread.interrupted()
         throw t
     } finally {
-      // Restore the enclosing scope (if any) so a nested `run` leaves the outer scope usable.
+      // Restore the previous scope (if any), so that a nested run leaves an enclosing scope intact.
       if (prev != null) JvmAsync.scope.set(prev)
       else JvmAsync.scope.remove()
       loomScope.close()

@@ -4,9 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration.*
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import io.yaes.Async.*
 
@@ -96,6 +94,59 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
     result shouldBe 123
   }
 
+  it should "keep sibling fibers running to completion when one forked fiber fails" in {
+    val queue           = new ConcurrentLinkedQueue[String]()
+    val siblingsStarted = new CountDownLatch(2)
+    val failed          = new CountDownLatch(1)
+    val siblingsDone    = new CountDownLatch(2)
+
+    // Every fiber only signals progress through latches, so the interleaving is fully
+    // determined by the handshake below and never by wall-clock timing:
+    //   1. both siblings start and then wait on `failed`
+    //   2. only once the main body has seen both of them start does the third fiber throw
+    //   3. the siblings wake up and do their work
+    // Reaching step 3 is what proves a sibling was alive at the moment a peer failed
+    // and was not cancelled because of it. Step 2 is gated from the main body rather
+    // than from inside the failing fiber, because an assertion inside an unjoined fiber
+    // would be swallowed by the unsupervised scope and could not fail the test.
+    def sibling(name: String)(using Async): Unit = {
+      Async.fork {
+        siblingsStarted.countDown()
+        // The sibling is alive and waiting while the peer fiber fails.
+        if (awaitLatch(failed)) {
+          queue.add(name)
+          siblingsDone.countDown()
+        }
+      }
+      ()
+    }
+
+    val result = Async.run {
+      Async.unsupervised {
+        sibling("sibling-1")
+        sibling("sibling-2")
+        // Both siblings are alive before the peer is allowed to fail. Asserting here, in
+        // the main body, means a starved fork fails the test instead of silently
+        // degrading the handshake.
+        awaitLatch(siblingsStarted) shouldBe true
+        // A fiber that fails while both siblings are running, and is never joined.
+        Async.fork {
+          try throw new RuntimeException("fiber boom")
+          finally failed.countDown()
+        }
+        // Leaving the block cancels whatever is still running, so wait for the failure
+        // to happen and for the siblings to finish their work afterwards.
+        awaitLatch(failed) shouldBe true
+        awaitLatch(siblingsDone) shouldBe true
+        "ok"
+      }
+    }
+
+    // The unjoined failure did not propagate, and both siblings ran to completion.
+    result shouldBe "ok"
+    queue.toArray should contain theSameElementsAs List("sibling-1", "sibling-2")
+  }
+
   it should "run Async.fork inside the scope without modification and return the block result" in {
     val queue = new ConcurrentLinkedQueue[String]()
 
@@ -112,6 +163,73 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
 
     result shouldBe "done"
     queue.toArray should contain theSameElementsAs List("forked", "main")
+  }
+
+  it should "propagate a joined fiber's exception to the caller of Async.unsupervised" in {
+    // The interception sits directly around Async.unsupervised so the test pins that the
+    // unsupervised scope itself rethrows what join() observed.
+    val thrown = Async.run {
+      intercept[Boom] {
+        Async.unsupervised {
+          val fiber = Async.fork {
+            throw new Boom("joined boom")
+          }
+          // join() rethrows the fiber's failure, so the block never completes normally.
+          fiber.join()
+        }
+      }
+    }
+
+    thrown.getMessage shouldBe "joined boom"
+  }
+
+  it should "return a joined fiber's value via fiber.value" in {
+    val result = Raise.either[Cancelled, Int] {
+      Async.run {
+        Async.unsupervised {
+          val fiber = Async.fork {
+            7
+          }
+          fiber.join()
+          fiber.value
+        }
+      }
+    }
+
+    result shouldBe Right(7)
+  }
+
+  it should "not throw when a cancelled fiber is joined" in {
+    val started     = new CountDownLatch(1)
+    val interrupted = new CountDownLatch(1)
+
+    val result = Async.run {
+      Async.unsupervised {
+        val fiber = Async.fork {
+          try {
+            started.countDown()
+            Async.delay(SentinelDelay)
+            "unreached"
+          } catch {
+            case ie: InterruptedException =>
+              // Record the interrupt, then let it propagate so the fiber is really cancelled
+              // and join() exercises the cancellation path rather than a normal completion.
+              interrupted.countDown()
+              throw ie
+          }
+        }
+        // Cancel only after the fiber is actually running so the interrupt lands.
+        awaitLatch(started) shouldBe true
+        fiber.cancel()
+        // A no-op cancel() would fail here within the latch timeout instead of quietly
+        // waiting out the full 10-second delay.
+        awaitLatch(interrupted) shouldBe true
+        fiber.join()
+        "ok"
+      }
+    }
+
+    result shouldBe "ok"
   }
 
   "Nesting Async.unsupervised inside Async.run" should
