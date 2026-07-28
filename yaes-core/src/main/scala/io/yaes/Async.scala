@@ -2,6 +2,7 @@ package io.yaes
 
 import java.util as ju
 import scala.concurrent.duration.Duration
+import scala.util.control.NonFatal
 
 import ju.concurrent.CancellationException
 import ju.concurrent.CompletableFuture
@@ -161,40 +162,11 @@ class JvmAsync extends Async.Unsafe {
     Thread.sleep(duration.toMillis)
   }
 
-  override def fork[A](name: String)(block: => A): Fiber[A] = {
-    val promise      = CompletableFuture[A]()
-    val forkedThread = CompletableFuture[Thread]()
-    JvmAsync.scope
-      .get()
-      .fork(() => {
-        Thread.currentThread().setName(name)
-        val innerScope = StructuredTaskScope
-          .open[A, Void](Joiner.awaitAllSuccessfulOrThrow())
-        forkedThread.complete(Thread.currentThread())
-        JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
-        try {
-          val result = block
-          innerScope.join()
-          promise.complete(result)
-        } catch {
-          case _: InterruptedException =>
-            promise.cancel(true)
-            JvmAsync.ensureJoined(innerScope)
-          case fe: FailedException =>
-            promise.completeExceptionally(fe.getCause)
-            throw fe.getCause
-          case t: Throwable =>
-            val wasCancelled = Thread.currentThread().isInterrupted()
-            JvmAsync.ensureJoined(innerScope)
-            promise.completeExceptionally(t)
-            if (!wasCancelled) throw t
-        } finally {
-          JvmAsync.scope.remove()
-          innerScope.close()
-        }
-      })
-    new JvmFiber[A](promise, forkedThread)
-  }
+  override def fork[A](name: String)(block: => A): Fiber[A] =
+    JvmAsync.forkImpl(name, rethrowOnFailure = true)(block)
+
+  override def attemptFork[A](name: String)(block: => A): Fiber[A] =
+    JvmAsync.forkImpl(name, rethrowOnFailure = false)(block)
 }
 object JvmAsync {
 
@@ -210,6 +182,106 @@ object JvmAsync {
     Thread.currentThread().interrupt()
     try { scope.join() }
     catch { case _: Throwable => () }
+  }
+
+  /** Shared JDK 25 structured-concurrency teardown behind both [[JvmAsync.fork]] and
+    * [[JvmAsync.attemptFork]].
+    *
+    * The two differ in whether a `NonFatal` failure of `block` rethrows into the parent scope
+    * (`fork`) or is captured on the fiber's promise instead (`attemptFork`, used by
+    * [[Async.raceSuccess]], see its scaladoc for why), and — only on the `attemptFork` path — in
+    * the extra cancellation-detection logic needed to tell a genuine failure apart from an
+    * interrupt that `block` disguised as a plain exception (see the `case NonFatal(t)` arm below).
+    * The scope open/close handshake, the `forkedThread` handshake, the `ThreadLocal` juggling, and
+    * the cancellation/fatal-error arms otherwise stay identical between the two. Keeping two copies
+    * of that teardown in sync by hand is a standing hazard, so both `fork` and `attemptFork` now
+    * delegate here, selecting their behavior with `rethrowOnFailure`.
+    *
+    * @param name
+    *   the name of the fiber
+    * @param rethrowOnFailure
+    *   `true` for `fork`'s semantics: a failure of `block` — whether thrown directly or surfaced by
+    *   joining the nested scope opened for it — always rethrows into the parent scope. `false` for
+    *   `attemptFork`'s semantics: a `NonFatal` failure is captured on the returned fiber's promise
+    *   and never rethrown. Cancellation and fatal errors (`VirtualMachineError`, `LinkageError`,
+    *   ...) are handled identically either way: cancellation never rethrows and fatal errors always
+    *   do.
+    * @param block
+    *   the code to execute asynchronously
+    * @tparam A
+    *   the type of value produced by the block
+    * @return
+    *   a [[Fiber]] representing the forked computation
+    */
+  private def forkImpl[A](name: String, rethrowOnFailure: Boolean)(block: => A): Fiber[A] = {
+    val promise      = CompletableFuture[A]()
+    val forkedThread = CompletableFuture[Thread]()
+    val outerScope   = JvmAsync.scope.get()
+    outerScope
+      .fork(() => {
+        Thread.currentThread().setName(name)
+        val innerScope = StructuredTaskScope
+          .open[A, Void](Joiner.awaitAllSuccessfulOrThrow())
+        forkedThread.complete(Thread.currentThread())
+        JvmAsync.scope.set(innerScope.asInstanceOf[StructuredTaskScope[Any, Any]])
+        try {
+          val result = block
+          innerScope.join()
+          promise.complete(result)
+        } catch {
+          case _: InterruptedException =>
+            promise.cancel(true)
+            JvmAsync.ensureJoined(innerScope)
+          case fe: FailedException =>
+            // innerScope.join() already ran (that is how we got here), so there is nothing
+            // left to join before close() — unlike the other branches below. `fork` always
+            // rethrows the unwrapped cause; `attemptFork` only rethrows it when it is genuinely
+            // fatal, capturing it on the promise either way.
+            val cause = fe.getCause
+            promise.completeExceptionally(cause)
+            if (rethrowOnFailure || !NonFatal(cause)) throw cause
+          case NonFatal(t) if !rethrowOnFailure =>
+            // The thread may have been interrupted by the *outer* scope being cancelled (e.g. an
+            // unrelated sibling fiber failing) rather than by `block` itself. If `block` catches
+            // that `InterruptedException` and rethrows it wrapped in a plain exception — a common
+            // Java interop idiom — the interrupt flag is typically already cleared by the time it
+            // does so (interruptible blocking calls clear it before throwing), so `outerScope`'s
+            // own cancellation state is the reliable signal here; the thread's own flag is checked
+            // too in case it is still set. Either way this must be reported as a cancellation, not
+            // a genuine failure, or it would overwrite a real failure observed on a sibling branch
+            // (see raceSuccess's `onFailure`).
+            //
+            // Deliberate trade (confirmed, not a bug): checking `outerScope.isCancelled()` also
+            // means that if this branch *survives* an interrupt (clears its own flag, keeps
+            // running) and then fails later for a genuinely independent reason, that failure is
+            // still misreported as a cancellation for as long as the outer scope remains
+            // cancelled. That sacrifices a rarer case (a branch outliving an interrupt and then
+            // failing on its own) to protect a far more common one (a branch disguising the
+            // interrupt itself as an ordinary exception), and the sacrificed case can only arise
+            // while the enclosing scope is already being torn down. Do not "fix" this by dropping
+            // the `outerScope.isCancelled()` check.
+            //
+            // Ordering constraint (load-bearing): `Thread.currentThread().isInterrupted()` is read
+            // here *before* `JvmAsync.ensureJoined(innerScope)` runs below. `ensureJoined` itself
+            // sets this thread's interrupt flag (see its scaladoc), so reading the flag after
+            // calling it would make this check unconditionally true.
+            if (outerScope.isCancelled() || Thread.currentThread().isInterrupted()) {
+              promise.cancel(true)
+            } else {
+              promise.completeExceptionally(t)
+            }
+            JvmAsync.ensureJoined(innerScope)
+          case t: Throwable =>
+            val wasCancelled = Thread.currentThread().isInterrupted()
+            JvmAsync.ensureJoined(innerScope)
+            promise.completeExceptionally(t)
+            if (!wasCancelled) throw t
+        } finally {
+          JvmAsync.scope.remove()
+          innerScope.close()
+        }
+      })
+    new JvmFiber[A](promise, forkedThread)
   }
 }
 
@@ -292,8 +364,8 @@ object Async {
     *
     * This method is deliberately not an overload of [[fork]]: a block whose type conforms to
     * `String` (including `Nothing`, e.g. a block ending in `throw` or `Raise.raise`) would
-    * otherwise bind to the `name` parameter and be evaluated eagerly on the caller thread, with
-    * the remaining parameter list silently eta-expanded to a discarded function value.
+    * otherwise bind to the `name` parameter and be evaluated eagerly on the caller thread, with the
+    * remaining parameter list silently eta-expanded to a discarded function value.
     *
     * @param name
     *   the name of the fiber
@@ -393,6 +465,102 @@ object Async {
         fiber1.cancel()
         result2
     }
+  }
+
+  /** Races two computations against each other, returning the result of the first one to *succeed*,
+    * ignoring failures unless both branches fail.
+    *
+    * Unlike [[race]] — which returns whichever branch completes first, success or failure, so a
+    * fast failure beats a slow success — `raceSuccess` keeps waiting on the surviving branch when
+    * one of them fails. Only if *both* branches fail does `raceSuccess` fail, surfacing the LAST
+    * failure observed (i.e. the failure of whichever branch finished second).
+    *
+    * As soon as one branch succeeds, the other one is cancelled, exactly like [[race]] does. If
+    * both branches complete (successfully or not) at effectively the same time, which one is
+    * treated as "first" is nondeterministic — including which failure is reported when both fail
+    * simultaneously.
+    *
+    * Example:
+    * {{{
+    * val result = Async.raceSuccess(
+    *   { /* fails fast */ throw new RuntimeException("boom") },
+    *   { /* succeeds slowly */ 42 }
+    * )
+    * // result == 42, the fast failure is ignored
+    * }}}
+    *
+    * @param block1
+    *   the first computation
+    * @param block2
+    *   the second computation
+    * @param async
+    *   the async context; the [[Async.Unsafe.attemptFork]] operation it provides is what actually
+    *   runs each branch, so a custom [[Async]] implementation is honored the same way [[race]]
+    *   honors it
+    * @tparam R1
+    *   the result type of the first computation
+    * @tparam R2
+    *   the result type of the second computation
+    * @return
+    *   the result of the first computation to succeed
+    * @throws Throwable
+    *   the last genuine failure observed, if both computations fail. In the rare case where both
+    *   branches are cancelled without either ever producing a genuine failure of their own — e.g.
+    *   an unrelated sibling fiber poisoning the enclosing scope while both branches are still
+    *   running — a bare `java.util.concurrent.CancellationException` is thrown instead.
+    * @see
+    *   [[race]] for a race that returns the first branch to complete, win or lose
+    */
+  def raceSuccess[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = {
+    val fiber1 = async.attemptFork[R1]("fiber1")(block1)
+    val fiber2 = async.attemptFork[R2]("fiber2")(block2)
+    val winner = CompletableFuture[R1 | R2]()
+
+    // Tracks the most recent *genuine* failure (as opposed to a cancellation) seen on either
+    // branch, plus how many branches have reached a non-winning terminal state (failed or
+    // cancelled). A branch can be cancelled for a reason that has nothing to do with this race —
+    // e.g. an unrelated sibling fiber failing and shutting down the enclosing scope — so a
+    // cancellation never overwrites a genuine failure already observed on the other branch, and
+    // is only ever reported itself when neither branch ever produced one.
+    val lock                                  = new Object
+    var lastGenuineFailure: Option[Throwable] = None
+    var terminatedCount                       = 0
+
+    def onSuccess(value: R1 | R2, loser: Fiber[?]): Unit = {
+      // Complete the winner before cancelling the loser: `cancel()` blocks on the loser's
+      // `forkedThread` future until its thread has actually been forked, so completing the
+      // winner first ensures the caller observes a result even if that wait were ever to stall.
+      //
+      // Only cancel when `complete` actually won. If both branches succeed at effectively the
+      // same time, this callback runs on both of them; for the one that lost the `complete` race
+      // the "loser" it holds is in fact the branch that already won, which is still on its own
+      // thread finishing its completion and scope teardown. Interrupting it there would cancel
+      // the winner mid-cleanup for no benefit — both branches have already produced a value, so
+      // there is nothing left to cancel either way.
+      if (winner.complete(value)) {
+        loser.cancel()
+      }
+    }
+
+    def onFailure(error: Throwable): Unit = {
+      val outcome = lock.synchronized {
+        error match {
+          case _: CancellationException => ()
+          case genuine                  => lastGenuineFailure = Some(genuine)
+        }
+        terminatedCount += 1
+        if (terminatedCount < 2) None else Some(lastGenuineFailure.getOrElse(error))
+      }
+      outcome.foreach(winner.completeExceptionally)
+    }
+
+    fiber1.onComplete(value1 => onSuccess(value1, fiber2))
+    fiber2.onComplete(value2 => onSuccess(value2, fiber1))
+    fiber1.onFailure(onFailure)
+    fiber2.onFailure(onFailure)
+
+    try winner.get()
+    catch { case ee: ExecutionException => throw ee.getCause }
   }
 
   /** Executes two computations in parallel and returns both results. If one of the computations
@@ -764,5 +932,35 @@ object Async {
       *   a [[Fiber]] representing the forked computation
       */
     def fork[A](name: String)(block: => A): Fiber[A]
+
+    /** Like [[fork]], but signals that `block` failing is an expected, recoverable outcome rather
+      * than a supervision event.
+      *
+      * The required property is: a `NonFatal` failure of `block` must be captured on the returned
+      * fiber's promise and must NOT be rethrown into the enclosing structured scope — cancellation
+      * and fatal errors should still propagate exactly like [[fork]] does. [[Async.raceSuccess]] is
+      * built on this: it only fails when *both* branches fail, which requires one losing branch's
+      * failure to never abort the race by poisoning the scope.
+      *
+      * The default implementation below does NOT provide that property — it simply delegates to
+      * [[fork]], which always rethrows a `NonFatal` failure into the enclosing scope. Consequently,
+      * on a backend that inherits this default, [[Async.raceSuccess]] does NOT honour its
+      * documented contract: a losing branch's failure will abort the whole race and surface to the
+      * caller instead of being discarded in favor of the winner's value.
+      *
+      * Any [[Async.Unsafe]] backend that supports `raceSuccess` MUST override this method with an
+      * implementation that actually captures the failure instead of rethrowing it; see the JVM
+      * backend's `attemptFork` for the JDK structured-concurrency version.
+      *
+      * @param name
+      *   the name of the fiber
+      * @param block
+      *   the code to execute asynchronously
+      * @tparam A
+      *   the type of value produced by the block
+      * @return
+      *   a [[Fiber]] representing the forked computation
+      */
+    def attemptFork[A](name: String)(block: => A): Fiber[A] = fork(name)(block)
   }
 }

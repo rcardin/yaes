@@ -160,6 +160,16 @@ Key properties of `parTraverse`:
 val winner = Async.race(computation1, computation2)
 ```
 
+`race` returns whichever branch completes first, success or failure — a fast failure beats a slow success.
+
+**Racing for success** — like `race`, but ignore failures unless every branch fails:
+
+```scala
+val winner = Async.raceSuccess(computation1, computation2)
+```
+
+Unlike `race`, `raceSuccess` keeps waiting on the surviving branch when one of them fails, instead of letting a fast failure win. It only fails if *both* branches fail, surfacing the failure of whichever branch finished second. As soon as one branch succeeds, the other is cancelled, exactly like `race` does.
+
 **Race with Pairs** — get the first result and the remaining fiber:
 
 ```scala
