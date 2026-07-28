@@ -10,6 +10,7 @@ import org.scalatest.time.Span
 
 import scala.concurrent.duration.*
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
 class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
@@ -49,18 +50,26 @@ class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "park the fiber instead of busy-waiting, observable as a blocked thread state" in failAfter(
     unblockTimeLimit
   ) {
-    val threadRef = new AtomicReference[Thread]()
+    val threadRef  = new AtomicReference[Thread]()
+    val readyLatch = new CountDownLatch(1)
     Async.run {
       val fiber = Async.fork {
         threadRef.set(Thread.currentThread())
+        readyLatch.countDown()
         Async.never[Int]
       }
-      // Give the fiber time to reach the park.
-      Async.delay(300.millis)
+      // Wait for the fiber to have actually started (and recorded its thread) before sampling
+      // its state, instead of guessing with a fixed sleep: on a loaded CI runner the fiber may
+      // not have been scheduled yet, which would otherwise read `threadRef` as null.
+      readyLatch.await()
+      // A short settle after the handshake so the fiber has time to move from RUNNABLE (just
+      // past the countDown) into the park inside `never`.
+      Async.delay(100.millis)
       val state = threadRef.get().getState
-      // A busy-wait / spin loop would observe RUNNABLE here. A real park reports WAITING or
-      // TIMED_WAITING (CountDownLatch.await() is a Condition await internally).
-      (state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING) shouldBe true
+      // A busy-wait / spin loop would observe RUNNABLE here. A real park on an uncounted
+      // CountDownLatch.await() (AQS `acquireSharedInterruptibly` plus `LockSupport.park`, not a
+      // `Condition` await) always reports WAITING, never TIMED_WAITING.
+      state shouldBe Thread.State.WAITING
       fiber.cancel()
       fiber.join()
     }
@@ -80,8 +89,10 @@ class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
     }
     val elapsedMillis = (java.lang.System.nanoTime() - start) / 1000000L
 
-    // Cancellation should be near-instant; well under the generous failAfter ceiling.
-    elapsedMillis should be < 5000L
+    // Cancellation should be near-instant on top of the 200ms internal delay. Tight enough that
+    // a regression where cancellation itself took seconds (rather than being near-instant) would
+    // fail this test, unlike the previous 5000L bound which had roughly 25x slack.
+    elapsedMillis should be < 800L
   }
 
   it should "stop promptly when an unsupervised scope exits, without an explicit cancel()" in failAfter(
@@ -160,6 +171,36 @@ class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "lose a race regardless of argument order" in failAfter(unblockTimeLimit) {
     val actualResult: Int = Async.run {
       Async.race(
+        {
+          Async.delay(200.millis)
+          42
+        },
+        Async.never[Int]
+      )
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "lose a raceSuccess against a fast computation, which is cancelled once the fast one wins" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualResult: Int = Async.run {
+      Async.raceSuccess(
+        Async.never[Int],
+        {
+          Async.delay(200.millis)
+          42
+        }
+      )
+    }
+
+    actualResult shouldBe 42
+  }
+
+  it should "lose a raceSuccess regardless of argument order" in failAfter(unblockTimeLimit) {
+    val actualResult: Int = Async.run {
+      Async.raceSuccess(
         {
           Async.delay(200.millis)
           42
