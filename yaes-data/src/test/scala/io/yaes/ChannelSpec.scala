@@ -2,13 +2,32 @@ package io.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.concurrent.Signaler
+import org.scalatest.concurrent.ThreadSignaler
+import org.scalatest.time.Seconds
+import org.scalatest.time.Span
 import scala.concurrent.duration._
 import io.yaes.Channel.ChannelClosed
 import io.yaes.Channel.Producer
 import io.yaes.Async.Cancelled
 import java.util.concurrent.LinkedBlockingQueue
 
-class ChannelSpec extends AnyFlatSpec with Matchers {
+class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
+
+  /** Interrupts the test thread when a `failAfter` limit expires.
+    *
+    * The default `Signaler` is `DoNotSignal`, which only reports the timeout once the block returns
+    * on its own. Tests that assert a parked sender gets released must interrupt the thread instead:
+    * the interrupt unwinds `Async.run`'s `join()`, whose `close()` then cancels the still-parked
+    * fiber, so a missing signal surfaces as a test failure rather than an unbounded hang.
+    */
+  private given Signaler = ThreadSignaler
+
+  /** Upper bound for the tests that would otherwise deadlock on a regression. Generous enough to
+    * absorb CI jitter, since the guarded blocks only ever sleep a few hundred milliseconds.
+    */
+  private val unblockTimeLimit: Span = Span(30, Seconds)
 
   "A Channel" should "send and receive values correctly" in {
     val channel             = Channel.unbounded[Int]()
@@ -880,26 +899,30 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     val channel   = Channel.bounded[Int](capacity = 1)
     val sendTrace = new LinkedBlockingQueue[String]()
 
-    val actualResult = Raise.run {
-      Async.run {
-        Async.fork {
-          channel.send(1)
-          sendTrace.put("sent1")
-          channel.send(2) // Suspends: the buffer is full
-          sendTrace.put("sent2")
+    // Without the `notFull` signal the sender stays parked forever and `Async.run` never joins, so
+    // the time limit is what turns the regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          Async.fork {
+            channel.send(1)
+            sendTrace.put("sent1")
+            channel.send(2) // Suspends: the buffer is full
+            sendTrace.put("sent2")
+          }
+
+          Async.delay(200.millis)
+          // The sender is parked on the full buffer at this point
+          val parkedTrace = sendTrace.toArray.toList
+
+          val first = channel.tryReceive()
+
+          Async.delay(200.millis)
+          val unblockedTrace = sendTrace.toArray.toList
+          val second         = channel.tryReceive()
+
+          (parkedTrace, first, unblockedTrace, second)
         }
-
-        Async.delay(200.millis)
-        // The sender is parked on the full buffer at this point
-        val parkedTrace = sendTrace.toArray.toList
-
-        val first = channel.tryReceive()
-
-        Async.delay(200.millis)
-        val unblockedTrace = sendTrace.toArray.toList
-        val second         = channel.tryReceive()
-
-        (parkedTrace, first, unblockedTrace, second)
       }
     }
 
@@ -944,24 +967,28 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     val channel   = Channel.rendezvous[Int]()
     val sendTrace = new LinkedBlockingQueue[String]()
 
-    val actualResult = Raise.run {
-      Async.run {
-        Async.fork {
-          channel.send(42)
-          sendTrace.put("sent")
+    // Without the `notFull` signal the sender never completes the handshake and `Async.run` never
+    // joins, so the time limit is what turns the regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          Async.fork {
+            channel.send(42)
+            sendTrace.put("sent")
+          }
+
+          Async.delay(200.millis)
+          // The sender is parked with the item ready at this point
+          val parkedTrace = sendTrace.toArray.toList
+
+          val received = channel.tryReceive()
+
+          Async.delay(200.millis)
+          // The handshake completed, so the sender resumed
+          val resumedTrace = sendTrace.toArray.toList
+
+          (parkedTrace, received, resumedTrace)
         }
-
-        Async.delay(200.millis)
-        // The sender is parked with the item ready at this point
-        val parkedTrace = sendTrace.toArray.toList
-
-        val received = channel.tryReceive()
-
-        Async.delay(200.millis)
-        // The handshake completed, so the sender resumed
-        val resumedTrace = sendTrace.toArray.toList
-
-        (parkedTrace, received, resumedTrace)
       }
     }
 
