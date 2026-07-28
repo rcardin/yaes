@@ -167,6 +167,17 @@ class JvmAsync extends Async.Unsafe {
 
   override def attemptFork[A](name: String)(block: => A): Fiber[A] =
     JvmAsync.forkImpl(name, rethrowOnFailure = false)(block)
+
+  override def never[A](): Nothing = {
+    new CountDownLatch(1).await()
+    // Unreachable: the latch above is never counted down, so `await()` can only return by
+    // throwing InterruptedException once this thread is interrupted. Throwing that same
+    // exception here (rather than e.g. IllegalStateException) keeps this a call site the
+    // JvmAsync.forkImpl's `case _: InterruptedException` arm still recognizes, so even this
+    // unreachable path would cancel the fiber cleanly instead of poisoning the enclosing scope
+    // with what would otherwise look like a genuine failure.
+    throw new InterruptedException()
+  }
 }
 object JvmAsync {
 
@@ -363,15 +374,32 @@ object Async {
   /** Blocks the calling fiber indefinitely, never returning on its own.
     *
     * `never` parks the fiber efficiently (a blocking wait, not a busy loop) until the fiber is
-    * cancelled, either explicitly via [[Fiber.cancel]] or because the enclosing scope (e.g.
-    * [[run]]) is torn down. Cancellation reaches it exactly the same way it reaches any other
-    * blocking `Async` operation such as [[delay]]: cooperative interruption. Since the calling
-    * thread only ever leaves the park by being interrupted, no exception it raises escapes to user
-    * code as an untracked failure; it flows through the same handling [[fork]] already applies to
-    * an interrupted fiber.
+    * cancelled, either explicitly via [[Fiber.cancel]] or through the same interrupt-based
+    * cancellation that reaches any other blocking `Async` operation such as [[delay]], for example
+    * when [[unsupervised]] tears down a scope whose block already returned.
     *
-    * This is useful for a computation that must "run until cancelled", or for a branch of [[race]],
-    * [[par]], or [[timeout]] that should never complete on its own.
+    * @note
+    *   `never` must be forked (directly with [[fork]]/[[attemptFork]], or indirectly through a
+    *   combinator such as [[race]] that forks its branches for you), and that fork must itself be
+    *   cancelled, raced away, or wrapped in [[timeout]]. A bare `Async.run { Async.never }`, with no
+    *   fork in between, runs on the caller thread with nothing able to cancel it and hangs forever;
+    *   `Async.run` cannot help here because it only reaches its own teardown after the block
+    *   returns, which a `never` inside that block prevents. The same is true of a forked `never`
+    *   that is left un-cancelled and un-raced directly inside [[run]]: `run` waits for every forked
+    *   fiber to finish, joined or not, so it hangs just the same. [[unsupervised]] does not have
+    *   that failure mode: it cancels any fiber still running as soon as its block returns, so a
+    *   `never` forked inside it is torn down correctly with no explicit `cancel()` needed.
+    * @note
+    *   On the forked path, the interrupt that unparks `never` is handled by [[fork]]'s own
+    *   cancellation logic, so it never escapes to user code as an untracked exception. That
+    *   guarantee is specific to the forked path; see the note above for the unforked case, where no
+    *   such handling exists and the interrupt is left to propagate on its own.
+    *
+    * This is useful for a computation that must "run until cancelled", or for a branch of [[race]]
+    * or [[timeout]] that should never complete on its own. [[raceSuccess]] also works with `never`,
+    * but only helps when the other branch can actually succeed. [[par]] and [[parTraverse]], by
+    * contrast, wait for *every* branch to finish before returning, so pairing either of them with
+    * `never` deadlocks unconditionally, not just in the unlucky case.
     *
     * Example:
     * {{{
@@ -388,42 +416,17 @@ object Async {
     * }}}
     *
     * @param async
-    *   the async context; required for API consistency with every other `Async` operation, even
-    *   though parking forever has no backend-specific behavior for this implementation to delegate
-    *   to
+    *   the async context; delegates to [[Async.Unsafe.never]] for the actual parking
+    *   implementation, exactly like every other `Async` operation delegates to its backend
     * @tparam A
     *   the type of value this method would produce, if it ever returned one
     * @return
     *   never returns; the calling fiber parks until it is cancelled
     * @see
-    *   [[race]], [[timeout]] for typical use sites of a branch that never completes on its own
+    *   [[race]], [[timeout]], [[raceSuccess]] for typical use sites of a branch that never
+    *   completes on its own
     */
-  def never[A](using async: Async): A = parkForever()
-
-  /** Parks the calling thread forever on a [[CountDownLatch]] that is never counted down.
-    *
-    * `await()` on a latch stuck at one can only return by throwing `InterruptedException` once the
-    * thread is interrupted. That is the same signal `Thread.sleep` (used by [[JvmAsync.delay]])
-    * raises on interruption, so it flows through the identical cancellation path already handled by
-    * [[JvmAsync.forkImpl]], which turns it into the fiber's promise being cancelled. Unlike
-    * `LockSupport.park()`, `CountDownLatch.await()` cannot wake up spuriously, so no wrapping loop
-    * is needed here; a loop would only be needed to guard against a wakeup that isn't the real
-    * interruption, which this call cannot produce.
-    *
-    * The statement after `await()` is unreachable in practice: the latch is never counted down, so
-    * the only way execution continues past it is via the exception the JVM raises on interrupt.
-    * The `Nothing` return type documents that explicitly, rather than silently returning a bogus
-    * value typed as whatever the caller expected.
-    *
-    * @return
-    *   never returns normally
-    */
-  private def parkForever(): Nothing = {
-    new CountDownLatch(1).await()
-    throw new IllegalStateException(
-      "unreachable: an uncounted CountDownLatch.await() only returns via InterruptedException"
-    )
-  }
+  def never[A](using async: Async): A = async.never()
 
   /** Creates a new fiber with a specified name.
     *
@@ -1027,5 +1030,25 @@ object Async {
       *   a [[Fiber]] representing the forked computation
       */
     def attemptFork[A](name: String)(block: => A): Fiber[A] = fork(name)(block)
+
+    /** Parks the calling thread until it is cancelled, never returning a value on its own.
+      *
+      * This is the backend seam behind [[Async.never]]. The JVM backend ([[JvmAsync]]) parks on an
+      * uncounted [[java.util.concurrent.CountDownLatch]] that is never counted down: the only way
+      * `await()` on it returns is by throwing `InterruptedException` once the thread is
+      * interrupted, the same cancellation signal [[delay]] and [[fork]] already rely on.
+      *
+      * A backend whose cancellation mechanism is not interrupt based, i.e. one that does not
+      * ultimately call `Thread.interrupt()` to cancel a fiber, must override this method with a
+      * parking primitive that responds to whatever signal that backend uses instead. Inheriting the
+      * JVM behavior on such a backend would compile cleanly but produce an `Async.never` that can
+      * never actually be cancelled.
+      *
+      * @tparam A
+      *   the type of value this method would produce, if it ever returned one
+      * @return
+      *   never returns normally
+      */
+    def never[A](): Nothing
   }
 }

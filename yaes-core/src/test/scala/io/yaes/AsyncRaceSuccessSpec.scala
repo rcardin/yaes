@@ -514,6 +514,8 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
       def delay(d: Duration): Unit                     = ()
       def fork[A](name: String)(block: => A): Fiber[A] =
         throw new UnsupportedOperationException("custom fork should have been used")
+      def never[A](): Nothing =
+        throw new UnsupportedOperationException("never is not exercised by this test")
     }
 
     a[UnsupportedOperationException] should be thrownBy {
@@ -552,6 +554,8 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
       def fork[A](name: String)(block: => A): Fiber[A]                 = attemptFork(name)(block)
       override def attemptFork[A](name: String)(block: => A): Fiber[A] =
         new ImmediateFiber[A](name, block)
+      def never[A](): Nothing =
+        throw new UnsupportedOperationException("never is not exercised by this test")
     }
 
     val actualResult = Async.raceSuccess(1, 2)(using fake)
