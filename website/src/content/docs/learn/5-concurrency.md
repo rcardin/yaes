@@ -170,7 +170,7 @@ Unlike `parTraverse`, `parTraverseLimit` does not fork one fiber per element. It
 Key properties of `parTraverseLimit`:
 - At most `concurrency` invocations of `f`, and at most `concurrency` worker fibers, exist at the same time
 - Results are returned in the same order as the input, regardless of completion or claim order
-- If any invocation fails, every worker is cancelled; the failing worker flags the failure before its exception unwinds, so a worker never claims a new element once a failure has been observed, though an element a worker had already claimed still runs to completion
+- If any invocation fails, every worker is cancelled; the failing worker flags the failure before its exception unwinds, so once that failure has been observed no worker invokes `f` on an element it had not already started, though an element a worker had already started still runs to completion
 - A `concurrency` of `items.size` or greater produces the same result as `parTraverse`, but does not guarantee that every element runs on its own fiber, since workers still claim indices from a shared counter; computations that need every element running at the same time, such as a rendezvous or a barrier, must use `parTraverse` instead
 - A non-positive `concurrency` is clamped to `1`, running fully sequentially, instead of throwing
 - If the traversal is cancelled before every element is computed, it fails with `java.util.concurrent.CancellationException` rather than returning a partial result, mirroring `parTraverse`

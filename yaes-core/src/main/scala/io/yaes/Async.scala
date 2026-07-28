@@ -722,11 +722,13 @@ object Async {
     *
     * If any invocation of `f` fails, every worker is cancelled, exactly as [[parTraverse]] cancels
     * its siblings on failure. The failing worker flags the failure before its exception unwinds, so
-    * a worker never claims a new element once a failure has been observed; this is checked in
-    * addition to, and faster than, the cooperative interrupt used to cancel the other workers. An
-    * element a worker has already claimed still runs to completion, since cancellation is
-    * cooperative, so this cannot guarantee that no additional element ever starts, only that no
-    * unclaimed one does. If a worker is cancelled after claiming an element but before finishing
+    * once that failure has been observed no worker invokes `f` on an element it had not already
+    * started; this is checked in addition to, and faster than, the cooperative interrupt used to
+    * cancel the other workers. A worker can still take an index from the shared counter after the
+    * flag is set, it simply never applies `f` to that element. An element a worker has already
+    * started still runs to completion, since cancellation is cooperative, so this cannot guarantee
+    * that no additional element ever starts, only that no not yet started one does. If a worker is
+    * cancelled after claiming an element but before finishing
     * it, that element is never produced, and the traversal fails with a
     * `java.util.concurrent.CancellationException` instead of silently returning a partial result,
     * mirroring how [[parTraverse]] surfaces cancellation through `Fiber.unsafeValue`.
@@ -793,9 +795,11 @@ object Async {
           }
         } catch {
           case t: Throwable =>
-            // Flag the failure before unwinding so sibling workers stop claiming new
-            // elements as soon as possible, without waiting for the cooperative interrupt
-            // that cancels them to land.
+            // Flag the failure before unwinding so sibling workers stop applying `f` to
+            // not yet started elements as soon as possible, without waiting for the
+            // cooperative interrupt that cancels them to land. A worker can still take an
+            // index from `nextIndex` after this, the loop condition just stops it before
+            // it invokes `f`.
             aborted.set(true)
             throw t
         }
