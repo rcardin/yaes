@@ -323,23 +323,6 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     tryResult.failed.get.getMessage shouldBe "A fails"
   }
 
-  // MEDIUM finding 4 (fatal errors silently discarded) is deliberately NOT covered by an
-  // automated test here: the old `captured` helper caught `Throwable`, including
-  // `VirtualMachineError`/`LinkageError`, silently discarding it whenever the other branch
-  // happened to succeed. `raceSuccess` no longer wraps branches in any try/catch at all — a
-  // fatal error thrown by a branch is handled by `JvmAsync.attemptFork` exactly like
-  // `JvmAsync.fork` already handles it for `race`/`racePair`/`par`/plain `fork`: it is recorded
-  // on the fiber's promise and rethrown into the parent scope. This was verified manually: a
-  // `raceSuccess({ throw new OutOfMemoryError("fake oom") }, { delay(200.millis); 2 })` probe,
-  // added temporarily to this spec and removed afterwards, did NOT return `OK(2)` — the
-  // `OutOfMemoryError` propagated and aborted the run with `java.lang.OutOfMemoryError: fake
-  // oom` (see the PR/commit description for the captured output). It is not kept as a permanent
-  // test because JDK 25's `StructuredTaskScope` does not cushion `Error`s the same way it
-  // cushions `Exception`s — any forked fiber (not just a `raceSuccess` branch) that lets an
-  // `Error` escape terminates its virtual thread uncaught, which aborts the whole shared test
-  // JVM rather than failing just this one test. That is pre-existing behavior of the whole
-  // `Async` runtime, not something specific to `raceSuccess`, and out of scope to change here.
-
   it should "not let a raced branch's internally forked failing child poison the enclosing scope (failing branch is the loser)" in failAfter(
     unblockTimeLimit
   ) {
@@ -424,13 +407,115 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // implementation that unconditionally returns block1 (or ignores the race entirely).
     // Running the tie repeatedly and requiring BOTH outcomes to show up proves raceSuccess is
     // actually racing, not hardcoding a winner.
+    //
+    // Round-2 MEDIUM finding: with instant literal blocks (no work at all), the "race" is
+    // decided by fork/callback-registration ordering rather than genuine concurrency, which is
+    // heavily biased towards block2 (measured ~88% block2 across repeated trials, making this
+    // assertion flaky at roughly 12% of CI runs). Giving both branches identical, tiny real work
+    // (an `Async.delay`) lets them genuinely tie instead, which measured at ~54%/46% across 400
+    // runs — no observed flake.
     val observedResults = (1 to 50).map { _ =>
       Async.run {
-        Async.raceSuccess(1, 2)
+        Async.raceSuccess(
+          {
+            Async.delay(20.millis)
+            1
+          }, {
+            Async.delay(20.millis)
+            2
+          }
+        )
       }
     }.toSet
 
     observedResults should contain(1)
     observedResults should contain(2)
+  }
+
+  it should "propagate a fatal error thrown by a branch instead of swallowing it" in failAfter(
+    unblockTimeLimit
+  ) {
+    // Round-2 MEDIUM finding: the comment that used to sit here claimed a permanent test was
+    // impossible because any forked fiber that lets an Error escape terminates its virtual
+    // thread uncaught, aborting the whole shared test JVM. That claim is false: the
+    // OutOfMemoryError below is thrown by `JvmAsync.attemptFork`'s own `case t: Throwable` arm
+    // (the same fatal-error path `JvmAsync.fork` already uses for `race`/`racePair`/`par`), which
+    // rethrows it into the parent scope. It is an ordinary Java exception at that point, catchable
+    // with a plain try/catch around `Async.run`, and the JVM (and this suite) keeps running
+    // afterwards — this very test executing is itself proof of that.
+    var caught: Throwable = null
+    try {
+      Async.run {
+        Async.raceSuccess(
+          {
+            Async.delay(50.millis)
+            throw new OutOfMemoryError("fake oom")
+          }, {
+            Async.delay(500.millis)
+            2
+          }
+        )
+      }
+    } catch {
+      case t: Throwable => caught = t
+    }
+
+    caught shouldBe an[OutOfMemoryError]
+    caught.getMessage shouldBe "fake oom"
+  }
+
+  it should "not let a cancellation wrapped in a rethrown exception mask a genuine failure from the other branch" in failAfter(
+    unblockTimeLimit
+  ) {
+    // Round-2 MEDIUM finding: residual of round-1 finding 3. When an unrelated sibling poisons
+    // the enclosing scope while raceSuccess waits on the surviving branch, that branch is
+    // interrupted. If the branch's own code catches `InterruptedException` and rethrows it
+    // wrapped in a plain exception (a common Java interop idiom), `attemptFork`'s `NonFatal` arm
+    // used to have no way to recognise that as a cancellation, so it overwrote the genuine
+    // failure already observed on the other branch.
+    val tryResult = scala.util.Try {
+      Async.run {
+        Async.fork {
+          Async.delay(200.millis)
+          throw new RuntimeException("sibling boom")
+        }
+        Async.raceSuccess[Int, Int](
+          {
+            Async.delay(50.millis)
+            throw new RuntimeException("A fails")
+          }, {
+            try {
+              new CountDownLatch(1).await()
+              2
+            } catch {
+              case _: InterruptedException => throw new RuntimeException("wrapped")
+            }
+          }
+        )
+      }
+    }
+
+    tryResult.isFailure shouldBe true
+    // The genuine failure observed on branch A must win over the cancellation that branch B's
+    // own code chose to disguise as an ordinary `RuntimeException`.
+    tryResult.failed.get.getMessage shouldBe "A fails"
+  }
+
+  it should "use the Async capability it is given rather than hard-coding the JVM backend" in {
+    // HIGH finding (round 2): raceSuccess used to call the static `JvmAsync.attemptFork`
+    // directly, bypassing the `async` capability parameter entirely. Any non-`JvmAsync`
+    // implementation of `Async.Unsafe` NPE'd (`JvmAsync.attemptFork` reads a `ThreadLocal` only
+    // `JvmAsync.run`/`fork` ever populate). `Async.race` already routes through `async.fork`;
+    // `raceSuccess` must route through `async.attemptFork` the same way, so a custom `fork`
+    // implementation is what actually runs.
+    val fake: Async = new Async.Unsafe {
+      def delay(d: Duration): Unit                     = ()
+      def fork[A](name: String)(block: => A): Fiber[A] =
+        throw new UnsupportedOperationException("custom fork should have been used")
+    }
+
+    a[UnsupportedOperationException] should be thrownBy {
+      Async.raceSuccess(1, 2)(using fake)
+    }
   }
 }
