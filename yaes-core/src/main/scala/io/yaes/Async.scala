@@ -187,13 +187,15 @@ object JvmAsync {
   /** Shared JDK 25 structured-concurrency teardown behind both [[JvmAsync.fork]] and
     * [[JvmAsync.attemptFork]].
     *
-    * The two only ever differed in whether a `NonFatal` failure of `block` rethrows into the parent
-    * scope (`fork`) or is captured on the fiber's promise instead (`attemptFork`, used by
-    * [[Async.raceSuccess]], see its scaladoc for why), while the scope open/close handshake, the
-    * `forkedThread` handshake, the `ThreadLocal` juggling, and the cancellation/fatal-error arms
-    * are identical. Keeping two copies of that teardown in sync by hand is a standing hazard, so
-    * both `fork` and `attemptFork` now delegate here, selecting their behavior with
-    * `rethrowOnFailure`.
+    * The two differ in whether a `NonFatal` failure of `block` rethrows into the parent scope
+    * (`fork`) or is captured on the fiber's promise instead (`attemptFork`, used by
+    * [[Async.raceSuccess]], see its scaladoc for why), and — only on the `attemptFork` path — in
+    * the extra cancellation-detection logic needed to tell a genuine failure apart from an
+    * interrupt that `block` disguised as a plain exception (see the `case NonFatal(t)` arm below).
+    * The scope open/close handshake, the `forkedThread` handshake, the `ThreadLocal` juggling, and
+    * the cancellation/fatal-error arms otherwise stay identical between the two. Keeping two copies
+    * of that teardown in sync by hand is a standing hazard, so both `fork` and `attemptFork` now
+    * delegate here, selecting their behavior with `rethrowOnFailure`.
     *
     * @param name
     *   the name of the fiber
@@ -248,6 +250,21 @@ object JvmAsync {
             // too in case it is still set. Either way this must be reported as a cancellation, not
             // a genuine failure, or it would overwrite a real failure observed on a sibling branch
             // (see raceSuccess's `onFailure`).
+            //
+            // Deliberate trade (confirmed, not a bug): checking `outerScope.isCancelled()` also
+            // means that if this branch *survives* an interrupt (clears its own flag, keeps
+            // running) and then fails later for a genuinely independent reason, that failure is
+            // still misreported as a cancellation for as long as the outer scope remains
+            // cancelled. That sacrifices a rarer case (a branch outliving an interrupt and then
+            // failing on its own) to protect a far more common one (a branch disguising the
+            // interrupt itself as an ordinary exception), and the sacrificed case can only arise
+            // while the enclosing scope is already being torn down. Do not "fix" this by dropping
+            // the `outerScope.isCancelled()` check.
+            //
+            // Ordering constraint (load-bearing): `Thread.currentThread().isInterrupted()` is read
+            // here *before* `JvmAsync.ensureJoined(innerScope)` runs below. `ensureJoined` itself
+            // sets this thread's interrupt flag (see its scaladoc), so reading the flag after
+            // calling it would make this check unconditionally true.
             if (outerScope.isCancelled() || Thread.currentThread().isInterrupted()) {
               promise.cancel(true)
             } else {
@@ -909,18 +926,23 @@ object Async {
     def fork[A](name: String)(block: => A): Fiber[A]
 
     /** Like [[fork]], but signals that `block` failing is an expected, recoverable outcome rather
-      * than a supervision event. Implementations that support it should capture a `NonFatal`
-      * failure of `block` on the returned fiber's promise without letting it propagate into (and
-      * poison) the enclosing scope — cancellation and fatal errors should still propagate exactly
-      * like [[fork]] does.
+      * than a supervision event.
       *
-      * [[Async.raceSuccess]] is built on this: it only fails when *both* branches fail, which
-      * requires one losing branch's failure to never abort the race by poisoning the scope. The
-      * default implementation here simply delegates to [[fork]], so a custom [[Async.Unsafe]] that
-      * does not override `attemptFork` behaves exactly like `fork` — correct, but without the "a
-      * losing branch's failure does not poison the scope" property. Override this method to provide
-      * that property; see the JVM backend's implementation for the JDK structured-concurrency
-      * version.
+      * The required property is: a `NonFatal` failure of `block` must be captured on the returned
+      * fiber's promise and must NOT be rethrown into the enclosing structured scope — cancellation
+      * and fatal errors should still propagate exactly like [[fork]] does. [[Async.raceSuccess]] is
+      * built on this: it only fails when *both* branches fail, which requires one losing branch's
+      * failure to never abort the race by poisoning the scope.
+      *
+      * The default implementation below does NOT provide that property — it simply delegates to
+      * [[fork]], which always rethrows a `NonFatal` failure into the enclosing scope. Consequently,
+      * on a backend that inherits this default, [[Async.raceSuccess]] does NOT honour its
+      * documented contract: a losing branch's failure will abort the whole race and surface to the
+      * caller instead of being discarded in favor of the winner's value.
+      *
+      * Any [[Async.Unsafe]] backend that supports `raceSuccess` MUST override this method with an
+      * implementation that actually captures the failure instead of rethrowing it; see the JVM
+      * backend's `attemptFork` for the JDK structured-concurrency version.
       *
       * @param name
       *   the name of the fiber
