@@ -770,20 +770,17 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
   }
 
   it should "return None on an empty open channel without blocking the caller" in {
-    val channel      = Channel.unbounded[Int]()
-    val receiveTrace = new LinkedBlockingQueue[Option[Int]]()
+    val channel = Channel.unbounded[Int]()
 
-    Raise.run {
-      Async.run {
-        Async.fork {
-          receiveTrace.put(channel.tryReceive())
-        }
-
-        // The forked fiber must have completed already: tryReceive never parks
-        Async.delay(200.millis)
-        receiveTrace.toArray.toList should be(List(None))
+    // Nothing else can ever feed this channel, so a `tryReceive` that parks would never be woken.
+    // The time limit is what turns that regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.tryReceive()
       }
     }
+
+    actualResult should be(Right(None))
   }
 
   it should "raise ChannelClosed on an empty channel that has been closed" in {
