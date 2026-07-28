@@ -751,16 +751,20 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "return None on an empty open channel without blocking the caller" in {
-    val channel = Channel.unbounded[Int]()
+    val channel      = Channel.unbounded[Int]()
+    val receiveTrace = new LinkedBlockingQueue[Option[Int]]()
 
-    val startTime    = java.lang.System.nanoTime()
-    val actualResult = Raise.either {
-      channel.tryReceive()
+    Raise.run {
+      Async.run {
+        Async.fork {
+          receiveTrace.put(channel.tryReceive())
+        }
+
+        // The forked fiber must have completed already: tryReceive never parks
+        Async.delay(200.millis)
+        receiveTrace.toArray.toList should be(List(None))
+      }
     }
-    val elapsed = (java.lang.System.nanoTime() - startTime).nanos
-
-    actualResult should be(Right(None))
-    elapsed.should(be < 1.second)
   }
 
   it should "raise ChannelClosed on an empty channel that has been closed" in {
@@ -792,7 +796,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     third should be(Left(ChannelClosed))
   }
 
-  it should "raise ChannelClosed on a cancelled channel even if elements were buffered" in {
+  it should "raise ChannelClosed on a cancelled channel, discarding buffered elements" in {
     val channel = Channel.unbounded[Int]()
 
     Raise.run {
@@ -839,6 +843,39 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     actualResult should be(Left(ChannelClosed))
   }
 
+  it should "drain the buffered elements before raising ChannelClosed on a closed channel" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    Raise.run {
+      channel.send(1)
+      channel.send(2)
+    }
+    channel.close()
+
+    val first  = Raise.either { channel.tryReceive() }
+    val second = Raise.either { channel.tryReceive() }
+    val third  = Raise.either { channel.tryReceive() }
+
+    first should be(Right(Some(1)))
+    second should be(Right(Some(2)))
+    third should be(Left(ChannelClosed))
+  }
+
+  it should "raise ChannelClosed on a cancelled channel, discarding buffered elements" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    Raise.run {
+      channel.send(1)
+    }
+    channel.cancel()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
   it should "unblock a sender parked on a full buffer" in {
     val channel   = Channel.bounded[Int](capacity = 1)
     val sendTrace = new LinkedBlockingQueue[String]()
@@ -871,22 +908,64 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     )
   }
 
+  "A bounded Channel with DROP_OLDEST tryReceive" should "return the retained elements and then None" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+
+    val actualResult = Raise.either {
+      channel.send(1) // Buffer: [1]
+      channel.send(2) // Buffer: [1, 2]
+      channel.send(3) // Buffer: [2, 3] (1 dropped)
+
+      (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+    }
+
+    actualResult should be(Right((Some(2), Some(3), None)))
+  }
+
+  "A bounded Channel with DROP_LATEST tryReceive" should "return the retained elements and then None" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+
+    val actualResult = Raise.either {
+      channel.send(1) // Buffer: [1]
+      channel.send(2) // Buffer: [1, 2]
+      channel.send(3) // Buffer: [1, 2] (3 dropped)
+
+      (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+    }
+
+    actualResult should be(Right((Some(1), Some(2), None)))
+  }
+
   "A rendezvous Channel tryReceive" should "return the element when a sender is already parked with an item" in {
-    val channel = Channel.rendezvous[Int]()
+    val channel   = Channel.rendezvous[Int]()
+    val sendTrace = new LinkedBlockingQueue[String]()
 
     val actualResult = Raise.run {
       Async.run {
         Async.fork {
           channel.send(42)
+          sendTrace.put("sent")
         }
 
         Async.delay(200.millis)
         // The sender is parked with the item ready at this point
-        channel.tryReceive()
+        val parkedTrace = sendTrace.toArray.toList
+
+        val received = channel.tryReceive()
+
+        Async.delay(200.millis)
+        // The handshake completed, so the sender resumed
+        val resumedTrace = sendTrace.toArray.toList
+
+        (parkedTrace, received, resumedTrace)
       }
     }
 
-    actualResult should be(Some(42))
+    actualResult should be((List.empty, Some(42), List("sent")))
   }
 
   it should "return None when no sender is waiting and not initiate a handshake" in {
@@ -897,11 +976,10 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
         // No sender yet: tryReceive must not park nor register a pending receiver
         val empty = channel.tryReceive()
 
-        val fiber = Async.fork {
+        Async.fork {
           channel.send(42)
         }
 
-        Async.delay(200.millis)
         val delivered = channel.receive()
 
         (empty, delivered)
@@ -914,6 +992,17 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   it should "raise ChannelClosed when the channel is closed and no item is pending" in {
     val channel = Channel.rendezvous[Int]()
     channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "raise ChannelClosed on a cancelled channel" in {
+    val channel = Channel.rendezvous[Int]()
+    channel.cancel()
 
     val actualResult = Raise.either {
       channel.tryReceive()
