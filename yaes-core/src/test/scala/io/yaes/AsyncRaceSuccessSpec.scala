@@ -438,8 +438,8 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // Round-2 MEDIUM finding: the comment that used to sit here claimed a permanent test was
     // impossible because any forked fiber that lets an Error escape terminates its virtual
     // thread uncaught, aborting the whole shared test JVM. That claim is false: the
-    // OutOfMemoryError below is thrown by `JvmAsync.attemptFork`'s own `case t: Throwable` arm
-    // (the same fatal-error path `JvmAsync.fork` already uses for `race`/`racePair`/`par`), which
+    // OutOfMemoryError below is thrown by `JvmAsync.forkImpl`'s own `case t: Throwable` arm
+    // (the same fatal-error path both `JvmAsync.fork` and `JvmAsync.attemptFork` delegate to), which
     // rethrows it into the parent scope. It is an ordinary Java exception at that point, catchable
     // with a plain try/catch around `Async.run`, and the JVM (and this suite) keeps running
     // afterwards — this very test executing is itself proof of that.
@@ -501,7 +501,9 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     tryResult.failed.get.getMessage shouldBe "A fails"
   }
 
-  it should "use the Async capability it is given rather than hard-coding the JVM backend" in {
+  it should "use the Async capability it is given rather than hard-coding the JVM backend" in failAfter(
+    unblockTimeLimit
+  ) {
     // HIGH finding (round 2): raceSuccess used to call the static `JvmAsync.attemptFork`
     // directly, bypassing the `async` capability parameter entirely. Any non-`JvmAsync`
     // implementation of `Async.Unsafe` NPE'd (`JvmAsync.attemptFork` reads a `ThreadLocal` only
