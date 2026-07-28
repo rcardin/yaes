@@ -34,10 +34,16 @@ class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     Async.run {
       val fiber = Async.fork {
-        Async.never[Int]
+        val neverReturned: Int = Async.never[Int]
+        // Statically unreachable, but only as long as `never` honours its contract: a regression
+        // making it return on its own would run this line and add a second element to the queue,
+        // which is what lets the assertion below tell a still-parked fiber apart from one that
+        // already finished. Without it the test would pass even if `never` returned immediately.
+        actualQueue.add("never-returned")
+        neverReturned
       }
-      // Give the fiber ample time to reach the park; if `never` returned on its own, this
-      // callback would have already fired.
+      // Give the fiber ample time to reach the park (and, on a regression, to record its
+      // unexpected return) before we sample the queue.
       Async.delay(300.millis)
       actualQueue.add("still-running")
       fiber.cancel()
