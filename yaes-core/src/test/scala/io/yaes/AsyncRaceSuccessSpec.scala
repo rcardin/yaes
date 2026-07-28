@@ -2,15 +2,39 @@ package io.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.concurrent.Signaler
+import org.scalatest.concurrent.ThreadSignaler
+import org.scalatest.time.Seconds
+import org.scalatest.time.Span
 
 import scala.concurrent.duration.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
-class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
+class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
-  "Async.raceSuccess" should "return the fast success and cancel the slow branch" in {
+  /** Interrupts the test thread when a `failAfter` limit expires.
+    *
+    * The default `Signaler` is `DoNotSignal`, which only reports the timeout once the block returns
+    * on its own. A regression in `raceSuccess` (e.g. a swallowed `InterruptedException`, see
+    * CRITICAL finding 2) would park a forked fiber forever and `Async.run`'s `join()` would never
+    * return, hanging the whole suite instead of failing it. Interrupting the thread unwinds that
+    * `join()`, whose `close()` then cancels the still-parked fiber, turning the regression into a
+    * test failure instead of an unbounded hang.
+    */
+  private given Signaler = ThreadSignaler
+
+  /** Upper bound for every test in this spec. Generous enough to absorb CI jitter, since the
+    * guarded blocks only ever sleep a few seconds at most.
+    */
+  private val unblockTimeLimit: Span = Span(30, Seconds)
+
+  "Async.raceSuccess" should "return the fast success and cancel the slow branch" in failAfter(
+    unblockTimeLimit
+  ) {
     val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
       Async.raceSuccess(
@@ -32,7 +56,32 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fast")
   }
 
-  it should "return the slow success and ignore the fast failure (plain exception)" in {
+  it should "return the fast success and cancel the slow branch (block2 wins)" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
+    val actualResult = Async.run {
+      Async.raceSuccess(
+        {
+          Async.delay(2.seconds)
+          actualQueue.add("slow")
+          43
+        }, {
+          Async.delay(100.millis)
+          actualQueue.add("fast")
+          42
+        }
+      )
+    }
+
+    actualResult shouldBe 42
+    Thread.sleep(300)
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fast")
+  }
+
+  it should "return the slow success and ignore the fast failure (plain exception)" in failAfter(
+    unblockTimeLimit
+  ) {
     val actualQueue  = new ConcurrentLinkedQueue[String]()
     val actualResult = Async.run {
       Async.raceSuccess(
@@ -52,7 +101,31 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fast-failure", "slow-success")
   }
 
-  it should "return the slow success and ignore the fast failure (Raise.raise)" in {
+  it should "return the slow success and ignore the fast failure (block2 fails fast)" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualQueue  = new ConcurrentLinkedQueue[String]()
+    val actualResult = Async.run {
+      Async.raceSuccess(
+        {
+          Async.delay(500.millis)
+          actualQueue.add("slow-success")
+          43
+        }, {
+          Async.delay(100.millis)
+          actualQueue.add("fast-failure")
+          throw new RuntimeException("boom")
+        }
+      )
+    }
+
+    actualResult shouldBe 43
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fast-failure", "slow-success")
+  }
+
+  it should "return the slow success and ignore the fast failure (Raise.raise)" in failAfter(
+    unblockTimeLimit
+  ) {
     val actualQueue                = new ConcurrentLinkedQueue[String]()
     val actualResult: Int | String = Raise.run {
       Async.run {
@@ -74,7 +147,9 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fast-failure", "slow-success")
   }
 
-  it should "fail when both branches fail, surfacing the last observed failure" in {
+  it should "fail when both branches fail, surfacing the last observed failure" in failAfter(
+    unblockTimeLimit
+  ) {
     val actualQueue = new ConcurrentLinkedQueue[String]()
     val tryResult   = scala.util.Try {
       Async.run {
@@ -98,7 +173,35 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
     actualQueue.toArray should contain theSameElementsInOrderAs List("fast-failure", "slow-failure")
   }
 
-  it should "fail through Raise.run when both branches fail with a raised error" in {
+  it should "fail when both branches fail, surfacing the last observed failure (block2 fails first)" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualQueue = new ConcurrentLinkedQueue[String]()
+    val tryResult   = scala.util.Try {
+      Async.run {
+        Async.raceSuccess[Int, Int](
+          {
+            Async.delay(500.millis)
+            actualQueue.add("slow-failure")
+            throw new RuntimeException("second failure")
+          }, {
+            Async.delay(100.millis)
+            actualQueue.add("fast-failure")
+            throw new RuntimeException("first failure")
+          }
+        )
+      }
+    }
+
+    tryResult.isFailure shouldBe true
+    tryResult.failed.get shouldBe a[RuntimeException]
+    tryResult.failed.get.getMessage shouldBe "second failure"
+    actualQueue.toArray should contain theSameElementsInOrderAs List("fast-failure", "slow-failure")
+  }
+
+  it should "fail through Raise.run when both branches fail with a raised error" in failAfter(
+    unblockTimeLimit
+  ) {
     val actualResult = Raise.run {
       Async.run {
         Async.raceSuccess[Int, Int](
@@ -116,8 +219,28 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
     actualResult shouldBe "second error"
   }
 
-  it should "observably cancel the loser once the winner succeeds" in {
-    val loserRan     = new java.util.concurrent.atomic.AtomicBoolean(false)
+  it should "fail through Raise.run when both branches fail with a raised error (block2 raises first)" in failAfter(
+    unblockTimeLimit
+  ) {
+    val actualResult = Raise.run {
+      Async.run {
+        Async.raceSuccess[Int, Int](
+          {
+            Async.delay(500.millis)
+            Raise.raise("second error")
+          }, {
+            Async.delay(100.millis)
+            Raise.raise("first error")
+          }
+        )
+      }
+    }
+
+    actualResult shouldBe "second error"
+  }
+
+  it should "observably cancel the loser once the winner succeeds" in failAfter(unblockTimeLimit) {
+    val loserRan     = new AtomicBoolean(false)
     val latch        = new CountDownLatch(1)
     val actualResult = Async.run {
       Async.raceSuccess(
@@ -138,36 +261,176 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers {
     loserRan.get() shouldBe false
   }
 
-  it should "not throw a FailedException from Async.run when one branch failed but the other succeeded" in {
-    // Regression guard: a naive fork of a throwing block would poison the enclosing
-    // StructuredTaskScope and make Async.run throw, even though raceSuccess itself
-    // should succeed because the other branch completed successfully.
-    noException should be thrownBy {
+  it should "cancel the loser's own forked children once the winner succeeds, not just the loser itself" in failAfter(
+    unblockTimeLimit
+  ) {
+    // CRITICAL finding 2: `captured` used to catch `InterruptedException`, clearing the interrupt
+    // flag and preventing `JvmAsync.fork`'s cancellation path from ever running. That made the
+    // loser's own forked child (here, a 4-second sleep) run to completion instead of being
+    // cancelled, even though the loser itself was supposed to be cancelled immediately.
+    val start        = java.lang.System.nanoTime()
+    val actualResult = Async.run {
+      Async.raceSuccess(
+        {
+          Async.delay(50.millis)
+          1
+        }, {
+          Async.fork {
+            Async.delay(4.seconds)
+            0
+          }
+          new CountDownLatch(1).await()
+          2
+        }
+      )
+    }
+    val elapsedMillis = (java.lang.System.nanoTime() - start) / 1000000L
+
+    actualResult shouldBe 1
+    // `race` resolves the equivalent program in well under a second; a regression that fails to
+    // cancel the loser's child would take the full 4+ seconds.
+    elapsedMillis should be < 2000L
+  }
+
+  it should "surface a branch's genuine failure rather than a bare cancellation when an unrelated sibling poisons the scope while raceSuccess is waiting on the loser" in failAfter(
+    unblockTimeLimit
+  ) {
+    // CRITICAL finding 3: while raceSuccess waits on the surviving branch after the other one
+    // failed, an unrelated sibling fiber can fail and shut down the enclosing scope, cancelling
+    // the branch raceSuccess is waiting on. That cancellation must never be reported as if it
+    // were the branch's own genuine failure (nor must it silently hang forever).
+    val tryResult = scala.util.Try {
       Async.run {
-        Async.raceSuccess(
+        Async.fork {
+          Async.delay(200.millis)
+          throw new RuntimeException("sibling boom")
+        }
+        Async.raceSuccess[Int, Int](
           {
-            Async.delay(100.millis)
-            throw new RuntimeException("ignored failure")
+            Async.delay(50.millis)
+            throw new RuntimeException("A fails")
           }, {
-            Async.delay(300.millis)
-            43
+            Async.delay(5.seconds)
+            2
           }
         )
       }
     }
+
+    tryResult.isFailure shouldBe true
+    // The genuine failure observed on the other branch must win over the meaningless
+    // cancellation caused by the unrelated sibling.
+    tryResult.failed.get.getMessage shouldBe "A fails"
   }
 
-  it should "return either winner when both branches succeed quickly" in {
+  // MEDIUM finding 4 (fatal errors silently discarded) is deliberately NOT covered by an
+  // automated test here: the old `captured` helper caught `Throwable`, including
+  // `VirtualMachineError`/`LinkageError`, silently discarding it whenever the other branch
+  // happened to succeed. `raceSuccess` no longer wraps branches in any try/catch at all — a
+  // fatal error thrown by a branch is handled by `JvmAsync.attemptFork` exactly like
+  // `JvmAsync.fork` already handles it for `race`/`racePair`/`par`/plain `fork`: it is recorded
+  // on the fiber's promise and rethrown into the parent scope. This was verified manually: a
+  // `raceSuccess({ throw new OutOfMemoryError("fake oom") }, { delay(200.millis); 2 })` probe,
+  // added temporarily to this spec and removed afterwards, did NOT return `OK(2)` — the
+  // `OutOfMemoryError` propagated and aborted the run with `java.lang.OutOfMemoryError: fake
+  // oom` (see the PR/commit description for the captured output). It is not kept as a permanent
+  // test because JDK 25's `StructuredTaskScope` does not cushion `Error`s the same way it
+  // cushions `Exception`s — any forked fiber (not just a `raceSuccess` branch) that lets an
+  // `Error` escape terminates its virtual thread uncaught, which aborts the whole shared test
+  // JVM rather than failing just this one test. That is pre-existing behavior of the whole
+  // `Async` runtime, not something specific to `raceSuccess`, and out of scope to change here.
+
+  it should "not let a raced branch's internally forked failing child poison the enclosing scope (failing branch is the loser)" in failAfter(
+    unblockTimeLimit
+  ) {
+    // CRITICAL finding 1, shape 1: the failing branch's own top-level code never throws directly
+    // — `Async.fork` returns a `Fiber` without rethrowing. The failure only surfaces later, when
+    // the branch's own nested scope is joined deep inside `JvmAsync.fork`/`attemptFork`, a path a
+    // naive try/catch around the branch body cannot see.
     val actualResult = Async.run {
       Async.raceSuccess(
         {
+          Async.fork {
+            Async.delay(10.millis)
+            throw new RuntimeException("inner boom")
+          }
+          Async.delay(200.millis)
           1
         }, {
+          Async.delay(500.millis)
           2
         }
       )
     }
 
-    actualResult should (be(1) or be(2))
+    actualResult shouldBe 2
+  }
+
+  it should "not let a raced branch's internally forked failing child poison the enclosing scope (failing branch is the winner's loser)" in failAfter(
+    unblockTimeLimit
+  ) {
+    // CRITICAL finding 1, shape 2: the loser is cancelled before it can even observe its own
+    // child's failure; that must not poison the scope the winner's value is returned into.
+    val actualResult = Async.run {
+      Async.raceSuccess(
+        {
+          Async.delay(50.millis)
+          1
+        }, {
+          Async.fork {
+            Async.delay(10.millis)
+            throw new RuntimeException("loser inner boom")
+          }
+          Async.delay(2.seconds)
+          2
+        }
+      )
+    }
+
+    actualResult shouldBe 1
+  }
+
+  it should "not let Async.par used inside a losing branch poison the enclosing scope when one par side fails" in failAfter(
+    unblockTimeLimit
+  ) {
+    // CRITICAL finding 1, shape 3: same root cause, different vector — the nested failure comes
+    // from `Async.par`'s own `racePair` machinery instead of a bare `Async.fork`.
+    val actualResult = Async.run {
+      Async.raceSuccess(
+        {
+          Async.par(
+            {
+              throw new RuntimeException("par boom")
+            }, {
+              Async.delay(100.millis)
+              "unused"
+            }
+          )
+          1
+        }, {
+          Async.delay(600.millis)
+          2
+        }
+      )
+    }
+
+    actualResult shouldBe 2
+  }
+
+  it should "genuinely race both branches rather than always favoring one when they tie" in failAfter(
+    unblockTimeLimit
+  ) {
+    // LOW finding 9: `actualResult should (be(1) or be(2))` on a single run passes for an
+    // implementation that unconditionally returns block1 (or ignores the race entirely).
+    // Running the tie repeatedly and requiring BOTH outcomes to show up proves raceSuccess is
+    // actually racing, not hardcoding a winner.
+    val observedResults = (1 to 50).map { _ =>
+      Async.run {
+        Async.raceSuccess(1, 2)
+      }
+    }.toSet
+
+    observedResults should contain(1)
+    observedResults should contain(2)
   }
 }
