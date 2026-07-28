@@ -520,4 +520,43 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
       Async.raceSuccess(1, 2)(using fake)
     }
   }
+
+  it should "cancel only the branch that actually lost when both branches succeed" in failAfter(
+    unblockTimeLimit
+  ) {
+    // Review finding: `onSuccess` used to call `loser.cancel()` unconditionally, even when its
+    // `winner.complete(value)` returned false because the other branch had already won. On a
+    // double success that second callback cancels the branch that actually won, interrupting it
+    // while it is still running its own completion and scope teardown. Only the branch that wins
+    // the `complete` race may cancel the other one.
+    //
+    // Both fibers below complete the instant their callback is registered, which reproduces the
+    // double success deterministically: `fiber1` wins, then `fiber2`'s callback finds the winner
+    // already completed.
+    val actualCancellations = new ConcurrentLinkedQueue[String]()
+
+    class ImmediateFiber[A](name: String, result: A) extends Fiber[A] {
+      override def value(using async: Async): Raise[Async.Cancelled] ?=> A = result
+      override def join()(using async: Async): Unit                        = ()
+      override def cancel()(using async: Async): Unit                      = {
+        actualCancellations.add(name)
+        ()
+      }
+      override def onComplete(fn: A => Unit)(using async: Async): Unit             = fn(result)
+      override def onFailure(handler: Throwable => Unit)(using async: Async): Unit = ()
+      override private[yaes] def unsafeValue(using async: Async): A                = result
+    }
+
+    val fake: Async = new Async.Unsafe {
+      def delay(d: Duration): Unit                                     = ()
+      def fork[A](name: String)(block: => A): Fiber[A]                 = attemptFork(name)(block)
+      override def attemptFork[A](name: String)(block: => A): Fiber[A] =
+        new ImmediateFiber[A](name, block)
+    }
+
+    val actualResult = Async.raceSuccess(1, 2)(using fake)
+
+    actualResult shouldBe 1
+    actualCancellations.toArray should contain theSameElementsInOrderAs List("fiber2")
+  }
 }

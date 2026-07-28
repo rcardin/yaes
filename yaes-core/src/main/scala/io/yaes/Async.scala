@@ -530,8 +530,16 @@ object Async {
       // Complete the winner before cancelling the loser: `cancel()` blocks on the loser's
       // `forkedThread` future until its thread has actually been forked, so completing the
       // winner first ensures the caller observes a result even if that wait were ever to stall.
-      winner.complete(value)
-      loser.cancel()
+      //
+      // Only cancel when `complete` actually won. If both branches succeed at effectively the
+      // same time, this callback runs on both of them; for the one that lost the `complete` race
+      // the "loser" it holds is in fact the branch that already won, which is still on its own
+      // thread finishing its completion and scope teardown. Interrupting it there would cancel
+      // the winner mid-cleanup for no benefit — both branches have already produced a value, so
+      // there is nothing left to cancel either way.
+      if (winner.complete(value)) {
+        loser.cancel()
+      }
     }
 
     def onFailure(error: Throwable): Unit = {
