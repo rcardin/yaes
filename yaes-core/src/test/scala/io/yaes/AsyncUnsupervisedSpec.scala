@@ -75,11 +75,13 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
 
     // Every fiber only signals progress through latches, so the interleaving is fully
     // determined by the handshake below and never by wall-clock timing:
-    //   1. both siblings start and then park on `failed`
-    //   2. only once both are parked does the third fiber throw
+    //   1. both siblings start and then wait on `failed`
+    //   2. only once the main body has seen both of them start does the third fiber throw
     //   3. the siblings wake up and do their work
     // Reaching step 3 is what proves a sibling was alive at the moment a peer failed
-    // and was not cancelled because of it.
+    // and was not cancelled because of it. Step 2 is gated from the main body rather
+    // than from inside the failing fiber, because an assertion inside an unjoined fiber
+    // would be swallowed by the unsupervised scope and could not fail the test.
     def sibling(name: String)(using Async): Unit = {
       Async.fork {
         siblingsStarted.countDown()
@@ -96,12 +98,14 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
       Async.unsupervised {
         sibling("sibling-1")
         sibling("sibling-2")
-        // A fiber that fails once both siblings are running, and is never joined.
+        // Both siblings are alive before the peer is allowed to fail. Asserting here, in
+        // the main body, means a starved fork fails the test instead of silently
+        // degrading the handshake.
+        siblingsStarted.await(5, TimeUnit.SECONDS) shouldBe true
+        // A fiber that fails while both siblings are running, and is never joined.
         Async.fork {
-          try {
-            siblingsStarted.await(5, TimeUnit.SECONDS)
-            throw new RuntimeException("fiber boom")
-          } finally failed.countDown()
+          try throw new RuntimeException("fiber boom")
+          finally failed.countDown()
         }
         // Leaving the block cancels whatever is still running, so wait for the failure
         // to happen and for the siblings to finish their work afterwards.
