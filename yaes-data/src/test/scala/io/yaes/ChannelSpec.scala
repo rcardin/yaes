@@ -738,4 +738,187 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
 
     closed should be(true)
   }
+
+  "An unbounded Channel tryReceive" should "return the element when one is immediately available" in {
+    val channel = Channel.unbounded[Int]()
+
+    val actualResult = Raise.either {
+      channel.send(42)
+      channel.tryReceive()
+    }
+
+    actualResult should be(Right(Some(42)))
+  }
+
+  it should "return None on an empty open channel without blocking the caller" in {
+    val channel = Channel.unbounded[Int]()
+
+    val startTime    = java.lang.System.nanoTime()
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+    val elapsed = (java.lang.System.nanoTime() - startTime).nanos
+
+    actualResult should be(Right(None))
+    elapsed.should(be < 1.second)
+  }
+
+  it should "raise ChannelClosed on an empty channel that has been closed" in {
+    val channel = Channel.unbounded[Int]()
+    channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "drain the buffered elements before raising ChannelClosed on a closed channel" in {
+    val channel = Channel.unbounded[Int]()
+
+    Raise.run {
+      channel.send(1)
+      channel.send(2)
+    }
+    channel.close()
+
+    val first  = Raise.either { channel.tryReceive() }
+    val second = Raise.either { channel.tryReceive() }
+    val third  = Raise.either { channel.tryReceive() }
+
+    first should be(Right(Some(1)))
+    second should be(Right(Some(2)))
+    third should be(Left(ChannelClosed))
+  }
+
+  it should "raise ChannelClosed on a cancelled channel even if elements were buffered" in {
+    val channel = Channel.unbounded[Int]()
+
+    Raise.run {
+      channel.send(1)
+    }
+    channel.cancel()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  "A bounded Channel tryReceive" should "return the element when one is immediately available" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    val actualResult = Raise.either {
+      channel.send(42)
+      channel.tryReceive()
+    }
+
+    actualResult should be(Right(Some(42)))
+  }
+
+  it should "return None on an empty open channel" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Right(None))
+  }
+
+  it should "raise ChannelClosed on an empty channel that has been closed" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+    channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "unblock a sender parked on a full buffer" in {
+    val channel   = Channel.bounded[Int](capacity = 1)
+    val sendTrace = new LinkedBlockingQueue[String]()
+
+    val actualResult = Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(1)
+          sendTrace.put("sent1")
+          channel.send(2) // Suspends: the buffer is full
+          sendTrace.put("sent2")
+        }
+
+        Async.delay(200.millis)
+        // The sender is parked on the full buffer at this point
+        val parkedTrace = sendTrace.toArray.toList
+
+        val first = channel.tryReceive()
+
+        Async.delay(200.millis)
+        val unblockedTrace = sendTrace.toArray.toList
+        val second         = channel.tryReceive()
+
+        (parkedTrace, first, unblockedTrace, second)
+      }
+    }
+
+    actualResult should be(
+      (List("sent1"), Some(1), List("sent1", "sent2"), Some(2))
+    )
+  }
+
+  "A rendezvous Channel tryReceive" should "return the element when a sender is already parked with an item" in {
+    val channel = Channel.rendezvous[Int]()
+
+    val actualResult = Raise.run {
+      Async.run {
+        Async.fork {
+          channel.send(42)
+        }
+
+        Async.delay(200.millis)
+        // The sender is parked with the item ready at this point
+        channel.tryReceive()
+      }
+    }
+
+    actualResult should be(Some(42))
+  }
+
+  it should "return None when no sender is waiting and not initiate a handshake" in {
+    val channel = Channel.rendezvous[Int]()
+
+    val actualResult = Raise.run {
+      Async.run {
+        // No sender yet: tryReceive must not park nor register a pending receiver
+        val empty = channel.tryReceive()
+
+        val fiber = Async.fork {
+          channel.send(42)
+        }
+
+        Async.delay(200.millis)
+        val delivered = channel.receive()
+
+        (empty, delivered)
+      }
+    }
+
+    actualResult should be((None, 42))
+  }
+
+  it should "raise ChannelClosed when the channel is closed and no item is pending" in {
+    val channel = Channel.rendezvous[Int]()
+    channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
 }
