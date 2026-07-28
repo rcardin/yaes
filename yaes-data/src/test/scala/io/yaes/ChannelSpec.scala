@@ -560,7 +560,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
     actualResult should be(ChannelClosed)
     val events = actualQueue.toArray.toList
-    events should contain allOf("s1", "cancel", "receive-attempt")
+    events should contain allOf ("s1", "cancel", "receive-attempt")
   }
 
   "Bounded channel with DROP_OLDEST policy" should "drop oldest element when buffer is full" in {
@@ -598,7 +598,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "not suspend the sender when buffer is full" in {
     import Channel.OverflowStrategy
 
-    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+    val channel   = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
     val sendTimes = new LinkedBlockingQueue[String]()
 
     Raise.run {
@@ -660,7 +660,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "not suspend the sender when buffer is full" in {
     import Channel.OverflowStrategy
 
-    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+    val channel   = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
     val sendTimes = new LinkedBlockingQueue[String]()
 
     Raise.run {
@@ -844,8 +844,12 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "return None on an empty open channel" in {
     val channel = Channel.bounded[Int](capacity = 2)
 
-    val actualResult = Raise.either {
-      channel.tryReceive()
+    // Nothing else can ever feed this channel, so a `tryReceive` that parks would never be woken.
+    // The time limit is what turns that regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.tryReceive()
+      }
     }
 
     actualResult should be(Right(None))
@@ -936,12 +940,16 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
     val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
 
-    val actualResult = Raise.either {
-      channel.send(1) // Buffer: [1]
-      channel.send(2) // Buffer: [1, 2]
-      channel.send(3) // Buffer: [2, 3] (1 dropped)
+    // The third `tryReceive` sees an empty but still open channel that nothing else can feed, so a
+    // regression that parks the caller would hang the suite instead of failing it.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.send(1) // Buffer: [1]
+        channel.send(2) // Buffer: [1, 2]
+        channel.send(3) // Buffer: [2, 3] (1 dropped)
 
-      (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+        (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+      }
     }
 
     actualResult should be(Right((Some(2), Some(3), None)))
@@ -952,12 +960,16 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
     val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
 
-    val actualResult = Raise.either {
-      channel.send(1) // Buffer: [1]
-      channel.send(2) // Buffer: [1, 2]
-      channel.send(3) // Buffer: [1, 2] (3 dropped)
+    // The third `tryReceive` sees an empty but still open channel that nothing else can feed, so a
+    // regression that parks the caller would hang the suite instead of failing it.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.send(1) // Buffer: [1]
+        channel.send(2) // Buffer: [1, 2]
+        channel.send(3) // Buffer: [1, 2] (3 dropped)
 
-      (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+        (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+      }
     }
 
     actualResult should be(Right((Some(1), Some(2), None)))
@@ -998,18 +1010,23 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "return None when no sender is waiting and not initiate a handshake" in {
     val channel = Channel.rendezvous[Int]()
 
-    val actualResult = Raise.run {
-      Async.run {
-        // No sender yet: tryReceive must not park nor register a pending receiver
-        val empty = channel.tryReceive()
+    // The first `tryReceive` runs before any sender is forked, so a `tryReceive` that parks would
+    // never be woken. The time limit is what turns that regression into a failure instead of a hung
+    // suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          // No sender yet: tryReceive must not park nor register a pending receiver
+          val empty = channel.tryReceive()
 
-        Async.fork {
-          channel.send(42)
+          Async.fork {
+            channel.send(42)
+          }
+
+          val delivered = channel.receive()
+
+          (empty, delivered)
         }
-
-        val delivered = channel.receive()
-
-        (empty, delivered)
       }
     }
 
@@ -1025,6 +1042,36 @@ class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
     }
 
     actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "drain the item left by a parked sender before raising ChannelClosed" in {
+    val channel     = Channel.rendezvous[Int]()
+    val sendOutcome = new LinkedBlockingQueue[Either[ChannelClosed, Unit]]()
+
+    // The sender deposits its item and then parks waiting for a receiver. Closing the channel wakes
+    // it up, and it unwinds with ChannelClosed leaving the deposited item behind. The time limit is
+    // what turns a missing wake-up into a failure instead of a hung suite.
+    failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          Async.fork {
+            sendOutcome.put(Raise.either { channel.send(42) })
+          }
+
+          // The sender is parked with the item ready at this point
+          Async.delay(200.millis)
+          channel.close()
+        }
+      }
+    }
+
+    sendOutcome.toArray.toList should be(List(Left(ChannelClosed)))
+
+    val drained   = Raise.either { channel.tryReceive() }
+    val exhausted = Raise.either { channel.tryReceive() }
+
+    drained should be(Right(Some(42)))
+    exhausted should be(Left(ChannelClosed))
   }
 
   it should "raise ChannelClosed on a cancelled channel" in {

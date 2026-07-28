@@ -1777,6 +1777,29 @@ Raise.run {
 }
 ```
 
+**Non-Blocking Receive**:
+
+`tryReceive` is the non-blocking counterpart of `receive`: it inspects the channel once and never suspends the caller. It returns `Some(element)` if an element is immediately available, `None` if the channel is empty but still open, and raises `ChannelClosed` once the channel is drained and closed, or cancelled.
+
+```scala 3
+import io.yaes.Channel
+import io.yaes.Raise.*
+
+val channel = Channel.unbounded[Int]()
+
+Raise.run {
+  channel.send(42)
+
+  channel.tryReceive() // Some(42)
+  channel.tryReceive() // None: empty but still open
+
+  channel.close()
+  channel.tryReceive() // Raises ChannelClosed
+}
+```
+
+A rendezvous channel has no buffer, so `tryReceive` returns `Some(value)` only when a sender is already parked with an item ready at the moment of the call. Otherwise it returns `None` without initiating a handshake, which means a sender arriving immediately afterwards is not served by that call.
+
 **Closing vs Canceling**:
 
 - **`close()`**: Prevents further sends but allows receiving remaining buffered elements
