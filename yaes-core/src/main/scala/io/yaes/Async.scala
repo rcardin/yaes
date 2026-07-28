@@ -12,6 +12,9 @@ import ju.concurrent.StructuredTaskScope
 import ju.concurrent.CountDownLatch
 import ju.concurrent.StructuredTaskScope.Joiner
 import ju.concurrent.StructuredTaskScope.FailedException
+import ju.concurrent.atomic.AtomicBoolean
+import ju.concurrent.atomic.AtomicInteger
+import ju.concurrent.atomic.AtomicReferenceArray
 
 type Async = Async.Unsafe
 
@@ -701,6 +704,120 @@ object Async {
         throw t
     }
     fibers.map(_.unsafeValue)
+  }
+
+  /** Executes a function over all elements of a collection in parallel, like [[parTraverse]], but
+    * bounding how many fibers, and therefore how many invocations of `f`, run at the same time.
+    *
+    * Unlike [[parTraverse]], which forks one fiber per element, this forks at most `concurrency`
+    * worker fibers, capped at the number of elements: `math.min(math.max(1, concurrency),
+    * items.size)`. Each worker repeatedly claims the next unclaimed element from a shared counter
+    * and applies `f` to it, so no more than `concurrency` invocations of `f` ever run at the same
+    * time, and the number of fibers and virtual threads created no longer grows with the size of
+    * `items`. Results are collected preserving the input order, regardless of completion or claim
+    * order.
+    *
+    * `items` is materialized once, up front, into an indexed sequence before any worker is forked,
+    * so a lazy `Seq` (for example a `LazyList`) does not serialize the traversal.
+    *
+    * If any invocation of `f` fails, every worker is cancelled, exactly as [[parTraverse]] cancels
+    * its siblings on failure. The failing worker flags the failure before its exception unwinds, so
+    * a worker never claims a new element once a failure has been observed; this is checked in
+    * addition to, and faster than, the cooperative interrupt used to cancel the other workers. An
+    * element a worker has already claimed still runs to completion, since cancellation is
+    * cooperative, so this cannot guarantee that no additional element ever starts, only that no
+    * unclaimed one does. If a worker is cancelled after claiming an element but before finishing
+    * it, that element is never produced, and the traversal fails with a
+    * `java.util.concurrent.CancellationException` instead of silently returning a partial result,
+    * mirroring how [[parTraverse]] surfaces cancellation through `Fiber.unsafeValue`.
+    *
+    * A `concurrency` of `items.size` or greater produces the same result as [[parTraverse]], but it
+    * does not guarantee that every element runs on its own fiber: workers still claim indices from
+    * a shared counter, so a fast worker can claim and run several elements before a slower sibling
+    * claims its first one. Computations that need every element to run at the same time, such as a
+    * rendezvous or a barrier shared across all elements, must use [[parTraverse]] instead. A
+    * non-positive `concurrency` is clamped to `1`, making the traversal fully sequential, one
+    * element at a time, rather than throwing: this follows this project's error handling philosophy
+    * of clamping invalid input to a sensible default instead of raising an exception from a public
+    * API (see the "Error Handling Philosophy" section of `CLAUDE.md`).
+    *
+    * Example:
+    * {{{
+    * val profiles: Seq[UserProfile] = Async.run {
+    *   // At most 3 calls to fetchUserProfile run at the same time, using at most 3 fibers.
+    *   Async.parTraverseLimit(List(1, 2, 3, 4, 5), concurrency = 3)(fetchUserProfile)
+    * }
+    * }}}
+    *
+    * @param items
+    *   the collection of elements to process
+    * @param concurrency
+    *   the maximum number of invocations of `f`, and worker fibers, that run at the same time; a
+    *   non-positive value is clamped to `1`
+    * @param f
+    *   the function to apply to each element
+    * @param async
+    *   the async context
+    * @tparam A
+    *   the type of input elements
+    * @tparam B
+    *   the type of output elements
+    * @return
+    *   a sequence of results in the same order as the input
+    * @throws java.util.concurrent.CancellationException
+    *   if the traversal is cancelled by an external cancellation of the enclosing scope, or if `f`
+    *   itself throws `InterruptedException`, before every element has been computed; a genuine
+    *   failure of `f` propagates unchanged instead
+    * @see
+    *   [[parTraverse]] for the unbounded variant this builds on
+    */
+  def parTraverseLimit[A, B](items: Seq[A], concurrency: Int)(f: A => B)(using
+      async: Async
+  ): Seq[B] = {
+    val elements    = items.toIndexedSeq
+    val size        = elements.size
+    val workerCount = math.min(math.max(1, concurrency), size)
+    val nextIndex   = new AtomicInteger(0)
+    val results     = new AtomicReferenceArray[AnyRef](size)
+    val completed   = new AtomicInteger(0)
+    val aborted     = new AtomicBoolean(false)
+
+    val workers = (0 until workerCount).map { workerId =>
+      forkNamed(s"parTraverseLimit-worker-$workerId") {
+        try {
+          var idx = nextIndex.getAndIncrement()
+          while (idx < size && !aborted.get() && !Thread.currentThread().isInterrupted()) {
+            results.set(idx, f(elements(idx)).asInstanceOf[AnyRef])
+            completed.incrementAndGet()
+            idx = nextIndex.getAndIncrement()
+          }
+        } catch {
+          case t: Throwable =>
+            // Flag the failure before unwinding so sibling workers stop claiming new
+            // elements as soon as possible, without waiting for the cooperative interrupt
+            // that cancels them to land.
+            aborted.set(true)
+            throw t
+        }
+      }
+    }
+    try {
+      workers.foreach(_.join())
+    } catch {
+      case t: Throwable =>
+        workers.foreach(_.cancel())
+        throw t
+    }
+    // JvmFiber.join() deliberately swallows CancellationException, so a cancelled worker
+    // (whether from an external scope cancellation or from claiming an element and then
+    // being interrupted before computing it) joins normally instead of throwing here. The
+    // completed count is the only reliable signal that every element was actually computed;
+    // without it, unwritten slots of `results` would be read as null, matching parTraverse's
+    // behaviour of rethrowing cancellation via Fiber.unsafeValue rather than returning a
+    // partial result.
+    if (completed.get() != size)
+      throw new CancellationException("parTraverseLimit was cancelled before completing")
+    (0 until size).map(idx => results.get(idx).asInstanceOf[B])
   }
 
   /** Races two computations and provides access to both fibers.

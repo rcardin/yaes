@@ -154,6 +154,27 @@ Key properties of `parTraverse`:
 - If any fiber fails, all remaining fibers are cancelled
 - Works with an empty collection (returns an empty `Seq`)
 
+**Bounded Parallel Traversal**: like `parTraverse`, but capping how many invocations of `f` run at the same time:
+
+```scala
+import io.yaes.Async.*
+
+val profiles: Seq[UserProfile] = Async.run {
+  // At most 3 calls to fetchUserProfile run at the same time.
+  Async.parTraverseLimit(List(1, 2, 3, 4, 5), concurrency = 3)(fetchUserProfile)
+}
+```
+
+Unlike `parTraverse`, `parTraverseLimit` does not fork one fiber per element. It forks at most `concurrency` worker fibers, capped at the number of elements, and each worker repeatedly claims the next unclaimed element and runs `f` on it. This keeps both the number of invocations in flight and the number of fibers created bounded by `concurrency`, no matter how large the input collection is, which makes it a good fit when `f` calls something with limited capacity, such as a connection pool or a rate limited API, and running every element at once would overwhelm it, or simply when the collection itself can be large.
+
+Key properties of `parTraverseLimit`:
+- At most `concurrency` invocations of `f`, and at most `concurrency` worker fibers, exist at the same time
+- Results are returned in the same order as the input, regardless of completion or claim order
+- If any invocation fails, every worker is cancelled; the failing worker flags the failure before its exception unwinds, so a worker never claims a new element once a failure has been observed, though an element a worker had already claimed still runs to completion
+- A `concurrency` of `items.size` or greater produces the same result as `parTraverse`, but does not guarantee that every element runs on its own fiber, since workers still claim indices from a shared counter; computations that need every element running at the same time, such as a rendezvous or a barrier, must use `parTraverse` instead
+- A non-positive `concurrency` is clamped to `1`, running fully sequentially, instead of throwing
+- If the traversal is cancelled before every element is computed, it fails with `java.util.concurrent.CancellationException` rather than returning a partial result, mirroring `parTraverse`
+
 **Racing** — get the first result and cancel the other:
 
 ```scala

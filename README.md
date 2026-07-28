@@ -407,6 +407,7 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 - `Async.raceSuccess`: Like `Async.race`, but ignores failures unless both branches fail — it keeps waiting on the surviving branch instead of letting a fast failure beat a slow success. Only fails if *both* branches fail, surfacing the last observed failure.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 - `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
+- `Async.parTraverseLimit`: Like `Async.parTraverse`, but bounds how many invocations run at the same time.
 - `Async.never`: A computation that never completes on its own; useful as a branch of `Async.race`, `Async.raceSuccess`, or `Async.timeout` that must be cancelled or timed out rather than complete by itself. It must always be forked (directly or through a combinator like `race`) and that fork must be cancelled, raced away, or wrapped in a timeout, otherwise the enclosing `Async.run` blocks forever.
 
 #### Parallel Traversal
@@ -438,6 +439,19 @@ val result: Either[String, Seq[UserProfile]] = Raise.either {
   Async.run {
     Async.parTraverse(List(1, 2, 3))(validateAndFetch)
   }
+}
+```
+
+#### Bounded Parallel Traversal
+
+When the number of elements can be large, or `f` calls a resource with a limited capacity such as a connection pool or a rate limited API, use `Async.parTraverseLimit` to cap how many invocations of `f` run at the same time. Unlike `parTraverse`, it does not fork one fiber per element: it forks at most `concurrency` worker fibers, capped at `items.size`, and each worker repeatedly claims the next unclaimed element and runs `f` on it, so both the number of invocations in flight and the number of fibers created are bounded by `concurrency`, regardless of how large `items` is. Results are still returned in input order, and a failure still cancels every worker: the failing worker flags the failure before its exception unwinds, so a worker never claims a new element once a failure has been observed, though an element a worker had already claimed still runs to completion. A `concurrency` of `items.size` or greater produces the same result as `parTraverse`, but it does not guarantee that every element runs on its own fiber, since workers still claim indices from a shared counter; computations that need every element running at the same time, such as a rendezvous or a barrier, must use `parTraverse` instead. A non-positive `concurrency` is clamped to `1` (fully sequential) rather than throwing. If the traversal is cancelled before every element is computed, it fails with `java.util.concurrent.CancellationException` rather than returning a partial result, mirroring `parTraverse`:
+
+```scala 3
+import io.yaes.Async.*
+
+val profiles: Seq[UserProfile] = Async.run {
+  // At most 3 calls to fetchUserProfile run at the same time.
+  Async.parTraverseLimit(List(1, 2, 3, 4, 5), concurrency = 3)(fetchUserProfile)
 }
 ```
 
