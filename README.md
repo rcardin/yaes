@@ -407,6 +407,7 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 - `Async.raceSuccess`: Like `Async.race`, but ignores failures unless both branches fail — it keeps waiting on the surviving branch instead of letting a fast failure beat a slow success. Only fails if *both* branches fail, surfacing the last observed failure.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 - `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
+- `Async.never`: A computation that never completes on its own; useful as a branch of `Async.race`, `Async.raceSuccess`, or `Async.timeout` that must be cancelled or timed out rather than complete by itself. It must always be forked (directly or through a combinator like `race`) and that fork must be cancelled, raced away, or wrapped in a timeout, otherwise the enclosing `Async.run` blocks forever.
 
 #### Parallel Traversal
 
