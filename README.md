@@ -403,7 +403,8 @@ Note that supervision is a property of the active scope, not of the `fork` call.
 Using the `Async.fork` DSL is quite low-level. The library provides a set of structured concurrency primitives that can be used to define more complex asynchronous computations. The available primitives are:
 
 - `Async.par`: Runs two asynchronous computations in parallel and returns both.
-- `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes. The other one is canceled.
+- `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes, success or failure. The other one is canceled.
+- `Async.raceSuccess`: Like `Async.race`, but ignores failures unless both branches fail — it keeps waiting on the surviving branch instead of letting a fast failure beat a slow success. Only fails if *both* branches fail, surfacing the last observed failure.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 - `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
 
