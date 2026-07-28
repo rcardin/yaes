@@ -176,6 +176,26 @@ Unlike `race`, `raceSuccess` keeps waiting on the surviving branch when one of t
 val (winner, remaining) = Async.racePair(computation1, computation2)
 ```
 
+**Never Completing**: a computation that blocks forever on its own:
+
+```scala
+import io.yaes.Async.*
+import scala.concurrent.duration.*
+
+val result: Int = Async.run {
+  Async.race(
+    Async.never, // never completes on its own
+    {
+      Async.delay(1.second)
+      42
+    }
+  )
+}
+// result == 42; the never branch is cancelled once the other one wins
+```
+
+`Async.never` parks the fiber efficiently, without busy-waiting, until it is cancelled. It is useful for a computation that must run until cancelled, or for a branch of `race`, `raceSuccess`, or `timeout` that should never complete on its own. It must always be forked, directly with `fork`/`attemptFork` or indirectly through a combinator such as `race` that forks its branches for you, and that fork must itself be cancelled, raced away, or wrapped in `timeout`. A bare `Async.run { Async.never }` with no fork in between hangs forever, and so does a forked `never` left un-cancelled and un-raced directly inside `run`, since `run` waits for every forked fiber to finish, joined or not. `Async.unsupervised` does not have that problem: it cancels any fiber still running as soon as its block returns. `par` and `parTraverse` wait for every branch to finish before returning, so pairing either of them with `never` deadlocks unconditionally.
+
 ### Key Features
 
 - **Structured Concurrency**: All fibers are properly managed and cleaned up
