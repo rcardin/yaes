@@ -116,7 +116,9 @@ class AsyncNeverSpec extends AnyFlatSpec with Matchers with TimeLimits {
     } shouldBe 42
     val elapsedMillis = (java.lang.System.nanoTime() - start) / 1000000L
 
-    elapsedMillis should be < 5000L
+    // Tightened to match the sibling test above: this test has no internal delay at all, so it
+    // has less fixed overhead to absorb and can afford the same tight bound.
+    elapsedMillis should be < 800L
   }
 
   it should "not throw any exception when joining a fiber cancelled while parked in never" in failAfter(

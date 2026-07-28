@@ -168,7 +168,7 @@ class JvmAsync extends Async.Unsafe {
   override def attemptFork[A](name: String)(block: => A): Fiber[A] =
     JvmAsync.forkImpl(name, rethrowOnFailure = false)(block)
 
-  override def never[A](): Nothing = {
+  override def never(): Nothing = {
     new CountDownLatch(1).await()
     // Unreachable: the latch above is never counted down, so `await()` can only return by
     // throwing InterruptedException once this thread is interrupted. Throwing that same
@@ -1038,17 +1038,19 @@ object Async {
       * `await()` on it returns is by throwing `InterruptedException` once the thread is
       * interrupted, the same cancellation signal [[delay]] and [[fork]] already rely on.
       *
-      * A backend whose cancellation mechanism is not interrupt based, i.e. one that does not
-      * ultimately call `Thread.interrupt()` to cancel a fiber, must override this method with a
-      * parking primitive that responds to whatever signal that backend uses instead. Inheriting the
-      * JVM behavior on such a backend would compile cleanly but produce an `Async.never` that can
-      * never actually be cancelled.
+      * This method has no default implementation; every backend must supply its own. No default
+      * would be safe here: returning a value is impossible given the `Nothing` result type,
+      * throwing an untracked exception would violate this project's error handling philosophy, and
+      * looping to avoid both would burn CPU forever and defeat the purpose of parking.
       *
-      * @tparam A
-      *   the type of value this method would produce, if it ever returned one
+      * On an interrupt based backend, implement this by parking on any interruptible primitive, the
+      * same way [[JvmAsync]] parks on an uncounted `CountDownLatch`. On a backend whose cancellation
+      * mechanism is not interrupt based, i.e. one that does not ultimately call `Thread.interrupt()`
+      * to cancel a fiber, park on whatever signal that backend uses instead to cancel a fiber.
+      *
       * @return
       *   never returns normally
       */
-    def never[A](): Nothing
+    def never(): Nothing
   }
 }
