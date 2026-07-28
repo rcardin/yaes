@@ -292,8 +292,8 @@ object Async {
     *
     * This method is deliberately not an overload of [[fork]]: a block whose type conforms to
     * `String` (including `Nothing`, e.g. a block ending in `throw` or `Raise.raise`) would
-    * otherwise bind to the `name` parameter and be evaluated eagerly on the caller thread, with
-    * the remaining parameter list silently eta-expanded to a discarded function value.
+    * otherwise bind to the `name` parameter and be evaluated eagerly on the caller thread, with the
+    * remaining parameter list silently eta-expanded to a discarded function value.
     *
     * @param name
     *   the name of the fiber
@@ -392,6 +392,82 @@ object Async {
       case Right((fiber1, result2)) =>
         fiber1.cancel()
         result2
+    }
+  }
+
+  /** Races two computations against each other, returning the result of the first one to *succeed*,
+    * ignoring failures unless both branches fail.
+    *
+    * Unlike [[race]] — which returns whichever branch completes first, success or failure, so a
+    * fast failure beats a slow success — `raceSuccess` keeps waiting on the surviving branch when
+    * one of them fails. Only if *both* branches fail does `raceSuccess` fail, surfacing the LAST
+    * failure observed (i.e. the failure of whichever branch finished second).
+    *
+    * As soon as one branch succeeds, the other one is cancelled, exactly like [[race]] does.
+    *
+    * Example:
+    * {{{
+    * val result = Async.raceSuccess(
+    *   { /* fails fast */ throw new RuntimeException("boom") },
+    *   { /* succeeds slowly */ 42 }
+    * )
+    * // result == 42, the fast failure is ignored
+    * }}}
+    *
+    * @param block1
+    *   the first computation
+    * @param block2
+    *   the second computation
+    * @param async
+    *   the async context
+    * @tparam R1
+    *   the result type of the first computation
+    * @tparam R2
+    *   the result type of the second computation
+    * @return
+    *   the result of the first computation to succeed
+    * @throws Throwable
+    *   the last failure observed, if both computations fail
+    * @see
+    *   [[race]] for a race that returns the first branch to complete, win or lose
+    */
+  def raceSuccess[R1, R2](block1: => R1, block2: => R2)(using async: Async): R1 | R2 = {
+    import scala.util.{Try, Success, Failure}
+
+    // Captures the outcome of a block instead of letting a failure escape the fiber body.
+    // A fiber that throws would re-propagate into the enclosing StructuredTaskScope (see
+    // JvmAsync.fork) and poison the whole Async.run, even though raceSuccess itself should
+    // only fail when *both* branches fail. Catching Throwable (not just NonFatal) is required
+    // because Raise.raise's boundary/break control-flow exception must be captured too.
+    def captured[A](block: => A): Try[A] =
+      try Success(block)
+      catch { case t: Throwable => Failure(t) }
+
+    racePair(captured(block1), captured(block2)) match {
+      case Left((outcome1, fiber2)) =>
+        outcome1 match {
+          case Success(value1) =>
+            fiber2.cancel()
+            value1
+          case Failure(error1) =>
+            fiber2.join()
+            fiber2.unsafeValue match {
+              case Success(value2) => value2
+              case Failure(error2) => throw error2
+            }
+        }
+      case Right((fiber1, outcome2)) =>
+        outcome2 match {
+          case Success(value2) =>
+            fiber1.cancel()
+            value2
+          case Failure(error2) =>
+            fiber1.join()
+            fiber1.unsafeValue match {
+              case Success(value1) => value1
+              case Failure(error1) => throw error1
+            }
+        }
     }
   }
 
