@@ -4,8 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration.*
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import io.yaes.Async.*
 
@@ -26,14 +25,14 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
           }
         }
         // Wait until the fiber is actually running before leaving the block.
-        started.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        started.await(5, TimeUnit.SECONDS) shouldBe true
         42
       }
     }
 
     result shouldBe 42
     // The block returned without waiting for the 10-second delay, and the fiber was cancelled.
-    cancelled.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+    cancelled.await(5, TimeUnit.SECONDS) shouldBe true
   }
 
   it should "propagate an exception thrown from the main body of the block" in {
@@ -60,12 +59,65 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
           try throw new RuntimeException("fiber boom")
           finally failed.countDown()
         }
-        failed.await(5, java.util.concurrent.TimeUnit.SECONDS) shouldBe true
+        failed.await(5, TimeUnit.SECONDS) shouldBe true
         123
       }
     }
 
     result shouldBe 123
+  }
+
+  it should "keep sibling fibers running to completion when one forked fiber fails" in {
+    val queue           = new ConcurrentLinkedQueue[String]()
+    val siblingsStarted = new CountDownLatch(2)
+    val failed          = new CountDownLatch(1)
+    val siblingsDone    = new CountDownLatch(2)
+
+    // Every fiber only signals progress through latches, so the interleaving is fully
+    // determined by the handshake below and never by wall-clock timing:
+    //   1. both siblings start and then wait on `failed`
+    //   2. only once the main body has seen both of them start does the third fiber throw
+    //   3. the siblings wake up and do their work
+    // Reaching step 3 is what proves a sibling was alive at the moment a peer failed
+    // and was not cancelled because of it. Step 2 is gated from the main body rather
+    // than from inside the failing fiber, because an assertion inside an unjoined fiber
+    // would be swallowed by the unsupervised scope and could not fail the test.
+    def sibling(name: String)(using Async): Unit = {
+      Async.fork {
+        siblingsStarted.countDown()
+        // The sibling is alive and waiting while the peer fiber fails.
+        if (failed.await(5, TimeUnit.SECONDS)) {
+          queue.add(name)
+          siblingsDone.countDown()
+        }
+      }
+      ()
+    }
+
+    val result = Async.run {
+      Async.unsupervised {
+        sibling("sibling-1")
+        sibling("sibling-2")
+        // Both siblings are alive before the peer is allowed to fail. Asserting here, in
+        // the main body, means a starved fork fails the test instead of silently
+        // degrading the handshake.
+        siblingsStarted.await(5, TimeUnit.SECONDS) shouldBe true
+        // A fiber that fails while both siblings are running, and is never joined.
+        Async.fork {
+          try throw new RuntimeException("fiber boom")
+          finally failed.countDown()
+        }
+        // Leaving the block cancels whatever is still running, so wait for the failure
+        // to happen and for the siblings to finish their work afterwards.
+        failed.await(5, TimeUnit.SECONDS) shouldBe true
+        siblingsDone.await(5, TimeUnit.SECONDS) shouldBe true
+        "ok"
+      }
+    }
+
+    // The unjoined failure did not propagate, and both siblings ran to completion.
+    result shouldBe "ok"
+    queue.toArray should contain theSameElementsAs List("sibling-1", "sibling-2")
   }
 
   it should "run Async.fork inside the scope without modification and return the block result" in {

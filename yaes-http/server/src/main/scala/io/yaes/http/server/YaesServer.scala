@@ -6,6 +6,7 @@ import io.yaes.http.server.parsing.{HttpParser, HttpWriter}
 import io.yaes.http.server.routing.Route
 import java.io.IOException
 import java.net.{ServerSocket, Socket, SocketException}
+import java.nio.channels.ClosedByInterruptException
 import scala.concurrent.duration.DurationInt
 import scala.util.boundary
 import scala.util.boundary.break
@@ -237,8 +238,9 @@ object YaesServer {
               // Accept loop - runs as main fiber in structured scope
               // Each request is handled in a forked fiber
               // Shutdown closes the ServerSocket to break out of accept()
+              var accepting = true
               try {
-                while (!Shutdown.isShuttingDown()) {
+                while (accepting && !Shutdown.isShuttingDown()) {
                   try {
                     val socket = serverSocket.accept()
                     // Fork a fiber to handle this request
@@ -246,10 +248,16 @@ object YaesServer {
                       handleConnection(socket, serverDef.routes, config)
                     }
                   } catch {
-                    case _: SocketException if Shutdown.isShuttingDown() =>
-                      // Expected during shutdown - ServerSocket was closed
-                      // Break out of the accept loop
-                      ()
+                    case _: ClosedByInterruptException =>
+                      // The accept loop fiber was cancelled. The interrupt already
+                      // closed the ServerSocket, so stop accepting and preserve the
+                      // interrupt status for the enclosing structured scope.
+                      Thread.currentThread().interrupt()
+                      accepting = false
+                    case _: SocketException if serverSocket.isClosed =>
+                      // Expected during shutdown, or after a cancellation closed the
+                      // socket. Accepting again would spin on "Socket is closed".
+                      accepting = false
                     case ex: Exception =>
                       // Log unexpected errors but continue accepting
                       logger.error(s"Error accepting connection: ${ex.getMessage}")
