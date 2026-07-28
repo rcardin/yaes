@@ -10,6 +10,12 @@ import io.yaes.Async.*
 
 class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
 
+  /** Waits for a latch to reach zero, bounding every synchronisation point in this spec with the
+    * same timeout. Returns `false` on timeout so call sites can assert on it.
+    */
+  private def awaitLatch(latch: CountDownLatch): Boolean =
+    latch.await(5, TimeUnit.SECONDS)
+
   "The Async.unsupervised scope" should "return promptly and cancel a still-running unjoined fiber" in {
     val started   = new CountDownLatch(1)
     val cancelled = new CountDownLatch(1)
@@ -25,14 +31,14 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
           }
         }
         // Wait until the fiber is actually running before leaving the block.
-        started.await(5, TimeUnit.SECONDS) shouldBe true
+        awaitLatch(started) shouldBe true
         42
       }
     }
 
     result shouldBe 42
     // The block returned without waiting for the 10-second delay, and the fiber was cancelled.
-    cancelled.await(5, TimeUnit.SECONDS) shouldBe true
+    awaitLatch(cancelled) shouldBe true
   }
 
   it should "propagate an exception thrown from the main body of the block" in {
@@ -59,7 +65,7 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
           try throw new RuntimeException("fiber boom")
           finally failed.countDown()
         }
-        failed.await(5, TimeUnit.SECONDS) shouldBe true
+        awaitLatch(failed) shouldBe true
         123
       }
     }
@@ -86,7 +92,7 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
       Async.fork {
         siblingsStarted.countDown()
         // The sibling is alive and waiting while the peer fiber fails.
-        if (failed.await(5, TimeUnit.SECONDS)) {
+        if (awaitLatch(failed)) {
           queue.add(name)
           siblingsDone.countDown()
         }
@@ -101,7 +107,7 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
         // Both siblings are alive before the peer is allowed to fail. Asserting here, in
         // the main body, means a starved fork fails the test instead of silently
         // degrading the handshake.
-        siblingsStarted.await(5, TimeUnit.SECONDS) shouldBe true
+        awaitLatch(siblingsStarted) shouldBe true
         // A fiber that fails while both siblings are running, and is never joined.
         Async.fork {
           try throw new RuntimeException("fiber boom")
@@ -109,8 +115,8 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
         }
         // Leaving the block cancels whatever is still running, so wait for the failure
         // to happen and for the siblings to finish their work afterwards.
-        failed.await(5, TimeUnit.SECONDS) shouldBe true
-        siblingsDone.await(5, TimeUnit.SECONDS) shouldBe true
+        awaitLatch(failed) shouldBe true
+        awaitLatch(siblingsDone) shouldBe true
         "ok"
       }
     }
@@ -136,5 +142,72 @@ class AsyncUnsupervisedSpec extends AnyFlatSpec with Matchers {
 
     result shouldBe "done"
     queue.toArray should contain theSameElementsAs List("forked", "main")
+  }
+
+  it should "propagate a joined fiber's exception to the caller of Async.unsupervised" in {
+    // The interception sits directly around Async.unsupervised so the test pins that the
+    // unsupervised scope itself rethrows what join() observed.
+    val thrown = Async.run {
+      intercept[RuntimeException] {
+        Async.unsupervised {
+          val fiber = Async.fork {
+            throw new RuntimeException("joined boom")
+          }
+          // join() rethrows the fiber's failure, so the block never completes normally.
+          fiber.join()
+        }
+      }
+    }
+
+    thrown.getMessage shouldBe "joined boom"
+  }
+
+  it should "return a joined fiber's value via fiber.value" in {
+    val result = Raise.either[Cancelled, Int] {
+      Async.run {
+        Async.unsupervised {
+          val fiber = Async.fork {
+            7
+          }
+          fiber.join()
+          fiber.value
+        }
+      }
+    }
+
+    result shouldBe Right(7)
+  }
+
+  it should "not throw when a cancelled fiber is joined" in {
+    val started     = new CountDownLatch(1)
+    val interrupted = new CountDownLatch(1)
+
+    val result = Async.run {
+      Async.unsupervised {
+        val fiber = Async.fork {
+          try {
+            started.countDown()
+            Async.delay(10.seconds)
+            "unreached"
+          } catch {
+            case ie: InterruptedException =>
+              // Record the interrupt, then let it propagate so the fiber is really cancelled
+              // and join() exercises the cancellation path rather than a normal completion.
+              interrupted.countDown()
+              throw ie
+          }
+        }
+        // Cancel only after the fiber is actually running so the interrupt lands.
+        awaitLatch(started) shouldBe true
+        fiber.cancel()
+        // A no-op cancel() would fail here within the latch timeout instead of quietly
+        // waiting out the full 10-second delay.
+        awaitLatch(interrupted) shouldBe true
+        fiber.join()
+        "ok"
+      }
+    }
+
+    result shouldBe "ok"
   }
 }
