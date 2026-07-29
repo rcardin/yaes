@@ -111,6 +111,35 @@ How it differs from `Async.run`:
 
 Supervision is a property of the scope, not of the fork. There is no separate "unsupervised fork" operation — `Async.fork` and `Async.forkNamed` work unchanged inside the block. Like `Async.run`, `Async.unsupervised` is a standalone handler providing its own `Async` capability, so it can be used on its own or nested in an existing scope. When nested, the enclosing scope is saved and restored, and is left untouched.
 
+### Detached Background Work
+
+`Async.fork`, `Async.run`, and `Async.unsupervised` all bind the work they start to a structured scope, so nothing they start can outlive that scope. `Async.detached` is the deliberate exception: it starts a computation on its own background daemon virtual thread, completely outside any scope, and returns immediately without waiting for it:
+
+```scala
+import io.yaes.Async
+
+Async.run {
+  val handle = Async.detached {
+    sendTelemetry() // keeps running even after this Async.run block returns
+  }
+  handle.onComplete(_ => println("telemetry sent"))
+  handle.onFailure(err => println(s"telemetry failed: ${err.getMessage}"))
+  "done"
+} // returns "done" immediately; the detached fiber is not waited on
+```
+
+`detached` gives the computation its own, freshly created `Async` capability with its own structured scope, so a failure inside it is contained there: it is captured for observers but never rethrown into the caller, so it can neither fail nor cancel the spawning scope. Because it runs on a virtual thread, the background thread is a daemon by construction — a detached computation left running never keeps the JVM alive on its own.
+
+The returned handle is fire-and-forget: it has no `join` or `cancel`, only `onComplete` and `onFailure` to observe the eventual outcome. Those callbacks are plain functions — they do not require an ambient `Async` — because the spawning scope may already be gone by the time they run. Registering an observer after the detached computation has already finished still fires it immediately.
+
+:::caution
+**`Async.detached` escapes structured concurrency.** Unlike `fork`, `run`, and `unsupervised`, the computation it starts is not cancelled when the spawning scope exits, its failure is never surfaced to that scope, and there is no way to join it from the caller. Reach for `fork` (inside `run` or `unsupervised`) for anything that should still respect structured concurrency; reach for `detached` only for genuine fire-and-forget background work, such as best-effort telemetry or logging, that must outlive the scope that started it.
+:::
+
+:::caution
+**The detached block must be self-terminating.** `detached` offers no `cancel`. A block that never completes — for example one that calls `Async.never` with nothing left to eventually interrupt it, since the fresh scope `detached` opens for it has nothing to cancel it either — leaves the returned handle permanently unsettled (no observer ever fires) and leaks its parked background thread for the lifetime of the JVM, with no way to reclaim it.
+:::
+
 ### Concurrency Primitives
 
 **Parallel Execution** — run two computations in parallel:

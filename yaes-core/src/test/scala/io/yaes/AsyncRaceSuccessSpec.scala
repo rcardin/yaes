@@ -516,6 +516,8 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
         throw new UnsupportedOperationException("custom fork should have been used")
       def never(): Nothing =
         throw new UnsupportedOperationException("never is not exercised by this test")
+      def detached[A](block: Async ?=> A): DetachedFiber[A] =
+        throw new UnsupportedOperationException("detached is not exercised by this test")
     }
 
     a[UnsupportedOperationException] should be thrownBy {
@@ -556,6 +558,8 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
         new ImmediateFiber[A](name, block)
       def never(): Nothing =
         throw new UnsupportedOperationException("never is not exercised by this test")
+      def detached[A](block: Async ?=> A): DetachedFiber[A] =
+        throw new UnsupportedOperationException("detached is not exercised by this test")
     }
 
     val actualResult = Async.raceSuccess(1, 2)(using fake)
