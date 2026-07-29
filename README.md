@@ -409,6 +409,7 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 - `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
 - `Async.parTraverseLimit`: Like `Async.parTraverse`, but bounds how many invocations run at the same time.
 - `Async.never`: A computation that never completes on its own; useful as a branch of `Async.race`, `Async.raceSuccess`, or `Async.timeout` that must be cancelled or timed out rather than complete by itself. It must always be forked (directly or through a combinator like `race`) and that fork must be cancelled, raced away, or wrapped in a timeout, otherwise the enclosing `Async.run` blocks forever.
+- `Async.detached`: Starts a computation on its own background daemon virtual thread, completely outside any structured concurrency scope — it keeps running (and its failure stays contained, never propagating back) even after the scope that started it has exited. **This escapes structured concurrency** and should be reserved for genuine fire-and-forget background work.
 
 #### Parallel Traversal
 
