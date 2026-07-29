@@ -30,7 +30,7 @@ This integration enables you to:
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.yaes" %% "yaes-cats" % "0.21.0"
+libraryDependencies += "io.yaes" %% "yaes-cats" % "0.23.0"
 ```
 
 ## Cats Effect Integration
@@ -866,6 +866,6 @@ val result = YaesSync.run {
 - **Java Version**: 25+ (for Virtual Threads)
 - **Cats Effect Version**: 3.6.3+
 - **Cats Version**: 2.13.0+
-- **λÆS Core**: 0.21.0+
+- **λÆS Core**: 0.23.0+
 
 > This page is coming soon. Content will be added in a subsequent migration step.

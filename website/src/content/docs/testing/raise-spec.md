@@ -13,7 +13,7 @@ sidebar:
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.yaes" %% "yaes-core-test-scalatest" % "0.21.0" % Test
+libraryDependencies += "io.yaes" %% "yaes-core-test-scalatest" % "0.23.0" % Test
 ```
 
 `yaes-core` and ScalaTest are included transitively — no additional declarations needed.

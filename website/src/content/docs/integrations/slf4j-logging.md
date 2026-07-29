@@ -287,7 +287,7 @@ The `yaes-slf4j` module provides an alternative handler that delegates logging t
 Add the `yaes-slf4j` dependency:
 
 ```sbt
-libraryDependencies += "io.yaes" %% "yaes-slf4j" % "0.21.0"
+libraryDependencies += "io.yaes" %% "yaes-slf4j" % "0.23.0"
 ```
 
 And an SLF4J backend, for example Logback:

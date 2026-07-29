@@ -14,7 +14,7 @@ Test utilities for λÆS effect code using ScalaTest. Provides mixin traits that
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.yaes" %% "yaes-core-test-scalatest" % "0.21.0" % Test
+libraryDependencies += "io.yaes" %% "yaes-core-test-scalatest" % "0.23.0" % Test
 ```
 
 Both `yaes-core` and ScalaTest are transitive dependencies — no need to declare them separately.
