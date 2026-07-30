@@ -39,5 +39,9 @@ class RuleSuite extends AbstractSyntacticRuleSuite with AnyFunSuiteLike {
   checkPair("scaladoc-prose")
   checkPair("inline-comment")
   checkPair("block-comment")
+  checkPair("string-literal")
+  checkPair("interpolated-string")
+  checkPair("triple-quoted-string")
+  checkPair("escaped-string")
   checkPair("no-op")
 }

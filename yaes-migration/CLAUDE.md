@@ -10,10 +10,13 @@ Every other YAES module targets Scala 3, but this one is compiled with Scala 2.1
 
 `MigrateV021ToV022` migrates the 0.21.0 package layout (`in.rcard.yaes`) to the 0.22.0 layout (`io.yaes`). It works in two passes because comments are invisible to a syntax tree:
 
-1. **Tree pass.** Package declarations, imports of every style, and fully-qualified type references all contain the same three-segment `Term.Select` node whose syntax is exactly `in.rcard.yaes`. Matching that innermost node and replacing it with `io.yaes` rewrites every code-level case uniformly.
-2. **Comment pass.** A separate iteration over the token stream string-replaces the old prefix inside every `Token.Comment`, covering inline `//` comments and `/** ... */` Scaladoc (including `{{{ }}}` code examples).
+1. **Tree pass.** Package declarations, imports of every style, and fully-qualified type references all contain the same three-segment `Term.Select` node whose syntax is exactly `in.rcard.yaes`. Matching that innermost node and replacing it with `io.yaes` rewrites every reference case uniformly.
+2. **String pass.** The prefix also travels inside string data (`Class.forName("in.rcard.yaes.Foo")`, logger names), where no `Term.Select` exists. Every `Lit.String` whose source text contains the old prefix is rewritten, covering plain, interpolated (one `Lit.String` per `s"..."` part), triple-quoted, and escape-carrying literals. Both the guard and the replacement use `lit.syntax` (raw source text), never `lit.value` (decoded), so an escape such as `\t` is not burned into the output as a real tab.
+3. **Comment pass.** A separate iteration over the token stream string-replaces the old prefix inside every `Token.Comment`, covering inline `//` comments, `/* ... */` blocks, and `/** ... */` Scaladoc (including `{{{ }}}` code examples).
 
-Both passes are idempotent: a migrated source has no matching tree node and no old prefix left in its comments.
+All three passes are idempotent: a migrated source has no matching tree node, string, or comment left.
+
+Not covered: anything outside the Scala source text handed to the rule (resource files, build definitions, service files) and prefixes assembled at runtime from separate fragments, where no single literal holds the whole prefix.
 
 ### Adding a Future Migration Rule
 

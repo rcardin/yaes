@@ -126,11 +126,11 @@ object YaesServer {
     *   GET(p"/health") { req =>
     *     Response.ok("OK")
     *   },
-    *   GET(p"/users" / userId) { (req, id: Int) =>
-    *     Response.ok(s"User $id")
+    *   GET(p"/users" / userId) { (req, path, _) =>
+    *     Response.ok(s"User ${path.userId}")
     *   },
-    *   POST(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
-    *     Response.ok(s"Created post $pid for user $uid")
+    *   POST(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+    *     Response.ok(s"Created post ${path.postId} for user ${path.userId}")
     *   }
     * )
     * }}}

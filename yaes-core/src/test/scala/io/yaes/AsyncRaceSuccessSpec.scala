@@ -32,10 +32,14 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     */
   private val unblockTimeLimit: Span = Span(30, Seconds)
 
+  /** Budget given to a cancelled loser branch to (not) run before the negative assertion. */
+  private val loserGrace = 300L
+
   "Async.raceSuccess" should "return the fast success and cancel the slow branch" in failAfter(
     unblockTimeLimit
   ) {
     val actualQueue  = new ConcurrentLinkedQueue[String]()
+    val loserRan     = new CountDownLatch(1)
     val actualResult = Async.run {
       Async.raceSuccess(
         {
@@ -45,14 +49,15 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
         }, {
           Async.delay(2.seconds)
           actualQueue.add("slow")
+          loserRan.countDown()
           43
         }
       )
     }
 
     actualResult shouldBe 42
-    // Give the loser a bounded chance to run (it should not, since it was cancelled).
-    Thread.sleep(300)
+    // The loser was cancelled, so it must not reach its countDown within the grace budget.
+    loserRan.await(loserGrace, TimeUnit.MILLISECONDS) shouldBe false
     actualQueue.toArray should contain theSameElementsInOrderAs List("fast")
   }
 
@@ -60,11 +65,13 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     unblockTimeLimit
   ) {
     val actualQueue  = new ConcurrentLinkedQueue[String]()
+    val loserRan     = new CountDownLatch(1)
     val actualResult = Async.run {
       Async.raceSuccess(
         {
           Async.delay(2.seconds)
           actualQueue.add("slow")
+          loserRan.countDown()
           43
         }, {
           Async.delay(100.millis)
@@ -75,7 +82,8 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     }
 
     actualResult shouldBe 42
-    Thread.sleep(300)
+    // The loser was cancelled, so it must not reach its countDown within the grace budget.
+    loserRan.await(loserGrace, TimeUnit.MILLISECONDS) shouldBe false
     actualQueue.toArray should contain theSameElementsInOrderAs List("fast")
   }
 
@@ -240,9 +248,10 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
   }
 
   it should "observably cancel the loser once the winner succeeds" in failAfter(unblockTimeLimit) {
-    val loserRan     = new AtomicBoolean(false)
-    val latch        = new CountDownLatch(1)
-    val actualResult = Async.run {
+    val loserRan      = new AtomicBoolean(false)
+    val latch         = new CountDownLatch(1)
+    val loserFinished = new CountDownLatch(1)
+    val actualResult  = Async.run {
       Async.raceSuccess(
         {
           42
@@ -250,6 +259,7 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
           latch.await(2, TimeUnit.SECONDS)
           Async.delay(1.second)
           loserRan.set(true)
+          loserFinished.countDown()
           43
         }
       )
@@ -257,7 +267,7 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
     actualResult shouldBe 42
     latch.countDown()
-    Thread.sleep(300)
+    loserFinished.await(loserGrace, TimeUnit.MILLISECONDS) shouldBe false
     loserRan.get() shouldBe false
   }
 
@@ -511,9 +521,10 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // `raceSuccess` must route through `async.attemptFork` the same way, so a custom `fork`
     // implementation is what actually runs.
     val fake: Async = new Async.Unsafe {
-      def delay(d: Duration): Unit                     = ()
-      def fork[A](name: String)(block: => A): Fiber[A] =
+      def delay(d: Duration): Unit                            = ()
+      def fork[A](name: String)(block: => A): Fiber[A]        =
         throw new UnsupportedOperationException("custom fork should have been used")
+      def attemptFork[A](name: String)(block: => A): Fiber[A] = fork(name)(block)
       def never(): Nothing =
         throw new UnsupportedOperationException("never is not exercised by this test")
       def detached[A](block: Async ?=> A): DetachedFiber[A] =

@@ -1353,15 +1353,13 @@ object Async {
       * built on this: it only fails when *both* branches fail, which requires one losing branch's
       * failure to never abort the race by poisoning the scope.
       *
-      * The default implementation below does NOT provide that property — it simply delegates to
-      * [[fork]], which always rethrows a `NonFatal` failure into the enclosing scope. Consequently,
-      * on a backend that inherits this default, [[Async.raceSuccess]] does NOT honour its
-      * documented contract: a losing branch's failure will abort the whole race and surface to the
-      * caller instead of being discarded in favor of the winner's value.
-      *
-      * Any [[Async.Unsafe]] backend that supports `raceSuccess` MUST override this method with an
-      * implementation that actually captures the failure instead of rethrowing it; see the JVM
-      * backend's `attemptFork` for the JDK structured-concurrency version.
+      * This method has no default implementation; every backend must supply its own. Delegating to
+      * [[fork]] would not be a valid implementation: `fork` always rethrows a `NonFatal` failure
+      * into the enclosing scope, which would make [[Async.raceSuccess]] abort the race on a losing
+      * branch's failure instead of waiting for the surviving branch. That is why no default is
+      * provided rather than an incorrect one: a backend author gets a compile error naming this
+      * method instead of a silently wrong `raceSuccess` at runtime. See the JVM backend's
+      * `attemptFork` ([[JvmAsync]]) for the JDK structured-concurrency reference implementation.
       *
       * @param name
       *   the name of the fiber
@@ -1372,7 +1370,7 @@ object Async {
       * @return
       *   a [[Fiber]] representing the forked computation
       */
-    def attemptFork[A](name: String)(block: => A): Fiber[A] = fork(name)(block)
+    def attemptFork[A](name: String)(block: => A): Fiber[A]
 
     /** Parks the calling thread until it is cancelled, never returning a value on its own.
       *

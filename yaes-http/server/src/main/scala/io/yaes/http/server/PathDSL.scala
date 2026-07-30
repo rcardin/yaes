@@ -180,20 +180,39 @@ object PathBuilder {
   * }}}
   */
 extension (sc: StringContext) {
-  def p(args: Any*): PathBuilder[EmptyParams, EmptyParams] = {
-    require(args.isEmpty, "Path interpolator does not support arguments, use / operator instead")
-    val path = sc.parts.mkString
+  /** Interpolated arguments are rejected at compile time: build parameters and additional literal
+    * segments with `/` instead.
+    */
+  inline def p(inline args: Any*): PathBuilder[EmptyParams, EmptyParams] =
+    ${pImpl('sc, 'args)}
+}
 
-    // Split the path and create literals
-    val segments = path.split("/").filter(_.nonEmpty).toList
+private def pImpl(scExpr: Expr[StringContext], argsExpr: Expr[Seq[Any]])(using q: Quotes): Expr[PathBuilder[EmptyParams, EmptyParams]] = {
+  import q.reflect.*
 
-    if (segments.isEmpty) {
-      // Root path "/" - empty segments list, End will be added by foldRight
-      new PathBuilder[EmptyParams, EmptyParams](List(), EndOfQuery)
-    } else {
-      // Create literal segments
-      val pathSegments = segments.map(seg => Literal(seg, End))
-      new PathBuilder[EmptyParams, EmptyParams](pathSegments, EndOfQuery)
-    }
+  argsExpr match {
+    case Varargs(Seq()) => '{literalPath($scExpr)}
+    case _ =>
+      report.errorAndAbort(
+        "The path interpolator does not accept interpolated values. " +
+          "Build path parameters with `/` and `param`, e.g. `p\"/users\" / param[Int](\"id\")`, " +
+          "and literal segments with `/`, e.g. `p\"/api\" / \"v1\"`."
+      )
+  }
+}
+
+private[server] def literalPath(sc: StringContext): PathBuilder[EmptyParams, EmptyParams] = {
+  val path = sc.parts.mkString
+
+  // Split the path and create literals
+  val segments = path.split("/").filter(_.nonEmpty).toList
+
+  if (segments.isEmpty) {
+    // Root path "/" - empty segments list, End will be added by foldRight
+    new PathBuilder[EmptyParams, EmptyParams](List(), EndOfQuery)
+  } else {
+    // Create literal segments
+    val pathSegments = segments.map(seg => Literal(seg, End))
+    new PathBuilder[EmptyParams, EmptyParams](pathSegments, EndOfQuery)
   }
 }
