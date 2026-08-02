@@ -158,6 +158,10 @@ The library provides a set of effects and handlers that can be used to define an
 - [`Reader`](#the-reader-effect): Allows for read-only access to environment values.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
 
+Escape hatch, kept separate from the list above since it deliberately breaks the guarantee every other effect makes:
+
+- [`Unscoped`](https://www.yaes.io/advanced/unscoped-effect/): Allows for starting fire and forget background work that outlives the scope that started it. Obtainable only via `io.yaes.unsafe.allowUnscoped`, so every use site stays greppable.
+
 The library also provides the following handlers that orchestrate existing effects:
 
 - [`Retry`](#the-retry-handler): Retries failing blocks according to composable schedule policies.

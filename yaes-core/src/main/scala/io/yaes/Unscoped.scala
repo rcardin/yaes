@@ -5,9 +5,26 @@ import scala.util.control.NonFatal
 
 import ju.concurrent.CompletableFuture
 
+/** The capability to start work that outlives every structured concurrency scope.
+  *
+  * Obtained only by importing [[io.yaes.unsafe.allowUnscoped]]; there is deliberately no
+  * `Unscoped.run`. See the [[Unscoped]] companion object for the full design rationale.
+  *
+  * Example:
+  * {{{
+  * import io.yaes.unsafe.allowUnscoped
+  *
+  * allowUnscoped {
+  *   Unscoped.spawn {
+  *     sendTelemetry() // keeps running even after this call returns
+  *   }
+  * }
+  * }}}
+  */
 type Unscoped = Unscoped.Unsafe
 
-/** JVM implementation of [[Unscoped.Strand]], backed by a plain [[CompletableFuture]].
+/** JVM implementation of [[Unscoped.Strand]], backed by a plain
+  * [[java.util.concurrent.CompletableFuture]].
   *
   * Unlike [[JvmFiber]], there is no `forkedThread` handshake and no cancellation: the underlying
   * daemon thread is not owned by any `StructuredTaskScope`, so there is nothing structured to
@@ -31,8 +48,15 @@ class JvmStrand[A](private val promise: CompletableFuture[A]) extends Unscoped.S
 
 /** JVM implementation of [[Unscoped]], starting each spawned computation on its own daemon virtual
   * thread.
+  *
+  * `private[yaes]`, not merely undocumented: this is the ready-made backend instance that
+  * [[io.yaes.unsafe.allowUnscoped]] hands out as the [[Unscoped]] capability. If it were public,
+  * anyone could write `given Unscoped = io.yaes.JvmUnscoped` and obtain the capability with no
+  * `io.yaes.unsafe` import at all, defeating the entire point of segregating the grant into that
+  * package (every authorization site must be greppable via `grep -rn "io.yaes.unsafe"`). Stateless,
+  * so it is an `object` rather than a `class`: there is only ever one JVM backend.
   */
-class JvmUnscoped extends Unscoped.Unsafe {
+private[yaes] object JvmUnscoped extends Unscoped.Unsafe {
 
   override def spawn[A](block: Async ?=> A): Unscoped.Strand[A] = {
     val promise = CompletableFuture[A]()
@@ -298,14 +322,14 @@ object Unscoped {
       * primitive. Implement this by starting `block` on whatever background execution primitive the
       * backend uses for concurrent work (a daemon thread, an unmanaged fiber, ...), running it
       * fully outside of any structured scope the backend maintains, and reporting its outcome
-      * through a [[Strand]] implementation appropriate to the backend.
+      * through a [[Unscoped.Strand]] implementation appropriate to the backend.
       *
       * @param block
       *   the computation to run detached; it receives its own freshly created [[Async]] capability
       * @tparam A
       *   the type of value produced by the detached computation
       * @return
-      *   a [[Strand]] handle for attaching completion/failure observers
+      *   a [[Unscoped.Strand]] handle for attaching completion/failure observers
       */
     def spawn[A](block: Async ?=> A): Strand[A]
   }

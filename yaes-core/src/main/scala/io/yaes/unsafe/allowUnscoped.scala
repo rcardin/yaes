@@ -38,4 +38,4 @@ import io.yaes.Unscoped
   * @return
   *   the result of `block`
   */
-def allowUnscoped[A](block: Unscoped ?=> A): A = block(using new JvmUnscoped())
+def allowUnscoped[A](block: Unscoped ?=> A): A = block(using JvmUnscoped)

@@ -152,4 +152,9 @@ You can handle effects one at a time or all at once. Effects that are not yet ha
 **Retry**
 - `Retry` — retry failing blocks with configurable schedules
 
+**Escape Hatches**
+
+These deliberately break the guarantee every effect above makes, so they are called out separately rather than listed flatly alongside `Sync`/`Async`:
+- `Unscoped` — starts fire and forget background work that outlives the scope that started it, obtainable only via `io.yaes.unsafe.allowUnscoped` so every use site stays greppable
+
 Continue to [Basic Effects](/learn/3-basic-effects/) to see these in action.
