@@ -51,9 +51,16 @@ class JvmStrand[A](private val promise: CompletableFuture[A]) extends Unscoped.S
   *
   * `private[yaes]`, not merely undocumented: this is the ready-made backend instance that
   * [[io.yaes.unsafe.allowUnscoped]] hands out as the [[Unscoped]] capability. If it were public,
-  * anyone could write `given Unscoped = io.yaes.JvmUnscoped` and obtain the capability with no
-  * `io.yaes.unsafe` import at all, defeating the entire point of segregating the grant into that
-  * package (every authorization site must be greppable via `grep -rn "io.yaes.unsafe"`). Stateless,
+  * anyone could write `given Unscoped = io.yaes.JvmUnscoped` and obtain the capability without
+  * ever calling `allowUnscoped`, defeating the entire point of gating the grant behind that
+  * function (every authorization site must be greppable via `grep -rn "allowUnscoped"` -- not
+  * `grep -rn "io.yaes.unsafe"`, since a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped` be
+  * called without that literal string ever appearing at the call site).
+  *
+  * `private[yaes]` blocks ordinary downstream code, which is the threat model this defends
+  * against, but it is defence in depth rather than an absolute guarantee: Scala's qualified-private
+  * is a compile-time package-path check with no module boundary, so code in a wholly separate
+  * compilation unit that declares its own `package io.yaes` can still see this member. Stateless,
   * so it is an `object` rather than a `class`: there is only ever one JVM backend.
   */
 private[yaes] object JvmUnscoped extends Unscoped.Unsafe {
@@ -110,7 +117,8 @@ private[yaes] object JvmUnscoped extends Unscoped.Unsafe {
   * handler that started it and cannot outlive it. `Unscoped` is the deliberate exception. There is
   * intentionally no `Unscoped.run`: the only way to obtain the [[Unscoped]] capability is importing
   * [[io.yaes.unsafe.allowUnscoped]], which makes every authorization site greppable and visible in
-  * a diff (`grep -rn "io.yaes.unsafe"`).
+  * a diff (`grep -rn "allowUnscoped"` -- not `grep -rn "io.yaes.unsafe"`, since a wildcard
+  * `import io.yaes.*` lets the call resolve without that literal substring ever appearing).
   *
   * Example:
   * {{{
@@ -306,7 +314,7 @@ object Unscoped {
     /** Starts `block` on its own background computation, detached from any structured concurrency
       * scope, and returns a handle for observing its eventual outcome.
       *
-      * This is the backend seam behind [[Unscoped.spawn]]. The JVM backend ([[JvmUnscoped]]) starts
+      * This is the backend seam behind [[Unscoped.spawn]]. The JVM backend (`JvmUnscoped`) starts
       * `block` on a brand new daemon virtual thread, gives it its own fresh [[Async]] capability
       * via an internal [[Async.run]], and reports its outcome on a plain
       * [[java.util.concurrent.CompletableFuture]] wrapped in a [[JvmStrand]]. `block`'s failure is

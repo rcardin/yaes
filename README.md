@@ -160,7 +160,7 @@ The library provides a set of effects and handlers that can be used to define an
 
 Escape hatch, kept separate from the list above since it deliberately breaks the guarantee every other effect makes:
 
-- [`Unscoped`](https://www.yaes.io/advanced/unscoped-effect/): Allows for starting fire and forget background work that outlives the scope that started it. Obtainable only via `io.yaes.unsafe.allowUnscoped`, so every use site stays greppable.
+- [`Unscoped`](#the-unscoped-effect): Allows for starting fire and forget background work that outlives the scope that started it. Obtainable only via `io.yaes.unsafe.allowUnscoped`; grep for `allowUnscoped` (not `io.yaes.unsafe`, which a wildcard `import io.yaes.*` can bypass) to find every use site.
 
 The library also provides the following handlers that orchestrate existing effects:
 
@@ -1470,6 +1470,58 @@ Slf4jLog.run {
 ```
 
 Level filtering is controlled by the SLF4J backend configuration instead of a handler parameter. See the [yaes-slf4j README](yaes-slf4j/README.md) for full details.
+
+### The `Unscoped` Effect
+
+Every concurrency primitive on `Async` — `Async.fork`, `Async.run`, `Async.unsupervised` — binds the work it starts to a structured scope, so nothing they start can outlive that scope. `Unscoped` is the deliberate, and only, exception in λÆS. It exists for one narrow case: background work that must keep running after its spawning scope has already exited, such as best-effort telemetry or logging. Because that guarantee is exactly what `Async` promises everywhere else, `Unscoped` is not part of `Async` at all — it is its own effect, gated behind a separate, clearly named import.
+
+#### Granting the Capability
+
+Unlike every other handler in λÆS, obtaining `Unscoped` does not run or contain anything: there is no `Unscoped.run`. The only way to obtain the capability is importing `allowUnscoped` from `io.yaes.unsafe`:
+
+```scala 3
+import io.yaes.unsafe.allowUnscoped
+
+allowUnscoped {
+  // Unscoped is available here
+}
+```
+
+This is intentional. Every other handler in the library contains what it grants — `Async.run` waits for its fibers, `Resource.run` releases its resources, `Raise.either` catches its own errors. `allowUnscoped` cannot make that promise, since the entire point of `Unscoped` is work that outlives the block that started it. Segregating the grant behind a dedicated function name means every place a codebase opts into that risk is a single grep away — grep for the function, not the package, since `unsafe` is a subpackage of `io.yaes` and a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped` be called without the literal string `io.yaes.unsafe` ever appearing at the call site:
+
+```bash
+grep -rn "allowUnscoped" --include="*.scala"
+```
+
+Grant it once, near the top of an application, and thread `Unscoped` through `using` clauses to whatever call site actually needs it:
+
+```scala 3
+def handleRequest(req: Request)(using Unscoped): Response = {
+  Unscoped.spawn { sendTelemetry(req) }
+  Response.ok
+}
+```
+
+#### Spawning Detached Work
+
+`Unscoped.spawn` starts a computation on its own background daemon virtual thread, completely outside any structured concurrency scope, and returns immediately without waiting for it:
+
+```scala 3
+import io.yaes.unsafe.allowUnscoped
+
+allowUnscoped {
+  val strand = Unscoped.spawn {
+    sendTelemetry() // keeps running even after this call returns
+  }
+  strand.onComplete(_ => println("telemetry sent"))
+  strand.onFailure(err => println(s"telemetry failed: ${err.getMessage}"))
+  "done"
+} // returns "done" immediately; the strand is not waited on
+```
+
+`spawn` gives the computation its own, freshly created `Async` capability with its own structured scope, so a failure inside it is contained there: it is captured for observers but never rethrown into the caller, so it can neither fail nor cancel the spawning scope. Unlike every `Async` operation, `spawn` requires no ambient `Async` capability at all — only `Unscoped`. The returned `Strand` is fire-and-forget: it has no `join` or `cancel`, only `onComplete` and `onFailure` to observe the eventual outcome.
+
+**`Unscoped.spawn` escapes structured concurrency**: the computation it starts is not cancelled when the spawning scope exits, its failure is never surfaced to that scope, and there is no way to join it from the caller. Reach for `Async.fork` (inside `Async.run` or `Async.unsupervised`) for anything that should still respect structured concurrency; reach for `Unscoped.spawn` only for genuine fire-and-forget background work that must outlive the scope that started it. See the [Unscoped Effect](https://www.yaes.io/advanced/unscoped-effect/) documentation for the full design rationale.
 
 ### The Retry Handler
 

@@ -49,7 +49,7 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     assertDoesNotCompile("Unscoped.spawn { 42 }")
   }
 
-  it should "not be obtainable without importing io.yaes.unsafe.allowUnscoped, since there is no Unscoped.run and the JVM backend is not itself public" in {
+  it should "not be obtainable without importing io.yaes.unsafe.allowUnscoped, since there is no Unscoped.run" in {
     // There is deliberately no `Unscoped.run`: a free handler would let
     // `def anything(): Unit = Unscoped.run { leak() }` compile from pure code with no capability
     // at all, the exact defect this effect exists to avoid (see the design rationale in issue
@@ -60,28 +60,20 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // by a file-level import that would otherwise make `allowUnscoped` resolvable everywhere.
     assertDoesNotCompile("allowUnscoped { 42 }")
     // `JvmUnscoped`, the ready-made backend instance `allowUnscoped` hands out, is
-    // `private[yaes]`. Without that, `given Unscoped = io.yaes.JvmUnscoped` would let anyone mint
-    // the capability with no `io.yaes.unsafe` import at all, defeating the greppability the whole
-    // `io.yaes.unsafe` segregation exists to provide. The snippet below declares its own `package
-    // io.userland`, standing in for arbitrary downstream code, rather than compiling as part of
-    // this file's own `package io.yaes` (which -- being literally inside the library -- can see
-    // `private[yaes]` members regardless of what this test proves, so a snippet without its own
-    // package clause here would compile and give this assertion no teeth at all).
-    assertDoesNotCompile(
-      """
-        |package io.userland
-        |object Probe {
-        |  given io.yaes.Unscoped = io.yaes.JvmUnscoped
-        |}
-        |""".stripMargin
-    )
+    // `private[yaes]`. Proving that it is unreachable from outside the library requires compiling
+    // a probe from a package other than `io.yaes` -- a snippet compiled here, inside
+    // `io.yaes.UnscopedSpec` itself, would trivially see `private[yaes]` members regardless of
+    // whether the guard works at all, since this file is literally inside the library.
+    // `assertDoesNotCompile` typechecks its argument as a block, where a `package` clause is not
+    // legal syntax, so that probe cannot be written inline in this file; see
+    // `io.userland.UnscopedCapabilityLeakSpec` for it instead.
   }
 
   it should "require no ambient Async capability: a Sync-only call site compiles" in {
-    // The ambient Async that `Async.detached` used to require was never used for anything but
-    // dispatch. `spawn` requires only `Unscoped`, so a call site holding `Sync` (and `Unscoped`),
-    // but no `Async` at all, must still compile -- exactly the shape of the motivating use case,
-    // telemetry from a synchronous request handler.
+    // Earlier designs for spawning detached work required an ambient Async capability that was
+    // never used for anything but dispatch. `spawn` requires only `Unscoped`, so a call site
+    // holding `Sync` (and `Unscoped`), but no `Async` at all, must still compile -- exactly the
+    // shape of the motivating use case, telemetry from a synchronous request handler.
     assertCompiles(
       """
         |def handleRequest(req: Int)(using Sync, Unscoped): Int = {

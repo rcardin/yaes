@@ -24,7 +24,7 @@ object EffectName {
 }
 ```
 
-**Documented exception: `Unscoped`.** `Unscoped` (`yaes-core/src/main/scala/io/yaes/Unscoped.scala`) has no `run` handler in its companion. Every other effect's handler contains what it grants, so a free `run` would be safe to expose. `Unscoped.spawn` is the one operation in the library whose work deliberately outlives the block that started it, so a free `Unscoped.run` would let any pure code obtain the capability and defeat the whole point. Instead, the capability is obtainable only by importing `io.yaes.unsafe.allowUnscoped`, which makes every authorization site greppable (`grep -rn "io.yaes.unsafe"`). See issue #326 for the full rationale.
+**Documented exception: `Unscoped`.** `Unscoped` (`yaes-core/src/main/scala/io/yaes/Unscoped.scala`) has no `run` handler in its companion. Every other effect's handler contains what it grants, so a free `run` would be safe to expose. `Unscoped.spawn` is the one operation in the library whose work deliberately outlives the block that started it, so a free `Unscoped.run` would let any pure code obtain the capability and defeat the whole point. Instead, the capability is obtainable only by importing `io.yaes.unsafe.allowUnscoped`, which makes every authorization site greppable via `grep -rn "allowUnscoped"` -- not `grep -rn "io.yaes.unsafe"`, since a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped` be called without that literal string ever appearing at the call site. See issue #326 for the full rationale.
 
 ### Infix Type Aliases Require Separate Imports
 

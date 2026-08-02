@@ -26,11 +26,13 @@ allowUnscoped {
 }
 ```
 
-This is intentional. Every other handler in the library contains what it grants — `Async.run` waits for its fibers, `Resource.run` releases its resources, `Raise.either` catches its own errors. `allowUnscoped` cannot make that promise, since the entire point of `Unscoped` is work that outlives the block that started it. Segregating the grant behind `io.yaes.unsafe` means every place a codebase opts into that risk is a single grep away:
+This is intentional. Every other handler in the library contains what it grants — `Async.run` waits for its fibers, `Resource.run` releases its resources, `Raise.either` catches its own errors. `allowUnscoped` cannot make that promise, since the entire point of `Unscoped` is work that outlives the block that started it. Segregating the grant behind a dedicated function name means every place a codebase opts into that risk is a single grep away — as long as you grep for the function, not the package:
 
 ```bash
-grep -rn "io.yaes.unsafe" --include="*.scala"
+grep -rn "allowUnscoped" --include="*.scala"
 ```
+
+Grepping for `io.yaes.unsafe` instead undercounts: `unsafe` is a subpackage of `io.yaes`, so a file with a wildcard `import io.yaes.*` can call `unsafe.allowUnscoped { ... }` without the literal string `io.yaes.unsafe` ever appearing.
 
 Grant it once, near the top of an application:
 

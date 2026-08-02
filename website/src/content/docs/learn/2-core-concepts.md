@@ -155,6 +155,6 @@ You can handle effects one at a time or all at once. Effects that are not yet ha
 **Escape Hatches**
 
 These deliberately break the guarantee every effect above makes, so they are called out separately rather than listed flatly alongside `Sync`/`Async`:
-- `Unscoped` — starts fire and forget background work that outlives the scope that started it, obtainable only via `io.yaes.unsafe.allowUnscoped` so every use site stays greppable
+- `Unscoped` — starts fire and forget background work that outlives the scope that started it, obtainable only via `io.yaes.unsafe.allowUnscoped`; grep for `allowUnscoped` (not `io.yaes.unsafe`, which a wildcard `import io.yaes.*` can bypass) to find every use site
 
 Continue to [Basic Effects](/learn/3-basic-effects/) to see these in action.
