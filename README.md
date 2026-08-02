@@ -24,7 +24,7 @@ Available modules are:
  * `yaes-http`: HTTP client and server built on λÆS effects, with optional Circe and jsoniter-scala JSON support.
  * `yaes-test`: Testing utilities for λÆS effects, including ScalaTest integration.
 
-What's new in λÆS when compared to other effect systems? Well, λÆS embraces direct style — no monads, no for-comprehensions, just plain Scala:
+What's new in λÆS when compared to other effect systems? Well, λÆS embraces direct style: no monads, no for-comprehensions, just plain Scala:
 
 ```scala 3
 import io.yaes.Random.*
@@ -157,6 +157,10 @@ The library provides a set of effects and handlers that can be used to define an
 - [`Writer`](#the-writer-effect): Allows for pure, append-only value accumulation.
 - [`Reader`](#the-reader-effect): Allows for read-only access to environment values.
 - [`Log`](#the-log-effect): Allows for logging messages at different levels.
+
+Escape hatch, kept separate from the list above since it deliberately breaks the guarantee every other effect makes:
+
+- [`Unscoped`](#the-unscoped-effect): Allows for starting fire-and-forget background work that outlives the scope that started it. Obtainable only via `io.yaes.unsafe.allowUnscoped`; grep for `allowUnscoped` (not `io.yaes.unsafe`, which a wildcard `import io.yaes.*` can bypass) to find every use site.
 
 The library also provides the following handlers that orchestrate existing effects:
 
@@ -404,12 +408,13 @@ Using the `Async.fork` DSL is quite low-level. The library provides a set of str
 
 - `Async.par`: Runs two asynchronous computations in parallel and returns both.
 - `Async.race`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes, success or failure. The other one is canceled.
-- `Async.raceSuccess`: Like `Async.race`, but ignores failures unless both branches fail — it keeps waiting on the surviving branch instead of letting a fast failure beat a slow success. Only fails if *both* branches fail, surfacing the last observed failure.
+- `Async.raceSuccess`: Like `Async.race`, but ignores failures unless both branches fail; it keeps waiting on the surviving branch instead of letting a fast failure beat a slow success. Only fails if *both* branches fail, surfacing the last observed failure.
 - `Async.racePair`: Runs two asynchronous computations in parallel and returns the result of the first computation that finishes along with the fiber that is still running.
 - `Async.parTraverse`: Executes a function over all elements of a collection in parallel, returning results in input order.
 - `Async.parTraverseLimit`: Like `Async.parTraverse`, but bounds how many invocations run at the same time.
 - `Async.never`: A computation that never completes on its own; useful as a branch of `Async.race`, `Async.raceSuccess`, or `Async.timeout` that must be cancelled or timed out rather than complete by itself. It must always be forked (directly or through a combinator like `race`) and that fork must be cancelled, raced away, or wrapped in a timeout, otherwise the enclosing `Async.run` blocks forever.
-- `Async.detached`: Starts a computation on its own background daemon virtual thread, completely outside any structured concurrency scope — it keeps running (and its failure stays contained, never propagating back) even after the scope that started it has exited. **This escapes structured concurrency** and should be reserved for genuine fire-and-forget background work.
+
+Genuine fire-and-forget background work, a computation that must keep running (with its failure contained, never propagating back) even after the scope that started it has exited, is **not** an `Async` operation. It lives in the dedicated `Unscoped` effect (`Unscoped.spawn`), gated behind `io.yaes.unsafe.allowUnscoped` since **it escapes structured concurrency**. See the [Unscoped Effect](https://www.yaes.io/advanced/unscoped-effect/) documentation for details.
 
 #### Parallel Traversal
 
@@ -1452,7 +1457,7 @@ object Log {
 
 #### SLF4J Integration
 
-The `yaes-slf4j` module provides an alternative handler that delegates logging to any SLF4J-compatible backend (Logback, Log4j2, etc.). Simply replace `Log.run` with `Slf4jLog.run` — all existing application code remains unchanged:
+The `yaes-slf4j` module provides an alternative handler that delegates logging to any SLF4J-compatible backend (Logback, Log4j2, etc.). Simply replace `Log.run` with `Slf4jLog.run`; all existing application code remains unchanged:
 
 ```scala 3
 import io.yaes.Log
@@ -1466,11 +1471,79 @@ Slf4jLog.run {
 
 Level filtering is controlled by the SLF4J backend configuration instead of a handler parameter. See the [yaes-slf4j README](yaes-slf4j/README.md) for full details.
 
+### The `Unscoped` Effect
+
+Every concurrency primitive on `Async` (`Async.fork`, `Async.run`, `Async.unsupervised`) binds the work it starts to a structured scope, so nothing they start can outlive that scope. `Unscoped` is the deliberate, and only, exception in λÆS. It exists for one narrow case: background work that must keep running after its spawning scope has already exited, such as best-effort telemetry or logging. Because that guarantee is exactly what `Async` promises everywhere else, `Unscoped` is not part of `Async` at all; it is its own effect, gated behind a separate, clearly named import.
+
+#### Granting the Capability
+
+Unlike every other handler in λÆS, obtaining `Unscoped` does not run or contain anything: there is no `Unscoped.run`. The only way to obtain the library's own `Unscoped` backend is importing `allowUnscoped` from `io.yaes.unsafe` (hand-rolling a `given` from the public `Unscoped.Unsafe` trait is possible, but that is a deliberate, visible act of its own):
+
+```scala 3
+import io.yaes.unsafe.allowUnscoped
+
+allowUnscoped {
+  // Unscoped is available here
+}
+```
+
+This is intentional. Every other handler in the library contains what it grants: `Async.run` waits for its fibers, `Resource.run` releases its resources, `Raise.either` catches its own errors. `allowUnscoped` cannot make that promise, since the entire point of `Unscoped` is work that outlives the block that started it. Segregating the grant behind a dedicated function name means every place the grant is introduced is a single grep away: grep for the function, not the package, since `unsafe` is a subpackage of `io.yaes` and a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped` be called without the literal string `io.yaes.unsafe` ever appearing at the call site:
+
+```bash
+grep -rn "allowUnscoped" --include="*.scala"
+```
+
+Grant it once, near the top of an application, and thread `Unscoped` through `using` clauses to whatever call site actually needs it:
+
+```scala 3
+def handleRequest(req: Request)(using Unscoped): Response = {
+  Unscoped.spawn { sendTelemetry(req) }
+  Response.ok
+}
+```
+
+#### Spawning Detached Work
+
+`Unscoped.spawn` starts a computation on its own background daemon virtual thread, completely outside any structured concurrency scope, and returns immediately without waiting for it:
+
+```scala 3
+import io.yaes.unsafe.allowUnscoped
+
+allowUnscoped {
+  val strand = Unscoped.spawn {
+    sendTelemetry() // keeps running even after this call returns
+  }
+  strand.onComplete(_ => println("telemetry sent"))
+  strand.onFailure(err => println(s"telemetry failed: ${err.getMessage}"))
+  "done"
+} // returns "done" immediately; the strand is not waited on
+```
+
+A failure inside the spawned computation is contained on its background thread: it is captured for observers but never rethrown into the caller, so it can neither fail nor cancel the spawning scope. Unlike every `Async` operation, `spawn` requires no ambient `Async` capability at all, only `Unscoped`. The returned `Strand` is fire-and-forget: it has no `join` or `cancel`, only `onComplete` and `onFailure` to observe the eventual outcome.
+
+`spawn` grants the block nothing: it hands out an unstructured thread of control and nothing else. The block is a plain by-name computation, not an `Async ?=> A`, so a block that wants concurrency of its own opens its own scope with `Async.run`. That handler is free, so it costs nothing but makes the scope opening visible at the call site:
+
+```scala 3
+import io.yaes.unsafe.allowUnscoped
+
+allowUnscoped {
+  Unscoped.spawn {
+    Async.run {
+      val fiber = Async.fork { flushBuffers() }
+      fiber.join()
+      sendTelemetry()
+    }
+  }
+}
+```
+
+**`Unscoped.spawn` escapes structured concurrency**: the computation it starts is not cancelled when the spawning scope exits, its failure is never surfaced to that scope, and there is no way to join it from the caller. Reach for `Async.fork` (inside `Async.run` or `Async.unsupervised`) for anything that should still respect structured concurrency; reach for `Unscoped.spawn` only for genuine fire-and-forget background work that must outlive the scope that started it. See the [Unscoped Effect](https://www.yaes.io/advanced/unscoped-effect/) documentation for the full design rationale.
+
 ### The Retry Handler
 
 The `Retry` handler re-executes a failing block according to a `Schedule` retry policy. It catches typed errors via `Raise[E]` and uses `Async` for delays between attempts.
 
-> **Note:** `Retry` is not an effect — it orchestrates existing effects (`Raise` and `Async`). The block being retried just runs, succeeds, or fails.
+> **Note:** `Retry` is not an effect; it orchestrates existing effects (`Raise` and `Async`). The block being retried just runs, succeeds, or fails.
 
 #### Schedule Policies
 
@@ -1527,7 +1600,7 @@ val result: Either[DbError, String] = Async.run {
 // result will be Left(DbError("connection timeout")) after 3 total attempts
 ```
 
-If the block succeeds on any attempt, its value is returned immediately. If all attempts are exhausted, the last error is re-raised via the outer `Raise[E]`. Only errors of the specified type `E` trigger retries — other error types propagate immediately.
+If the block succeeds on any attempt, its value is returned immediately. If all attempts are exhausted, the last error is re-raised via the outer `Raise[E]`. Only errors of the specified type `E` trigger retries; other error types propagate immediately.
 
 #### Selective Retry with a Predicate
 
@@ -1561,7 +1634,7 @@ The default is `retryable = _ => true`: all errors are retried, preserving exist
 
 The `CircuitBreaker` handler protects a downstream call by cycling through three states based on consecutive typed `Raise[E]` failures.
 
-> **Note:** `CircuitBreaker` is not an effect — it is a stateful orchestrator. The protected block just runs, succeeds, or fails; it never calls `CircuitBreaker` directly.
+> **Note:** `CircuitBreaker` is not an effect; it is a stateful orchestrator. The protected block just runs, succeeds, or fails; it never calls `CircuitBreaker` directly.
 
 #### States
 

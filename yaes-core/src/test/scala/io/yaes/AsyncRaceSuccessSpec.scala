@@ -521,14 +521,12 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // `raceSuccess` must route through `async.attemptFork` the same way, so a custom `fork`
     // implementation is what actually runs.
     val fake: Async = new Async.Unsafe {
-      def delay(d: Duration): Unit                            = ()
-      def fork[A](name: String)(block: => A): Fiber[A]        =
+      def delay(d: Duration): Unit                     = ()
+      def fork[A](name: String)(block: => A): Fiber[A] =
         throw new UnsupportedOperationException("custom fork should have been used")
       def attemptFork[A](name: String)(block: => A): Fiber[A] = fork(name)(block)
-      def never(): Nothing =
+      def never(): Nothing                                    =
         throw new UnsupportedOperationException("never is not exercised by this test")
-      def detached[A](block: Async ?=> A): DetachedFiber[A] =
-        throw new UnsupportedOperationException("detached is not exercised by this test")
     }
 
     a[UnsupportedOperationException] should be thrownBy {
@@ -569,8 +567,6 @@ class AsyncRaceSuccessSpec extends AnyFlatSpec with Matchers with TimeLimits {
         new ImmediateFiber[A](name, block)
       def never(): Nothing =
         throw new UnsupportedOperationException("never is not exercised by this test")
-      def detached[A](block: Async ?=> A): DetachedFiber[A] =
-        throw new UnsupportedOperationException("detached is not exercised by this test")
     }
 
     val actualResult = Async.raceSuccess(1, 2)(using fake)

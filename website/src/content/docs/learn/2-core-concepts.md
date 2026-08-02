@@ -1,6 +1,6 @@
 ---
 title: Core Concepts
-description: Understand the mental model behind λÆS — what effects are, how deferred execution works, and how handlers compose.
+description: Understand the mental model behind λÆS, what effects are, how deferred execution works, and how handlers compose.
 sidebar:
   label: "2. Core Concepts"
   order: 2
@@ -14,7 +14,7 @@ This page explains the ideas that everything in λÆS is built on. Understanding
 
 In λÆS, an **Effect** is a managed side effect. To understand what that means, start from the more familiar idea:
 
-- A **Side Effect** is an unpredictable interaction, usually with an external system — reading from a file, generating a random number, or throwing an exception.
+- A **Side Effect** is an unpredictable interaction, usually with an external system: reading from a file, generating a random number, or throwing an exception.
 - An **Effect System** manages side effects by tracking and wrapping them. Instead of letting side effects happen implicitly, the system makes them explicit in function signatures.
 - An **Effect** describes _what kind_ of side effect a function needs, and _what type_ of value it produces.
 
@@ -28,7 +28,7 @@ def rollDie(using Random): Int =
   Random.nextInt(6) + 1
 ```
 
-The key insight: effects appear in the **type signature**. There are no hidden surprises — you can read a function's requirements directly from its parameters.
+The key insight: effects appear in the **type signature**. There are no hidden surprises; you can read a function's requirements directly from its parameters.
 
 ## Side Effects vs Effects
 
@@ -39,7 +39,7 @@ The key insight: effects appear in the **type signature**. There are no hidden s
 | Hard to test | Can be swapped for a test handler |
 | Untracked | Tracked by the type system |
 
-λÆS does not eliminate side effects — it _manages_ them. Under the hood, a handler runs the real operation. But the function itself is pure from the caller's perspective.
+λÆS does not eliminate side effects; it _manages_ them. Under the hood, a handler runs the real operation. But the function itself is pure from the caller's perspective.
 
 ## Deferred Execution
 
@@ -90,7 +90,7 @@ val result: Unit = Output.run {
 }
 ```
 
-Handlers can be **composed** — you wrap one inside another. The innermost handler runs first:
+Handlers can be **composed**: you wrap one inside another. The innermost handler runs first:
 
 ```scala
 import io.yaes.Random.*
@@ -127,29 +127,34 @@ def gameRound(using Random, Output, Raise[String]): Int = {
 }
 ```
 
-You can handle effects one at a time or all at once. Effects that are not yet handled are propagated to callers — the type system tracks them.
+You can handle effects one at a time or all at once. Effects that are not yet handled are propagated to callers; the type system tracks them.
 
 ## Available Effects
 
 λÆS provides a comprehensive set of effects:
 
 **Core Effects**
-- `Sync` — wraps arbitrary side-effecting code
-- `Async` — structured concurrency and fibers
-- `Raise[E]` — typed error handling
-- `State[S]` — stateful computations
+- `Sync`: wraps arbitrary side-effecting code
+- `Async`: structured concurrency and fibers
+- `Raise[E]`: typed error handling
+- `State[S]`: stateful computations
 
 **Resource Management**
-- `Resource` — acquire/release with guaranteed cleanup
-- `Shutdown` — graceful termination with hooks
+- `Resource`: acquire/release with guaranteed cleanup
+- `Shutdown`: graceful termination with hooks
 
 **I/O and Utilities**
-- `Input` / `Output` — console I/O
-- `Random` — random number generation
-- `SystemClock` / `SystemEnv` / `SystemProperties` — clock and environment access
-- `Log` — structured logging (via SLF4J backend)
+- `Input` / `Output`: console I/O
+- `Random`: random number generation
+- `SystemClock` / `SystemEnv` / `SystemProperties`: clock and environment access
+- `Log`: structured logging (via SLF4J backend)
 
 **Retry**
-- `Retry` — retry failing blocks with configurable schedules
+- `Retry`: retry failing blocks with configurable schedules
+
+**Escape Hatches**
+
+These deliberately break the guarantee every effect above makes, so they are called out separately rather than listed flatly alongside `Sync`/`Async`:
+- `Unscoped`: starts fire-and-forget background work that outlives the scope that started it, obtainable only via `io.yaes.unsafe.allowUnscoped`; grep for `allowUnscoped` (not `io.yaes.unsafe`, which a wildcard `import io.yaes.*` can bypass) to find every use site
 
 Continue to [Basic Effects](/learn/3-basic-effects/) to see these in action.

@@ -154,85 +154,6 @@ class JvmFiber[A](
   }
 }
 
-/** A handle to a detached background computation started by [[Async.detached]].
-  *
-  * Unlike [[Fiber]], a `DetachedFiber` is not bound to any [[Async]] scope and offers no
-  * `join`/`cancel`/`value`: the computation it represents already runs on its own background daemon
-  * thread, independent of any [[StructuredTaskScope]], so there is no scope left to join or cancel
-  * it from. The only supported operation is attaching an observer that runs once the detached
-  * computation completes, successfully or not.
-  *
-  * Example:
-  * {{{
-  * val handle: DetachedFiber[Int] = Async.run {
-  *   Async.detached {
-  *     42
-  *   }
-  * }
-  * handle.onComplete(value => println(s"got $value"))
-  * handle.onFailure(err => println(s"failed: ${err.getMessage}"))
-  * }}}
-  *
-  * @tparam A
-  *   the type of value produced by the detached computation
-  */
-trait DetachedFiber[A] {
-
-  /** Registers a callback to run once the detached computation completes successfully.
-    *
-    * The callback does not require an ambient [[Async]] capability. If the detached computation has
-    * not completed yet, the callback runs on the detached background thread itself once it does. If
-    * the computation has ALREADY completed successfully by the time this is called, the callback
-    * instead runs synchronously and inline, on whatever thread called `onComplete` — so a slow or
-    * blocking callback registered late blocks the registering thread until it returns. Either way,
-    * the callback never runs on a thread of its own.
-    *
-    * An observer that throws is not propagated anywhere and does not prevent other observers
-    * registered on the same handle from running: the exception is silently discarded. Since
-    * observers are the only feedback channel for detached work, a throwing observer's failure is
-    * otherwise invisible.
-    *
-    * @param result
-    *   the callback function, receiving the computed value
-    */
-  def onComplete(result: A => Unit): Unit
-
-  /** Registers a callback to run if the detached computation fails with an exception.
-    *
-    * As with [[onComplete]], the callback does not require an ambient [[Async]] capability, runs
-    * either on the detached background thread or, if the computation has already failed,
-    * synchronously and inline on the registering thread, and an observer that throws is silently
-    * discarded without affecting other observers. It may also run well after the spawning scope has
-    * already exited.
-    *
-    * @param handler
-    *   the callback function, receiving the exception the computation failed with
-    */
-  def onFailure(handler: Throwable => Unit): Unit
-}
-
-/** JVM implementation of [[DetachedFiber]], backed by a plain [[CompletableFuture]].
-  *
-  * Unlike [[JvmFiber]], there is no `forkedThread` handshake and no cancellation: the underlying
-  * daemon thread is not owned by any [[StructuredTaskScope]], so there is nothing structured to
-  * cancel it from.
-  *
-  * @param promise
-  *   the CompletableFuture holding the detached computation's result
-  * @tparam A
-  *   the type of value produced by the detached computation
-  */
-class JvmDetachedFiber[A](private val promise: CompletableFuture[A]) extends DetachedFiber[A] {
-
-  override def onComplete(fn: A => Unit): Unit =
-    promise.thenAccept(result => fn(result))
-
-  override def onFailure(handler: Throwable => Unit): Unit =
-    promise.whenComplete { (_, ex) =>
-      if (ex != null) handler(ex)
-    }
-}
-
 /** JVM implementation of [[Async]] using Java's [[StructuredTaskScope]].
   *
   * This implementation provides structured concurrency support using Java's StructuredTaskScope
@@ -259,49 +180,6 @@ class JvmAsync extends Async.Unsafe {
     // unreachable path would cancel the fiber cleanly instead of poisoning the enclosing scope
     // with what would otherwise look like a genuine failure.
     throw new InterruptedException()
-  }
-
-  override def detached[A](block: Async ?=> A): DetachedFiber[A] = {
-    val promise = CompletableFuture[A]()
-    Thread
-      .ofVirtual()
-      .name(s"yaes-detached-${java.util.UUID.randomUUID()}")
-      .start(() => {
-        try {
-          val result = Async.run(block)
-          promise.complete(result)
-        } catch {
-          case ie: InterruptedException =>
-            // Treated as an ordinary failure, not a cancellation: this thread belongs to no
-            // StructuredTaskScope whose cancellation semantics `promise.cancel(true)` could
-            // mirror (that would also destroy the original exception, contradicting onFailure's
-            // documented contract of receiving the exception the computation failed with).
-            // Deliberately NOT restoring the interrupt status here (unlike standard JVM practice
-            // for a thread that keeps running): `CompletableFuture` runs any dependents already
-            // registered via `onComplete`/`onFailure` synchronously, on this very thread, as part
-            // of `completeExceptionally` below. Setting the interrupt flag first would make an
-            // observer's own interruptible blocking calls fail spuriously. This thread is about to
-            // terminate right after, so no later code could ever observe the flag anyway -- there
-            // is nothing for restoring it to protect.
-            promise.completeExceptionally(ie)
-          case NonFatal(t) =>
-            // Contained, not rethrown: `block`'s failure must never propagate anywhere, since
-            // this thread belongs to no structured scope that could observe it.
-            promise.completeExceptionally(t)
-          case fatal: Throwable =>
-            // Everything NonFatal does not match: genuine fatal errors (VirtualMachineError,
-            // LinkageError, ...) as well as scala.util.control.ControlThrowable (e.g. Raise's
-            // own private AccumulationError, see Raise.scala). Still recorded for observers, but
-            // also rethrown so it reaches this thread's default uncaught-exception handler,
-            // exactly like an equivalent failure would on any other unmanaged thread. This
-            // thread is not part of any StructuredTaskScope, so rethrowing here cannot reach the
-            // spawning scope or caller either way. Mirrors JvmAsync.forkImpl's identical
-            // treatment of this case.
-            promise.completeExceptionally(fatal)
-            throw fatal
-        }
-      })
-    new JvmDetachedFiber[A](promise)
   }
 }
 object JvmAsync {
@@ -506,14 +384,15 @@ object Async {
     * @note
     *   `never` must be forked (directly with [[fork]]/[[attemptFork]], or indirectly through a
     *   combinator such as [[race]] that forks its branches for you), and that fork must itself be
-    *   cancelled, raced away, or wrapped in [[timeout]]. A bare `Async.run { Async.never }`, with no
-    *   fork in between, runs on the caller thread with nothing able to cancel it and hangs forever;
-    *   `Async.run` cannot help here because it only reaches its own teardown after the block
-    *   returns, which a `never` inside that block prevents. The same is true of a forked `never`
-    *   that is left un-cancelled and un-raced directly inside [[run]]: `run` waits for every forked
-    *   fiber to finish, joined or not, so it hangs just the same. [[unsupervised]] does not have
-    *   that failure mode: it cancels any fiber still running as soon as its block returns, so a
-    *   `never` forked inside it is torn down correctly with no explicit `cancel()` needed.
+    *   cancelled, raced away, or wrapped in [[timeout]]. A bare `Async.run { Async.never }`, with
+    *   no fork in between, runs on the caller thread with nothing able to cancel it and hangs
+    *   forever; `Async.run` cannot help here because it only reaches its own teardown after the
+    *   block returns, which a `never` inside that block prevents. The same is true of a forked
+    *   `never` that is left un-cancelled and un-raced directly inside [[run]]: `run` waits for
+    *   every forked fiber to finish, joined or not, so it hangs just the same. [[unsupervised]]
+    *   does not have that failure mode: it cancels any fiber still running as soon as its block
+    *   returns, so a `never` forked inside it is torn down correctly with no explicit `cancel()`
+    *   needed.
     * @note
     *   On the forked path, the interrupt that unparks `never` is handled by [[fork]]'s own
     *   cancellation logic, so it never escapes to user code as an untracked exception. That
@@ -850,10 +729,10 @@ object Async {
     * flag is set, it simply never applies `f` to that element. An element a worker has already
     * started still runs to completion, since cancellation is cooperative, so this cannot guarantee
     * that no additional element ever starts, only that no not yet started one does. If a worker is
-    * cancelled after claiming an element but before finishing
-    * it, that element is never produced, and the traversal fails with a
-    * `java.util.concurrent.CancellationException` instead of silently returning a partial result,
-    * mirroring how [[parTraverse]] surfaces cancellation through `Fiber.unsafeValue`.
+    * cancelled after claiming an element but before finishing it, that element is never produced,
+    * and the traversal fails with a `java.util.concurrent.CancellationException` instead of
+    * silently returning a partial result, mirroring how [[parTraverse]] surfaces cancellation
+    * through `Fiber.unsafeValue`.
     *
     * A `concurrency` of `items.size` or greater produces the same result as [[parTraverse]], but it
     * does not guarantee that every element runs on its own fiber: workers still claim indices from
@@ -1098,106 +977,6 @@ object Async {
     }
   }
 
-  /** Starts a detached computation on its own background daemon virtual thread, completely outside
-    * any structured concurrency scope.
-    *
-    * Every other entry point in this object — [[fork]], [[run]], [[unsupervised]] — binds the
-    * computation it starts to a [[StructuredTaskScope]], so it cannot outlive the scope that
-    * started it. `detached` is the deliberate exception: it starts `block` on a brand new daemon
-    * virtual thread that belongs to no scope at all, gives that thread its own fresh,
-    * self-contained [[Async]] capability (via an internal [[run]]), and returns immediately without
-    * waiting for it. A failure inside `block` is contained on that background thread; it is
-    * captured for observers but never rethrown into the caller, so it can neither fail nor cancel
-    * the spawning scope. The one exception is a genuinely fatal error (`VirtualMachineError`,
-    * `LinkageError`, ...): it is still captured for observers first, but is then also rethrown on
-    * the detached background thread itself, reaching that thread's default uncaught-exception
-    * handler -- never the caller's scope either way, since that thread belongs to no structured
-    * scope the caller could observe a rethrow through.
-    *
-    * Being a virtual thread, the background thread is a daemon by construction (the JVM's virtual
-    * threads are always daemons), so a detached computation left running never keeps the JVM alive
-    * on its own.
-    *
-    * The returned [[DetachedFiber]] is fire-and-forget: it exposes no `join`/`cancel`, only
-    * [[DetachedFiber.onComplete]] / [[DetachedFiber.onFailure]] to observe the eventual outcome.
-    *
-    * @note
-    *   '''This escapes structured concurrency.''' Unlike [[fork]], [[run]], and [[unsupervised]],
-    *   the computation started by `detached` is not cancelled when the spawning scope exits, its
-    *   failure is never surfaced to that scope, and there is no way to join it from the caller.
-    *   Reach for [[fork]] (inside [[run]] or [[unsupervised]]) for anything that should still
-    *   respect structured concurrency; reach for `detached` only for genuine fire-and-forget
-    *   background work (e.g. best-effort telemetry or logging) that must outlive the scope that
-    *   started it. Starting it still requires an ambient [[Async]] capability, exactly like every
-    *   other operation in this object: `detached` is a way to escape the spawning *scope*, not a
-    *   way to spawn concurrent work from code that holds no [[Async]] capability at all.
-    * @note
-    *   `block` must be self-terminating. `detached` offers no `cancel`, so a block that never
-    *   completes (for example one that calls [[never]] without anything to eventually interrupt
-    *   it, since the fresh scope `detached` opens for `block` has nothing left to cancel it either)
-    *   leaves the returned [[DetachedFiber]] permanently unsettled — no observer ever fires — and
-    *   leaks its parked background thread for the lifetime of the JVM, with no way to reclaim it.
-    * @note
-    *   An `InterruptedException` thrown by `block` is treated as an ordinary failure, not a
-    *   cancellation: it is reported to [[DetachedFiber.onFailure]] with its original type and
-    *   message intact. The background thread's interrupt status is deliberately NOT restored:
-    *   observers registered before completion run synchronously on this same, about-to-terminate
-    *   thread, and setting the flag would make an observer's own interruptible blocking calls fail
-    *   spuriously; nothing downstream ever gets a chance to observe the flag anyway. There is no
-    *   structured scope here for a cancellation signal to have come from, so, unlike [[fork]],
-    *   there is nothing to distinguish it from any other failure.
-    * @note
-    *   Observer callbacks passed to [[DetachedFiber.onComplete]] / [[DetachedFiber.onFailure]] are
-    *   plain `A => Unit` / `Throwable => Unit` functions: they do not receive an ambient [[Async]],
-    *   since the spawning scope (and the [[Async]] it provided) may already be gone by the time
-    *   they run. A callback that itself needs an [[Async]] capability can open its own with [[run]]
-    *   or [[unsupervised]].
-    * @note
-    *   `block` runs inside its own, freshly opened [[run]] scope, not bare. That scope applies
-    *   [[run]]'s usual rule: it waits for every fiber [[fork]]ed inside `block`, joined or not, and
-    *   if any of them fails, that failure wins over whatever `block` itself returned or threw. So
-    *   `Async.detached { Async.fork { throw Boom() }; 42 }` settles the returned [[DetachedFiber]]
-    *   exceptionally with `Boom()` -- the `42` is discarded -- even though `block` itself neither
-    *   threw nor was cancelled. Fibers forked inside `block` should be joined (or their failure
-    *   otherwise handled) before `block` returns, exactly as with a plain [[run]] call.
-    * @note
-    *   A [[Raise]] capability captured from the spawning scope and then used inside `block` does
-    *   not deliver its typed error at all: `Raise.raise` implements control flow via
-    *   `scala.util.boundary`/`break`, and the `boundary` frame that captured capability closed
-    *   over lives on the spawning thread's stack, not on this detached background thread. Using it
-    *   here throws a bare `scala.util.boundary.Break` instead, which is delivered to
-    *   [[DetachedFiber.onFailure]] like any other `NonFatal` failure rather than propagating the
-    *   typed error. Open a fresh [[Raise]] handler inside `block` instead.
-    *
-    * Example:
-    * {{{
-    * Async.run {
-    *   val handle = Async.detached {
-    *     sendTelemetry() // keeps running even after this Async.run block returns
-    *   }
-    *   handle.onComplete(_ => println("telemetry sent"))
-    *   handle.onFailure(err => println(s"telemetry failed: ${err.getMessage}"))
-    *   "done"
-    * } // returns "done" immediately; the detached fiber is not waited on
-    * }}}
-    *
-    * @param block
-    *   the computation to run detached; it receives its own freshly created [[Async]] capability,
-    *   with its own structured scope, independent of the caller's
-    * @param async
-    *   the async context; delegates to [[Async.Unsafe.detached]] for the actual spawning
-    *   implementation, exactly like every other `Async` operation delegates to its backend
-    * @tparam A
-    *   the type of value produced by the detached computation
-    * @return
-    *   a [[DetachedFiber]] handle for attaching completion/failure observers; it offers no
-    *   `join`/`cancel`, by design (see the note above)
-    * @see
-    *   [[unsupervised]], [[fork]] for the structured alternatives that remain bound to the spawning
-    *   scope
-    */
-  def detached[A](block: Async ?=> A)(using async: Async): DetachedFiber[A] = async.detached(block)
-
   opaque type Deadline = Duration
   object Deadline {
     def after(duration: Duration): Deadline = duration
@@ -1385,43 +1164,14 @@ object Async {
       * looping to avoid both would burn CPU forever and defeat the purpose of parking.
       *
       * On an interrupt based backend, implement this by parking on any interruptible primitive, the
-      * same way [[JvmAsync]] parks on an uncounted `CountDownLatch`. On a backend whose cancellation
-      * mechanism is not interrupt based, i.e. one that does not ultimately call `Thread.interrupt()`
-      * to cancel a fiber, park on whatever signal that backend uses instead to cancel a fiber.
+      * same way [[JvmAsync]] parks on an uncounted `CountDownLatch`. On a backend whose
+      * cancellation mechanism is not interrupt based, i.e. one that does not ultimately call
+      * `Thread.interrupt()` to cancel a fiber, park on whatever signal that backend uses instead to
+      * cancel a fiber.
       *
       * @return
       *   never returns normally
       */
     def never(): Nothing
-
-    /** Starts `block` on its own background computation, detached from any structured concurrency
-      * scope, and returns a handle for observing its eventual outcome.
-      *
-      * This is the backend seam behind [[Async.detached]]. The JVM backend ([[JvmAsync]]) starts
-      * `block` on a brand new daemon virtual thread, gives it its own fresh [[Async]] capability via
-      * an internal [[Async.run]], and reports its outcome on a plain
-      * [[java.util.concurrent.CompletableFuture]] wrapped in a [[JvmDetachedFiber]]. `block`'s
-      * failure is always contained here (captured for observers, never rethrown to any caller),
-      * since the background computation this method starts belongs to no structured scope that
-      * could observe a rethrow. The one exception is a genuinely fatal error: it is still captured
-      * for observers first, but is then also rethrown on the detached background thread itself, so
-      * it still reaches that thread's own default uncaught-exception handler -- it just never
-      * reaches a caller, since there is no caller scope to reach.
-      *
-      * This method has no default implementation; every backend must supply its own, the same way
-      * [[never]] does, so that spawning genuinely detached work is not hard-coded to a single
-      * backend's concurrency primitive. Implement this by starting `block` on whatever background
-      * execution primitive the backend uses for concurrent work (a daemon thread, an unmanaged
-      * fiber, ...), running it fully outside of any structured scope the backend maintains, and
-      * reporting its outcome through a [[DetachedFiber]] implementation appropriate to the backend.
-      *
-      * @param block
-      *   the computation to run detached; it receives its own freshly created [[Async]] capability
-      * @tparam A
-      *   the type of value produced by the detached computation
-      * @return
-      *   a [[DetachedFiber]] handle for attaching completion/failure observers
-      */
-    def detached[A](block: Async ?=> A): DetachedFiber[A]
   }
 }
