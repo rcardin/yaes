@@ -1519,7 +1519,23 @@ allowUnscoped {
 } // returns "done" immediately; the strand is not waited on
 ```
 
-`spawn` gives the computation its own, freshly created `Async` capability with its own structured scope, so a failure inside it is contained there: it is captured for observers but never rethrown into the caller, so it can neither fail nor cancel the spawning scope. Unlike every `Async` operation, `spawn` requires no ambient `Async` capability at all — only `Unscoped`. The returned `Strand` is fire-and-forget: it has no `join` or `cancel`, only `onComplete` and `onFailure` to observe the eventual outcome.
+A failure inside the spawned computation is contained on its background thread: it is captured for observers but never rethrown into the caller, so it can neither fail nor cancel the spawning scope. Unlike every `Async` operation, `spawn` requires no ambient `Async` capability at all — only `Unscoped`. The returned `Strand` is fire-and-forget: it has no `join` or `cancel`, only `onComplete` and `onFailure` to observe the eventual outcome.
+
+`spawn` grants the block nothing: it hands out an unstructured thread of control and nothing else. The block is a plain by-name computation, not an `Async ?=> A`, so a block that wants concurrency of its own opens its own scope with `Async.run`. That handler is free, so it costs nothing but makes the scope opening visible at the call site:
+
+```scala 3
+import io.yaes.unsafe.allowUnscoped
+
+allowUnscoped {
+  Unscoped.spawn {
+    Async.run {
+      val fiber = Async.fork { flushBuffers() }
+      fiber.join()
+      sendTelemetry()
+    }
+  }
+}
+```
 
 **`Unscoped.spawn` escapes structured concurrency**: the computation it starts is not cancelled when the spawning scope exits, its failure is never surfaced to that scope, and there is no way to join it from the caller. Reach for `Async.fork` (inside `Async.run` or `Async.unsupervised`) for anything that should still respect structured concurrency; reach for `Unscoped.spawn` only for genuine fire-and-forget background work that must outlive the scope that started it. See the [Unscoped Effect](https://www.yaes.io/advanced/unscoped-effect/) documentation for the full design rationale.
 

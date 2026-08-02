@@ -67,14 +67,16 @@ class JvmStrand[A](private val promise: CompletableFuture[A]) extends Unscoped.S
   */
 private[yaes] object JvmUnscoped extends Unscoped.Unsafe {
 
-  override def spawn[A](block: Async ?=> A): Unscoped.Strand[A] = {
+  override def spawn[A](block: => A): Unscoped.Strand[A] = {
     val promise = CompletableFuture[A]()
     Thread
       .ofVirtual()
       .name(s"yaes-unscoped-${java.util.UUID.randomUUID()}")
+      // `block` is by-name, so it is forced here, inside the lambda, on the detached virtual
+      // thread -- never eagerly on the calling thread. That is the whole point of the operation.
       .start(() => {
         try {
-          val result = Async.run(block)
+          val result = block
           promise.complete(result)
         } catch {
           case ie: InterruptedException =>
@@ -145,11 +147,12 @@ object Unscoped {
     * Every entry point on [[Async]] — [[Async.fork]], [[Async.run]], [[Async.unsupervised]] — binds
     * the computation it starts to a `StructuredTaskScope`, so it cannot outlive the scope that
     * started it. `spawn` is the deliberate exception: it starts `block` on a brand new daemon
-    * virtual thread that belongs to no scope at all, gives that thread its own fresh,
-    * self-contained [[Async]] capability (via an internal [[Async.run]]), and returns immediately
-    * without waiting for it. A failure inside `block` is contained on that background thread; it is
-    * captured for observers but never rethrown into the caller, so it can neither fail nor cancel
-    * the spawning scope. The one exception is a genuinely fatal error (`VirtualMachineError`,
+    * virtual thread that belongs to no scope at all, and returns immediately without waiting for
+    * it. `block` is a plain by-name computation: it is granted nothing, and in particular no
+    * [[Async]] capability -- a block that wants concurrency of its own opens its own scope with
+    * [[Async.run]]. A failure inside `block` is contained on that background thread; it is captured
+    * for observers but never rethrown into the caller, so it can neither fail nor cancel the
+    * spawning scope. The one exception is a genuinely fatal error (`VirtualMachineError`,
     * `LinkageError`, ...): it is still captured for observers first, but is then also rethrown on
     * the detached background thread itself, reaching that thread's default uncaught-exception
     * handler -- never the caller's scope either way, since that thread belongs to no structured
@@ -171,14 +174,14 @@ object Unscoped {
     *   telemetry or logging) that must outlive the scope that started it. Unlike every `Async`
     *   operation, `spawn` requires no ambient [[Async]] capability at all: it requires only the
     *   [[Unscoped]] capability, obtained by importing [[io.yaes.unsafe.allowUnscoped]]. That
-    *   capability is what marks a call site as one that may start work outliving its caller — the
-    *   `block` it starts receives its own, entirely separate [[Async]] capability.
+    *   capability is what marks a call site as one that may start work outliving its caller, and it
+    *   is the only thing `spawn` hands out: an unstructured thread of control, nothing else.
     * @note
     *   `block` must be self-terminating. `spawn` offers no `cancel`, so a block that never
-    *   completes (for example one that calls [[Async.never]] without anything to eventually
-    *   interrupt it, since the fresh scope `spawn` opens for `block` has nothing left to cancel it
-    *   either) leaves the returned [[Strand]] permanently unsettled — no observer ever fires — and
-    *   leaks its parked background thread for the lifetime of the JVM, with no way to reclaim it.
+    *   completes (for example one that calls [[Async.never]] inside its own [[Async.run]], with
+    *   nothing left to eventually interrupt it) leaves the returned [[Strand]] permanently
+    *   unsettled — no observer ever fires — and leaks its parked background thread for the lifetime
+    *   of the JVM, with no way to reclaim it.
     * @note
     *   An `InterruptedException` thrown by `block` is treated as an ordinary failure, not a
     *   cancellation: it is reported to [[Strand.onFailure]] with its original type and message
@@ -195,14 +198,14 @@ object Unscoped {
     *   A callback that itself needs an [[Async]] capability can open its own with [[Async.run]] or
     *   [[Async.unsupervised]].
     * @note
-    *   `block` runs inside its own, freshly opened [[Async.run]] scope, not bare. That scope
-    *   applies [[Async.run]]'s usual rule: it waits for every fiber [[Async.fork]]ed inside
-    *   `block`, joined or not, and if any of them fails, that failure wins over whatever `block`
-    *   itself returned or threw. So `Unscoped.spawn { Async.fork { throw Boom() }; 42 }` settles
-    *   the returned [[Strand]] exceptionally with `Boom()` -- the `42` is discarded -- even though
-    *   `block` itself neither threw nor was cancelled. Fibers forked inside `block` should be
-    *   joined (or their failure otherwise handled) before `block` returns, exactly as with a plain
-    *   [[Async.run]] call.
+    *   `block` runs bare: `spawn` opens no scope for it. A block that needs to fork must open its
+    *   own with [[Async.run]] (a free handler, so it costs nothing but makes the scope opening
+    *   visible), and [[Async.run]]'s usual rule then applies inside it -- it waits for every fiber
+    *   [[Async.fork]]ed there, joined or not, and if any of them fails, that failure wins over
+    *   whatever the block itself returned or threw. So
+    *   `Unscoped.spawn { Async.run { Async.fork { throw Boom() }; 42 } }` settles the returned
+    *   [[Strand]] exceptionally with `Boom()` -- the `42` is discarded -- even though nothing at
+    *   the outer level threw or was cancelled.
     * @note
     *   A [[Raise]] capability captured from the spawning scope and then used inside `block` does
     *   not deliver its typed error at all: `Raise.raise` implements control flow via
@@ -227,8 +230,8 @@ object Unscoped {
     * }}}
     *
     * @param block
-    *   the computation to run detached; it receives its own freshly created [[Async]] capability,
-    *   with its own structured scope, independent of the caller's
+    *   the computation to run detached; a plain by-name block, evaluated on the detached background
+    *   thread and granted no capability of its own
     * @param u
     *   the unscoped context; delegates to [[Unscoped.Unsafe.spawn]] for the actual spawning
     *   implementation
@@ -241,7 +244,7 @@ object Unscoped {
     *   [[Async.unsupervised]], [[Async.fork]] for the structured alternatives that remain bound to
     *   the spawning scope
     */
-  def spawn[A](block: Async ?=> A)(using u: Unscoped): Strand[A] = u.spawn(block)
+  def spawn[A](block: => A)(using u: Unscoped): Strand[A] = u.spawn(block)
 
   /** A handle to a detached background computation started by [[Unscoped.spawn]].
     *
@@ -319,30 +322,32 @@ object Unscoped {
       * scope, and returns a handle for observing its eventual outcome.
       *
       * This is the backend seam behind [[Unscoped.spawn]]. The JVM backend (`JvmUnscoped`) starts
-      * `block` on a brand new daemon virtual thread, gives it its own fresh [[Async]] capability
-      * via an internal [[Async.run]], and reports its outcome on a plain
-      * [[java.util.concurrent.CompletableFuture]] wrapped in a [[JvmStrand]]. `block`'s failure is
-      * always contained here (captured for observers, never rethrown to any caller), since the
-      * background computation this method starts belongs to no structured scope that could observe
-      * a rethrow. The one exception is a genuinely fatal error: it is still captured for observers
-      * first, but is then also rethrown on the detached background thread itself, so it still
-      * reaches that thread's own default uncaught-exception handler -- it just never reaches a
-      * caller, since there is no caller scope to reach.
+      * `block` on a brand new daemon virtual thread and reports its outcome on a plain
+      * [[java.util.concurrent.CompletableFuture]] wrapped in a [[JvmStrand]]. `block` is granted
+      * nothing at all: it is a plain by-name computation, and a block that wants concurrency of its
+      * own opens its own scope with [[Async.run]]. `block`'s failure is always contained here
+      * (captured for observers, never rethrown to any caller), since the background computation
+      * this method starts belongs to no structured scope that could observe a rethrow. The one
+      * exception is a genuinely fatal error: it is still captured for observers first, but is then
+      * also rethrown on the detached background thread itself, so it still reaches that thread's
+      * own default uncaught-exception handler -- it just never reaches a caller, since there is no
+      * caller scope to reach.
       *
       * This method has no default implementation; every backend must supply its own, so that
       * spawning genuinely detached work is not hard-coded to a single backend's concurrency
       * primitive. Implement this by starting `block` on whatever background execution primitive the
       * backend uses for concurrent work (a daemon thread, an unmanaged fiber, ...), running it
       * fully outside of any structured scope the backend maintains, and reporting its outcome
-      * through a [[Unscoped.Strand]] implementation appropriate to the backend.
+      * through a [[Unscoped.Strand]] implementation appropriate to the backend. `block` is by-name:
+      * it must be forced on that background primitive, never eagerly on the calling thread.
       *
       * @param block
-      *   the computation to run detached; it receives its own freshly created [[Async]] capability
+      *   the computation to run detached; a plain by-name block, granted no capability of its own
       * @tparam A
       *   the type of value produced by the detached computation
       * @return
       *   a [[Unscoped.Strand]] handle for attaching completion/failure observers
       */
-    def spawn[A](block: Async ?=> A): Strand[A]
+    def spawn[A](block: => A): Strand[A]
   }
 }

@@ -84,6 +84,86 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     )
   }
 
+  it should "take a plain by-name block that is granted no Async capability of its own" in failAfter(
+    unblockTimeLimit
+  ) {
+    import io.yaes.unsafe.allowUnscoped
+
+    // `spawn` takes `block: => A`, not `block: Async ?=> A`: it hands out an unstructured thread
+    // of control and nothing else. Nothing inside the block can summon an ambient Async, so the
+    // block below fails to compile. Restoring `block: Async ?=> A` would make it compile again and
+    // fail this assertion, so the line has teeth.
+    assertDoesNotCompile(
+      """
+        |io.yaes.unsafe.allowUnscoped {
+        |  Unscoped.spawn { summon[Async] }
+        |  ()
+        |}
+        |""".stripMargin
+    )
+    // Positive control for the assertion above: identical, except the block opens the scope
+    // itself. Without this, the assertDoesNotCompile could pass for an unrelated reason (a typo,
+    // a missing name) and silently stop proving anything about the capability.
+    assertCompiles(
+      """
+        |io.yaes.unsafe.allowUnscoped {
+        |  Unscoped.spawn { Async.run { summon[Async] } }
+        |  ()
+        |}
+        |""".stripMargin
+    )
+
+    // And a plain block, with only the Unscoped capability in scope, settles with its value.
+    val done   = new CountDownLatch(1)
+    val value  = new AtomicReference[Int]()
+    val handle = allowUnscoped {
+      Unscoped.spawn { 42 }
+    }
+    handle.onComplete { v =>
+      value.set(v)
+      done.countDown()
+    }
+
+    awaitLatch(done) shouldBe true
+    value.get() shouldBe 42
+  }
+
+  it should "evaluate the by-name block on the spawned background thread, not eagerly on the calling thread" in failAfter(
+    unblockTimeLimit
+  ) {
+    import io.yaes.unsafe.allowUnscoped
+
+    val started       = new CountDownLatch(1)
+    val release       = new CountDownLatch(1)
+    val done          = new CountDownLatch(1)
+    val blockThread   = new AtomicReference[Thread]()
+    val callingThread = Thread.currentThread()
+
+    // `block` is by-name, so it must be forced inside the spawned thread's body. Were it forced
+    // eagerly at the call site instead, `allowUnscoped` below could not return until `release` is
+    // counted down, which happens only further down this same thread -- the test would deadlock
+    // and be failed by the `failAfter` signaler rather than passing.
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] {
+        blockThread.set(Thread.currentThread())
+        started.countDown()
+        awaitLatch(release) shouldBe true
+        42
+      }
+    }
+    handle.onComplete(_ => done.countDown())
+
+    awaitLatch(started) shouldBe true
+    // `spawn` has already returned while the block is still parked on `release`, so the spawned
+    // computation is genuinely still running at this point.
+    done.getCount shouldBe 1
+    blockThread.get() should not be callingThread
+    blockThread.get().isVirtual shouldBe true
+
+    release.countDown()
+    awaitLatch(done) shouldBe true
+  }
+
   it should "keep running and reach completion after the spawning Async.run block has already returned" in failAfter(
     unblockTimeLimit
   ) {
@@ -331,12 +411,9 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     val interruptedInObserver = new AtomicBoolean(true)
 
     // Mirrors the InterruptedException-path test above, but exercises the far more common
-    // NonFatal path instead. Its clear interrupt flag is not intrinsic to that arm: `block`
-    // runs inside its own internal `Async.run`, and it is that inner `Async.run`'s own
-    // `Thread.interrupted()` call (Async.scala's `run`, in its `case t: Throwable` arm) that
-    // undoes the interrupt flag `JvmAsync.ensureJoined` sets while tearing down the scope, before
-    // the exception is rethrown to this NonFatal arm and the promise is completed. An onFailure
-    // observer registered before completion runs synchronously on this same thread, so a stray
+    // NonFatal path instead. `block` runs bare on the spawned thread, so nothing on this path
+    // should ever touch that thread's interrupt flag. An onFailure observer registered before
+    // completion runs synchronously on this same thread, so a stray
     // `Thread.currentThread().interrupt()` anywhere on this path would be visible right here.
     val handle = allowUnscoped {
       Unscoped.spawn[Unit] {
@@ -579,7 +656,7 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     }
   }
 
-  it should "support a spawned block that forks its own fibers internally" in failAfter(
+  it should "support a spawned block that opens its own Async.run scope and forks fibers inside it" in failAfter(
     unblockTimeLimit
   ) {
     import io.yaes.unsafe.allowUnscoped
@@ -587,15 +664,20 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     val done  = new CountDownLatch(1)
     val value = new AtomicReference[Int]()
 
+    // `spawn` grants no Async capability, so a block that wants to fork opens its own scope with
+    // `Async.run`. That handler is free (no `using` clause), so this costs the caller nothing but
+    // makes the scope opening visible at the call site.
     val handle = allowUnscoped {
       Unscoped.spawn[Int] {
-        val innerResult = new AtomicReference[Int]()
-        val fiber       = Async.fork {
-          innerResult.set(21)
-          ()
+        Async.run {
+          val innerResult = new AtomicReference[Int]()
+          val fiber       = Async.fork {
+            innerResult.set(21)
+            ()
+          }
+          fiber.join()
+          innerResult.get() * 2
         }
-        fiber.join()
-        innerResult.get() * 2
       }
     }
     handle.onComplete { v =>
@@ -616,18 +698,19 @@ class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     val observedFailure  = new AtomicReference[Throwable]()
     val completeObserved = new AtomicBoolean(false)
 
-    // `block` runs inside its own internal `Async.run` scope. That scope waits for every fiber
-    // forked inside it, joined or not, exactly like a top-level `Async.run` call would; if any of
-    // them fails, that failure -- not the value `block` returns -- becomes the outcome. Here
-    // `block` forks a fiber that fails and never joins it, then returns `42` and neither throws
-    // nor is itself cancelled; the handle must still fail with the child's exception, discarding
-    // the `42`.
+    // `spawn` opens no scope of its own, so this is the caller's `Async.run` doing the waiting.
+    // That scope waits for every fiber forked inside it, joined or not; if any of them fails, that
+    // failure -- not the value the block returns -- becomes the outcome. Here the block forks a
+    // fiber that fails and never joins it, then returns `42` and neither throws nor is itself
+    // cancelled; the handle must still fail with the child's exception, discarding the `42`.
     val handle = allowUnscoped {
       Unscoped.spawn[Int] {
-        Async.fork {
-          throw new Boom("unjoined child boom")
+        Async.run {
+          Async.fork {
+            throw new Boom("unjoined child boom")
+          }
+          42
         }
-        42
       }
     }
     handle.onComplete(_ => completeObserved.set(true))
