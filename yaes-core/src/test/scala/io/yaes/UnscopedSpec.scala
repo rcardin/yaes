@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import io.yaes.Async.*
 
-class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
+class UnscopedSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
   /** Interrupts the test thread when a `failAfter` limit expires, turning a regression that hangs
     * forever into a clean test failure.
@@ -41,100 +41,134 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
   private def awaitLatch(latch: CountDownLatch): Boolean =
     latch.await(AwaitTimeout.toMillis, TimeUnit.MILLISECONDS)
 
-  "Async.detached" should "keep running and reach completion after the spawning Async.run block has already returned" in failAfter(
+  "Unscoped.spawn" should "not compile without an ambient Unscoped capability" in {
+    // `spawn` takes `using Unscoped`, the same as every other capability-gated operation in this
+    // library. With no ambient Unscoped capability in scope, `Unscoped.spawn { 42 }` fails to
+    // compile. Removing `(using u: Unscoped)` from `Unscoped.spawn` would make this assertion
+    // itself fail (the snippet would newly compile), so this line has teeth.
+    assertDoesNotCompile("Unscoped.spawn { 42 }")
+  }
+
+  it should "not be obtainable without importing io.yaes.unsafe.allowUnscoped, since there is no Unscoped.run" in {
+    // There is deliberately no `Unscoped.run`: a free handler would let
+    // `def anything(): Unit = Unscoped.run { leak() }` compile from pure code with no capability
+    // at all, the exact defect this effect exists to avoid (see the design rationale in issue
+    // #326). This proves no such handler exists, under any name matching `run`.
+    assertDoesNotCompile("Unscoped.run { 42 }")
+    // `allowUnscoped` is not in scope in this test: every other test in this spec imports it
+    // locally, inside its own `in { ... }` block, specifically so this assertion is not defeated
+    // by a file-level import that would otherwise make `allowUnscoped` resolvable everywhere.
+    assertDoesNotCompile("allowUnscoped { 42 }")
+  }
+
+  it should "require no ambient Async capability: a Sync-only call site compiles" in {
+    // The ambient Async that `Async.detached` used to require was never used for anything but
+    // dispatch. `spawn` requires only `Unscoped`, so a call site holding `Sync` (and `Unscoped`),
+    // but no `Async` at all, must still compile -- exactly the shape of the motivating use case,
+    // telemetry from a synchronous request handler.
+    assertCompiles(
+      """
+        |def handleRequest(req: Int)(using Sync, Unscoped): Int = {
+        |  Unscoped.spawn { req + 1 }
+        |  req
+        |}
+        |""".stripMargin
+    )
+  }
+
+  it should "keep running and reach completion after the spawning Async.run block has already returned" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val release   = new CountDownLatch(1)
     val completed = new CountDownLatch(1)
     val order     = new ConcurrentLinkedQueue[String]()
 
-    Async.run {
-      Async.detached {
+    allowUnscoped {
+      Async.run {
         // Only proceeds once the parent test releases it, which happens strictly after
         // Async.run below has already returned. If this ran inside the spawning scope,
         // Async.run's own join() would have to wait for it and could never return first.
-        awaitLatch(release) shouldBe true
-        order.add("detached-done")
-        completed.countDown()
+        Unscoped.spawn {
+          awaitLatch(release) shouldBe true
+          order.add("spawn-done")
+          completed.countDown()
+        }
+        ()
       }
-      ()
     }
     order.add("run-returned")
     release.countDown()
 
     awaitLatch(completed) shouldBe true
-    order.toArray should contain theSameElementsInOrderAs List("run-returned", "detached-done")
+    order.toArray should contain theSameElementsInOrderAs List("run-returned", "spawn-done")
   }
 
   it should "keep running and reach completion after the spawning Async.unsupervised block has already returned" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val release   = new CountDownLatch(1)
     val completed = new CountDownLatch(1)
     val order     = new ConcurrentLinkedQueue[String]()
 
-    Async.run {
-      Async.unsupervised {
-        Async.detached {
-          awaitLatch(release) shouldBe true
-          order.add("detached-done")
-          completed.countDown()
+    allowUnscoped {
+      Async.run {
+        Async.unsupervised {
+          Unscoped.spawn {
+            awaitLatch(release) shouldBe true
+            order.add("spawn-done")
+            completed.countDown()
+          }
+          ()
         }
-        ()
+        order.add("unsupervised-returned")
       }
-      order.add("unsupervised-returned")
     }
     release.countDown()
 
     awaitLatch(completed) shouldBe true
     order.toArray should contain theSameElementsInOrderAs List(
       "unsupervised-returned",
-      "detached-done"
+      "spawn-done"
     )
   }
 
-  it should "require an ambient Async capability to be started, yet still let the computation escape the scope that started it" in failAfter(
+  it should "keep running and reach completion with no ambient Async at all, spawned directly under allowUnscoped" in failAfter(
     unblockTimeLimit
   ) {
-    // `detached` takes `using Async`, the same as every other capability-gated operation in this
-    // object. Unlike the comment-only claim this test used to make, this line actually exercises
-    // the gate: with no ambient Async capability in scope, `Async.detached { 42 }` fails to
-    // compile. Removing `(using async: Async)` from `Async.detached` would make this assertion
-    // itself fail (the snippet would newly compile), so this line has teeth where the runtime
-    // assertions below do not.
-    assertDoesNotCompile("Async.detached { 42 }")
+    import io.yaes.unsafe.allowUnscoped
 
-    val release   = new CountDownLatch(1)
     val completed = new CountDownLatch(1)
-    val order     = new ConcurrentLinkedQueue[String]()
+    val value     = new AtomicReference[Int]()
 
-    // The capability is needed only to *start* the background computation; once started, that
-    // computation still runs independent of, and outlives, the scope that provided the
-    // capability -- proven the same way as the first test above.
-    val handle = Async.run {
-      Async.detached[Int] {
-        awaitLatch(release) shouldBe true
-        order.add("detached-done")
+    // No Async.run anywhere: `spawn` needs only the Unscoped capability granted by
+    // `allowUnscoped`, and returns immediately without waiting for the spawned computation.
+    allowUnscoped {
+      Unscoped.spawn[Int] {
+        value.set(42)
+        completed.countDown()
         42
       }
+      ()
     }
-    order.add("run-returned")
-    release.countDown()
-
-    handle.onComplete(_ => completed.countDown())
 
     awaitLatch(completed) shouldBe true
-    order.toArray should contain theSameElementsInOrderAs List("run-returned", "detached-done")
+    value.get() shouldBe 42
   }
 
   it should "start the computation on a virtual thread, which the JVM always treats as a daemon" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val threadRef = new AtomicReference[Thread]()
     val done      = new CountDownLatch(1)
 
-    Async.run {
-      Async.detached {
+    allowUnscoped {
+      Unscoped.spawn {
         threadRef.set(Thread.currentThread())
         done.countDown()
       }
@@ -143,82 +177,92 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
     awaitLatch(done) shouldBe true
     threadRef.get() should not be null
-    // This proves the background thread has the daemon/virtual properties that make "a detached
+    // This proves the background thread has the daemon/virtual properties that make "a spawned
     // computation left running never keeps the JVM alive on its own" true by construction (the
     // JVM never waits for daemon threads before exiting). It does not itself observe the JVM
-    // actually exiting with only detached work outstanding, which would require driving a
+    // actually exiting with only unscoped work outstanding, which would require driving a
     // separate process.
     threadRef.get().isDaemon shouldBe true
     threadRef.get().isVirtual shouldBe true
   }
 
-  it should "not propagate a failure thrown inside the detached computation to the spawning scope" in failAfter(
+  it should "not propagate a failure thrown inside the spawned computation to the spawning scope" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val release     = new CountDownLatch(1)
     val aboutToFail = new CountDownLatch(1)
 
-    // The detached computation only throws once released, and it is released only after
+    // The spawned computation only throws once released, and it is released only after
     // Async.run below has already returned. If the failure were somehow bound to the spawning
     // scope (e.g. joined by it), Async.run could not have returned "parent-ok" first: it would
-    // have had to wait for, and then rethrow, the detached failure.
-    val result = Async.run {
-      Async.detached {
-        awaitLatch(release) shouldBe true
-        aboutToFail.countDown()
-        throw new Boom("detached boom")
+    // have had to wait for, and then rethrow, the spawned failure.
+    val result = allowUnscoped {
+      Async.run {
+        Unscoped.spawn {
+          awaitLatch(release) shouldBe true
+          aboutToFail.countDown()
+          throw new Boom("spawn boom")
+        }
+        "parent-ok"
       }
-      "parent-ok"
     }
 
     result shouldBe "parent-ok"
     release.countDown()
 
-    // Confirm the detached computation actually reached its throw, rather than relying on the
+    // Confirm the spawned computation actually reached its throw, rather than relying on the
     // 2-3ms window between Async.run returning and the assertion above being too short for the
-    // (not yet even started) detached block to have failed -- a bug that delayed or dropped the
+    // (not yet even started) spawned block to have failed -- a bug that delayed or dropped the
     // failure entirely would otherwise hide behind that timing coincidence.
     awaitLatch(aboutToFail) shouldBe true
   }
 
-  it should "not cancel sibling work in the spawning scope when the detached computation fails" in failAfter(
+  it should "not cancel sibling work in the spawning scope when the spawned computation fails" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val siblingDone = new CountDownLatch(1)
     val aboutToFail = new CountDownLatch(1)
 
-    val result = Async.run {
-      Async.detached {
-        aboutToFail.countDown()
-        throw new Boom("detached boom")
-      }
-      // Wait for the detached computation to have actually reached its throw before forking the
-      // sibling, so this test cannot pass merely because the detached block had not even started
-      // yet by the time the sibling ran.
-      awaitLatch(aboutToFail) shouldBe true
+    val result = allowUnscoped {
+      Async.run {
+        Unscoped.spawn {
+          aboutToFail.countDown()
+          throw new Boom("spawn boom")
+        }
+        // Wait for the spawned computation to have actually reached its throw before forking the
+        // sibling, so this test cannot pass merely because the spawned block had not even started
+        // yet by the time the sibling ran.
+        awaitLatch(aboutToFail) shouldBe true
 
-      // A sibling fiber forked in the very same scope must run to completion untouched by the
-      // detached failure.
-      val sibling = Async.fork {
-        siblingDone.countDown()
+        // A sibling fiber forked in the very same scope must run to completion untouched by the
+        // spawned computation's failure.
+        val sibling = Async.fork {
+          siblingDone.countDown()
+        }
+        sibling.join()
+        "sibling-ok"
       }
-      sibling.join()
-      "sibling-ok"
     }
 
     result shouldBe "sibling-ok"
     awaitLatch(siblingDone) shouldBe true
   }
 
-  it should "surface an InterruptedException thrown by the detached computation to the failure observer with its original type and message intact" in failAfter(
+  it should "surface an InterruptedException thrown by the spawned computation to the failure observer with its original type and message intact" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val observed         = new CountDownLatch(1)
     val observedFailure  = new AtomicReference[Throwable]()
     val completeObserved = new AtomicBoolean(false)
 
-    val handle = Async.run {
-      Async.detached[Unit] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[Unit] {
         throw new InterruptedException("interrupted boom")
       }
     }
@@ -236,9 +280,11 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     completeObserved.get() shouldBe false
   }
 
-  it should "not leave the detached background thread's interrupt flag set for an onFailure observer registered before the InterruptedException is thrown" in failAfter(
+  it should "not leave the spawned background thread's interrupt flag set for an onFailure observer registered before the InterruptedException is thrown" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val observerRegistered    = new CountDownLatch(1)
     val observed              = new CountDownLatch(1)
     val interruptedInObserver = new AtomicBoolean(true)
@@ -247,9 +293,9 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // happens strictly before this latch is released. That guarantees `promise.completeExceptionally`
     // runs only after `onFailure` has already registered its callback with the still-incomplete
     // `CompletableFuture`, so the callback is guaranteed to run synchronously, on this very
-    // detached background thread, rather than racily on whichever thread happens to register late.
-    val handle = Async.run {
-      Async.detached[Unit] {
+    // spawned background thread, rather than racily on whichever thread happens to register late.
+    val handle = allowUnscoped {
+      Unscoped.spawn[Unit] {
         awaitLatch(observerRegistered) shouldBe true
         throw new InterruptedException("interrupted boom")
       }
@@ -267,9 +313,11 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     interruptedInObserver.get() shouldBe false
   }
 
-  it should "not leave the detached background thread's interrupt flag set for an onFailure observer registered before a NonFatal exception is thrown" in failAfter(
+  it should "not leave the spawned background thread's interrupt flag set for an onFailure observer registered before a NonFatal exception is thrown" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val observerRegistered    = new CountDownLatch(1)
     val observed              = new CountDownLatch(1)
     val interruptedInObserver = new AtomicBoolean(true)
@@ -282,8 +330,8 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // the exception is rethrown to this NonFatal arm and the promise is completed. An onFailure
     // observer registered before completion runs synchronously on this same thread, so a stray
     // `Thread.currentThread().interrupt()` anywhere on this path would be visible right here.
-    val handle = Async.run {
-      Async.detached[Unit] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[Unit] {
         awaitLatch(observerRegistered) shouldBe true
         throw new Boom("nonfatal boom")
       }
@@ -298,23 +346,27 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     interruptedInObserver.get() shouldBe false
   }
 
-  it should "let a completion observer run with the value after the detached computation finishes, even once the spawning scope has exited" in failAfter(
+  it should "let a completion observer run with the value after the spawned computation finishes, even once the spawning scope has exited" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val release       = new CountDownLatch(1)
     val observed      = new CountDownLatch(1)
     val observedValue = new AtomicReference[Int]()
 
-    val outerResult = Async.run {
-      val handle = Async.detached[Int] {
-        awaitLatch(release) shouldBe true
-        42
+    val outerResult = allowUnscoped {
+      Async.run {
+        val handle = Unscoped.spawn[Int] {
+          awaitLatch(release) shouldBe true
+          42
+        }
+        handle.onComplete { value =>
+          observedValue.set(value)
+          observed.countDown()
+        }
+        "scope-done"
       }
-      handle.onComplete { value =>
-        observedValue.set(value)
-        observed.countDown()
-      }
-      "scope-done"
     }
 
     outerResult shouldBe "scope-done"
@@ -327,23 +379,24 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     observedValue.get() shouldBe 42
   }
 
-  it should "let a failure observer run with the exception when the detached computation fails" in failAfter(
+  it should "let a failure observer run with the exception when the spawned computation fails" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val release         = new CountDownLatch(1)
     val observed        = new CountDownLatch(1)
     val observedFailure = new AtomicReference[Throwable]()
 
-    Async.run {
-      val handle = Async.detached[Unit] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[Unit] {
         awaitLatch(release) shouldBe true
         throw new Boom("observed boom")
       }
-      handle.onFailure { err =>
-        observedFailure.set(err)
-        observed.countDown()
-      }
-      ()
+    }
+    handle.onFailure { err =>
+      observedFailure.set(err)
+      observed.countDown()
     }
 
     release.countDown()
@@ -352,15 +405,17 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     observedFailure.get().getMessage shouldBe "observed boom"
   }
 
-  it should "run a completion observer registered after the detached computation has already finished" in failAfter(
+  it should "run a completion observer registered after the spawned computation has already finished" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val firstObserved  = new CountDownLatch(1)
     val secondObserved = new CountDownLatch(1)
     val secondValue    = new AtomicReference[Int]()
 
-    val handle = Async.run {
-      Async.detached[Int] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] {
         99
       }
     }
@@ -368,7 +423,7 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     handle.onComplete(_ => firstObserved.countDown())
     awaitLatch(firstObserved) shouldBe true
 
-    // At this point the detached computation has already completed; a second, late observer,
+    // At this point the spawned computation has already completed; a second, late observer,
     // registered entirely outside any Async scope, must still fire.
     handle.onComplete { value =>
       secondValue.set(value)
@@ -379,14 +434,16 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     secondValue.get() shouldBe 99
   }
 
-  it should "not fire the failure observer when the detached computation succeeds" in failAfter(
+  it should "not fire the failure observer when the spawned computation succeeds" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val completeObserved = new CountDownLatch(1)
     val failureObserved  = new AtomicBoolean(false)
 
-    val handle = Async.run {
-      Async.detached[Int] { 7 }
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] { 7 }
     }
     handle.onFailure(_ => failureObserved.set(true))
     handle.onComplete(_ => completeObserved.countDown())
@@ -397,14 +454,16 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     failureObserved.get() shouldBe false
   }
 
-  it should "not fire the completion observer when the detached computation fails" in failAfter(
+  it should "not fire the completion observer when the spawned computation fails" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val failureObserved  = new CountDownLatch(1)
     val completeObserved = new AtomicBoolean(false)
 
-    val handle = Async.run {
-      Async.detached[Int] { throw new Boom("discrimination boom") }
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] { throw new Boom("discrimination boom") }
     }
     handle.onComplete(_ => completeObserved.set(true))
     handle.onFailure(_ => failureObserved.countDown())
@@ -418,11 +477,13 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "not let a throwing observer prevent a second observer registered on the same handle from running" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val secondObserved = new CountDownLatch(1)
     val secondValue    = new AtomicReference[Int]()
 
-    val handle = Async.run {
-      Async.detached[Int] { 7 }
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] { 7 }
     }
     handle.onComplete(_ => throw new Boom("observer boom"))
     handle.onComplete { value =>
@@ -434,9 +495,11 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     secondValue.get() shouldBe 7
   }
 
-  it should "not let a failing detached computation's exception escape to the JVM's default uncaught exception handler" in failAfter(
+  it should "not let a failing spawned computation's exception escape to the JVM's default uncaught exception handler" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val threadRef       = new AtomicReference[Thread]()
     val observed        = new CountDownLatch(1)
     val uncaught        = new AtomicReference[Throwable]()
@@ -444,8 +507,8 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
 
     Thread.setDefaultUncaughtExceptionHandler((_, ex) => uncaught.set(ex))
     try {
-      val handle = Async.run {
-        Async.detached[Unit] {
+      val handle = allowUnscoped {
+        Unscoped.spawn[Unit] {
           threadRef.set(Thread.currentThread())
           throw new Boom("uncaught-check boom")
         }
@@ -465,9 +528,11 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     }
   }
 
-  it should "surface a fatal error thrown inside the detached computation to both the failure observer and the JVM's default uncaught exception handler" in failAfter(
+  it should "surface a fatal error thrown inside the spawned computation to both the failure observer and the JVM's default uncaught exception handler" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val threadRef       = new AtomicReference[Thread]()
     val observed        = new CountDownLatch(1)
     val observedFailure = new AtomicReference[Throwable]()
@@ -476,13 +541,13 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     val fatal           = new LinkageError("fatal boom")
 
     // Unlike a NonFatal failure (the test above), a genuinely fatal error is not only contained
-    // for observers: it is also rethrown on the detached background thread itself, so it must
+    // for observers: it is also rethrown on the spawned background thread itself, so it must
     // still reach that thread's own default uncaught-exception handler, exactly like an
     // equivalent failure would on any other unmanaged thread.
     Thread.setDefaultUncaughtExceptionHandler((_, ex) => uncaught.set(ex))
     try {
-      val handle = Async.run {
-        Async.detached[Unit] {
+      val handle = allowUnscoped {
+        Unscoped.spawn[Unit] {
           threadRef.set(Thread.currentThread())
           throw fatal
         }
@@ -506,14 +571,16 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     }
   }
 
-  it should "support a detached block that forks its own fibers internally" in failAfter(
+  it should "support a spawned block that forks its own fibers internally" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val done  = new CountDownLatch(1)
     val value = new AtomicReference[Int]()
 
-    val handle = Async.run {
-      Async.detached[Int] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] {
         val innerResult = new AtomicReference[Int]()
         val fiber       = Async.fork {
           innerResult.set(21)
@@ -535,6 +602,8 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
   it should "fail the handle with an unjoined child fiber's exception even though the block itself returned a value" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val observed         = new CountDownLatch(1)
     val observedFailure  = new AtomicReference[Throwable]()
     val completeObserved = new AtomicBoolean(false)
@@ -545,8 +614,8 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     // `block` forks a fiber that fails and never joins it, then returns `42` and neither throws
     // nor is itself cancelled; the handle must still fail with the child's exception, discarding
     // the `42`.
-    val handle = Async.run {
-      Async.detached[Int] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[Int] {
         Async.fork {
           throw new Boom("unjoined child boom")
         }
@@ -565,15 +634,21 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     completeObserved.get() shouldBe false
   }
 
-  it should "support a detached block nested inside another detached block" in failAfter(
+  it should "support a spawned block nested inside another spawned block" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val innerDone  = new CountDownLatch(1)
     val innerValue = new AtomicReference[Int]()
 
-    Async.run {
-      Async.detached[Unit] {
-        val innerHandle = Async.detached[Int] { 5 }
+    allowUnscoped {
+      // Both `Unscoped.spawn` calls are written lexically inside this `allowUnscoped` block, so
+      // both resolve the same ambient `Unscoped` capability at compile time -- including the
+      // inner one, even though it executes later, on the outer spawned computation's own
+      // background thread.
+      Unscoped.spawn[Unit] {
+        val innerHandle = Unscoped.spawn[Int] { 5 }
         innerHandle.onComplete { v =>
           innerValue.set(v)
           innerDone.countDown()
@@ -587,14 +662,16 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     innerValue.get() shouldBe 5
   }
 
-  it should "let the completion observer fire with null when the detached block returns null" in failAfter(
+  it should "let the completion observer fire with null when the spawned block returns null" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val done  = new CountDownLatch(1)
     val value = new AtomicReference[String]("not set")
 
-    val handle = Async.run {
-      Async.detached[String] {
+    val handle = allowUnscoped {
+      Unscoped.spawn[String] {
         null
       }
     }
@@ -607,9 +684,11 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     value.get() shouldBe null
   }
 
-  it should "let many detached blocks spawned concurrently from multiple threads all settle" in failAfter(
+  it should "let many computations spawned concurrently from multiple threads all settle" in failAfter(
     unblockTimeLimit
   ) {
+    import io.yaes.unsafe.allowUnscoped
+
     val spawnerCount = 8
     val perSpawner   = 5
     val total        = spawnerCount * perSpawner
@@ -619,8 +698,8 @@ class AsyncDetachedSpec extends AnyFlatSpec with Matchers with TimeLimits {
     val spawners = (0 until spawnerCount).map { i =>
       val spawner = new Thread(() => {
         (0 until perSpawner).foreach { j =>
-          val handle = Async.run {
-            Async.detached[Int] { i * perSpawner + j }
+          val handle = allowUnscoped {
+            Unscoped.spawn[Int] { i * perSpawner + j }
           }
           handle.onComplete { v =>
             values.add(v)
