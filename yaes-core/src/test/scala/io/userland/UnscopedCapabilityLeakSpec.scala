@@ -17,6 +17,15 @@ import org.scalatest.matchers.should.Matchers
   */
 class UnscopedCapabilityLeakSpec extends AnyFlatSpec with Matchers {
 
+  // `assertDoesNotCompile`/`assertCompiles` typecheck their argument strings at macro-expansion
+  // time, but those trees are discarded before zinc's ExtractDependencies phase runs, so zinc
+  // records no source dependency from this spec to `io.yaes` from the string literals above and
+  // below. Without a real, non-string reference somewhere in this file, an incremental local
+  // build could keep this spec's stale class file green even after `JvmUnscoped`'s visibility is
+  // loosened, since zinc would see no reason to recompile it. This reference gives zinc that edge
+  // to follow. Do not delete it as dead code.
+  private val grantIsReachable: Int = io.yaes.unsafe.allowUnscoped { 42 }
+
   "JvmUnscoped" should "not be referenceable by name from outside io.yaes" in {
     assertDoesNotCompile("io.yaes.JvmUnscoped")
   }
@@ -30,5 +39,6 @@ class UnscopedCapabilityLeakSpec extends AnyFlatSpec with Matchers {
     // vacuously for the wrong reason (e.g. a typo or an unrelated compile error breaking basic
     // name resolution in this package), and this file would silently stop proving anything.
     assertCompiles("io.yaes.unsafe.allowUnscoped { 42 }")
+    grantIsReachable shouldBe 42
   }
 }

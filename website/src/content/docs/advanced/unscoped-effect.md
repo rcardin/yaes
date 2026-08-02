@@ -16,7 +16,7 @@ Because that guarantee is exactly what `Async` promises everywhere else, `Unscop
 
 ### Granting the Capability
 
-Unlike every other handler in λÆS, obtaining `Unscoped` does not run or contain anything: there is no `Unscoped.run`. The only way to obtain the capability is importing `allowUnscoped` from `io.yaes.unsafe`:
+Unlike every other handler in λÆS, obtaining `Unscoped` does not run or contain anything: there is no `Unscoped.run`. The only way to obtain the library's own `Unscoped` backend is importing `allowUnscoped` from `io.yaes.unsafe` (hand-rolling a `given` from the public `Unscoped.Unsafe` trait is possible, but that is a deliberate, visible act of its own):
 
 ```scala
 import io.yaes.unsafe.allowUnscoped
@@ -26,7 +26,7 @@ allowUnscoped {
 }
 ```
 
-This is intentional. Every other handler in the library contains what it grants — `Async.run` waits for its fibers, `Resource.run` releases its resources, `Raise.either` catches its own errors. `allowUnscoped` cannot make that promise, since the entire point of `Unscoped` is work that outlives the block that started it. Segregating the grant behind a dedicated function name means every place a codebase opts into that risk is a single grep away — as long as you grep for the function, not the package:
+This is intentional. Every other handler in the library contains what it grants — `Async.run` waits for its fibers, `Resource.run` releases its resources, `Raise.either` catches its own errors. `allowUnscoped` cannot make that promise, since the entire point of `Unscoped` is work that outlives the block that started it. Segregating the grant behind a dedicated function name means every place the grant is introduced is a single grep away — as long as you grep for the function, not the package:
 
 ```bash
 grep -rn "allowUnscoped" --include="*.scala"

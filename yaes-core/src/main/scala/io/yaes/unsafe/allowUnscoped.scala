@@ -13,11 +13,13 @@ import io.yaes.Unscoped
   * the [[io.yaes.Unscoped]] effect.
   *
   * There is no `Unscoped.run`. Importing this function from `io.yaes.unsafe` is the only way to
-  * obtain the [[io.yaes.Unscoped]] capability, so every authorization site in a codebase is
-  * greppable and visible in a diff via `grep -rn "allowUnscoped"` -- the function name, not the
-  * package path. `unsafe` is a subpackage of `io.yaes`, so a wildcard `import io.yaes.*` lets
-  * `unsafe.allowUnscoped { ... }` be called without the literal string `io.yaes.unsafe` ever
-  * appearing at the call site; `grep -rn "io.yaes.unsafe"` would miss that site entirely.
+  * obtain the library's own [[io.yaes.Unscoped]] backend; hand-rolling a `given` from the public
+  * [[io.yaes.Unscoped.Unsafe]] trait is possible, but that is a deliberate, visible act of its own.
+  * `allowUnscoped` lists every place the grant is introduced and visible in a diff via
+  * `grep -rn "allowUnscoped"` -- the function name, not the package path. `unsafe` is a subpackage
+  * of `io.yaes`, so a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped { ... }` be called
+  * without the literal string `io.yaes.unsafe` ever appearing at the call site; `grep -rn
+  * "io.yaes.unsafe"` would miss that site entirely.
   *
   * Example:
   * {{{

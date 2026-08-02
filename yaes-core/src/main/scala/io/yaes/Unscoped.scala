@@ -7,8 +7,10 @@ import ju.concurrent.CompletableFuture
 
 /** The capability to start work that outlives every structured concurrency scope.
   *
-  * Obtained only by importing [[io.yaes.unsafe.allowUnscoped]]; there is deliberately no
-  * `Unscoped.run`. See the [[Unscoped]] companion object for the full design rationale.
+  * Obtained only by importing [[io.yaes.unsafe.allowUnscoped]] -- the library's own backend; a
+  * hand-rolled `given` from the public [[Unscoped.Unsafe]] trait is possible, but that is a
+  * deliberate, visible act of its own. There is deliberately no `Unscoped.run`. See the
+  * [[Unscoped]] companion object for the full design rationale.
   *
   * Example:
   * {{{
@@ -51,15 +53,15 @@ class JvmStrand[A](private val promise: CompletableFuture[A]) extends Unscoped.S
   *
   * `private[yaes]`, not merely undocumented: this is the ready-made backend instance that
   * [[io.yaes.unsafe.allowUnscoped]] hands out as the [[Unscoped]] capability. If it were public,
-  * anyone could write `given Unscoped = io.yaes.JvmUnscoped` and obtain the capability without
-  * ever calling `allowUnscoped`, defeating the entire point of gating the grant behind that
-  * function (every authorization site must be greppable via `grep -rn "allowUnscoped"` -- not
+  * anyone could write `given Unscoped = io.yaes.JvmUnscoped` and obtain the capability without ever
+  * calling `allowUnscoped`, defeating the entire point of gating the grant behind that function
+  * (every place the grant is introduced must be greppable via `grep -rn "allowUnscoped"` -- not
   * `grep -rn "io.yaes.unsafe"`, since a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped` be
   * called without that literal string ever appearing at the call site).
   *
-  * `private[yaes]` blocks ordinary downstream code, which is the threat model this defends
-  * against, but it is defence in depth rather than an absolute guarantee: Scala's qualified-private
-  * is a compile-time package-path check with no module boundary, so code in a wholly separate
+  * `private[yaes]` blocks ordinary downstream code, which is the threat model this defends against,
+  * but it is defence in depth rather than an absolute guarantee: Scala's qualified-private is a
+  * compile-time package-path check with no module boundary, so code in a wholly separate
   * compilation unit that declares its own `package io.yaes` can still see this member. Stateless,
   * so it is an `object` rather than a `class`: there is only ever one JVM backend.
   */
@@ -115,10 +117,12 @@ private[yaes] object JvmUnscoped extends Unscoped.Unsafe {
   * Every other operation in λÆS — [[Async.fork]], [[Async.run]], [[Async.unsupervised]],
   * [[Resource.run]], [[Raise.either]] — contains what it grants: the work it starts is bound to the
   * handler that started it and cannot outlive it. `Unscoped` is the deliberate exception. There is
-  * intentionally no `Unscoped.run`: the only way to obtain the [[Unscoped]] capability is importing
-  * [[io.yaes.unsafe.allowUnscoped]], which makes every authorization site greppable and visible in
-  * a diff (`grep -rn "allowUnscoped"` -- not `grep -rn "io.yaes.unsafe"`, since a wildcard
-  * `import io.yaes.*` lets the call resolve without that literal substring ever appearing).
+  * intentionally no `Unscoped.run`: the only way to obtain the library's own [[Unscoped]] backend
+  * is importing [[io.yaes.unsafe.allowUnscoped]] (hand-rolling a `given` from the public [[Unsafe]]
+  * trait is possible, but that is a deliberate, visible act of its own). `allowUnscoped` lists
+  * every place the grant is introduced and visible in a diff (`grep -rn "allowUnscoped"` -- not
+  * `grep -rn "io.yaes.unsafe"`, since a wildcard `import io.yaes.*` lets the call resolve without
+  * that literal substring ever appearing).
   *
   * Example:
   * {{{
