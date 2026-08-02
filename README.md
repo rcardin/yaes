@@ -160,7 +160,7 @@ The library provides a set of effects and handlers that can be used to define an
 
 Escape hatch, kept separate from the list above since it deliberately breaks the guarantee every other effect makes:
 
-- [`Unscoped`](#the-unscoped-effect): Allows for starting fire and forget background work that outlives the scope that started it. Obtainable only via `io.yaes.unsafe.allowUnscoped`; grep for `allowUnscoped` (not `io.yaes.unsafe`, which a wildcard `import io.yaes.*` can bypass) to find every use site.
+- [`Unscoped`](#the-unscoped-effect): Allows for starting fire-and-forget background work that outlives the scope that started it. Obtainable only via `io.yaes.unsafe.allowUnscoped`; grep for `allowUnscoped` (not `io.yaes.unsafe`, which a wildcard `import io.yaes.*` can bypass) to find every use site.
 
 The library also provides the following handlers that orchestrate existing effects:
 
