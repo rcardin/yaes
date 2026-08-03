@@ -27,7 +27,7 @@ JSON body encoder/decoder integration for the λÆS HTTP server using [Circe](ht
 Add `yaes-http-circe` to your project dependencies:
 
 ```scala
-libraryDependencies += "io.yaes" %% "yaes-http-circe" % "0.21.0"
+libraryDependencies += "io.yaes" %% "yaes-http-circe" % "0.23.0"
 ```
 
 If you need Circe's automatic derivation features, also include `circe-generic`:
@@ -60,7 +60,7 @@ Sync.runBlocking(Duration.Inf) {
     Log.run() {
       val server = YaesServer.route(
         // Response body automatically encoded to JSON
-        GET(p"/users" / param[Int]("id")) { (req, id: Int) =>
+        GET(p"/users" / param[Int]("id")) { (req, _, _) =>
           Response.ok(User("Alice", 30))
           // Response body: {"name":"Alice","age":30}
           // Content-Type: application/json
@@ -202,8 +202,8 @@ object JsonServer extends App {
       Log.run() {
         val server = YaesServer.route(
           // Return a user as JSON
-          GET(p"/users" / userId) { (req, id: Int) =>
-            Response.ok(User(id, "Alice", "alice@example.com"))
+          GET(p"/users" / userId) { (req, path, _) =>
+            Response.ok(User(path.userId, "Alice", "alice@example.com"))
           },
 
           // Parse JSON body and create a user
@@ -233,7 +233,7 @@ Add the following to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.yaes" %% "yaes-http-circe" % "0.21.0",
+  "io.yaes" %% "yaes-http-circe" % "0.23.0",
   "io.circe"      %% "circe-generic"   % "0.14.15"  // For derivation
 )
 ```

@@ -65,7 +65,7 @@ object QueryParamParser {
     * Example:
     * {{{
     * // Route: /search?limit=10
-    * val limit = query.get("limit")  // uses this parser, returns 10
+    * val limit = query.limit  // uses this parser, returns 10
     * }}}
     */
   given QueryParamParser[Int] with {
@@ -124,13 +124,13 @@ object QueryParamParser {
     * Example:
     * {{{
     * // Route: /users?page=2
-    * val page = query.get("page")  // returns Some(2)
+    * val page = query.page  // returns Some(2)
     *
     * // Route: /users (no page param)
-    * val page = query.get("page")  // returns None
+    * val page = query.page  // returns None
     *
     * // Route: /users?page=abc (invalid Int)
-    * val page = query.get("page")  // returns None (parsing failed, but no error raised)
+    * val page = query.page  // returns None (parsing failed, but no error raised)
     * }}}
     */
   given [T](using parser: QueryParamParser[T]): QueryParamParser[Option[T]] with {
@@ -151,13 +151,13 @@ object QueryParamParser {
     * Example:
     * {{{
     * // Route: /filter?tag=scala&tag=fp&tag=web
-    * val tags = query.get("tag")  // returns List("scala", "fp", "web")
+    * val tags = query.tag  // returns List("scala", "fp", "web")
     *
     * // Route: /filter?tag=scala&tag=123&tag=web (where tag expects String)
-    * val tags = query.get("tag")  // returns List("scala", "123", "web")
+    * val tags = query.tag  // returns List("scala", "123", "web")
     *
     * // Route: /filter (no tag param)
-    * val tags = query.get("tag")  // returns List()
+    * val tags = query.tag  // returns List()
     * }}}
     */
   given [T](using parser: QueryParamParser[T]): QueryParamParser[List[T]] with {

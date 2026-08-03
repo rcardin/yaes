@@ -9,14 +9,14 @@ import org.scalatest.matchers.should.Matchers
 
 /** Integration tests for query parameter functionality.
   *
-  * Tests the complete end-to-end flow of query parameter parsing, matching, and type-safe access.
+  * Tests the complete end-to-end flow of query parameter parsing, matching, and type-safe access
+  * via named tuples.
   */
 class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   "Query parameter parsing" should "parse single required parameter" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[String]("q")) { req =>
-        // Query params will be available via context in the future
+      GET(p"/search" ? queryParam[String]("q")) { (req, _, _) =>
         Response.ok("Search endpoint")
       }
     )
@@ -35,7 +35,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "parse multiple required parameters" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { req =>
+      GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { (req, _, _) =>
         Response.ok("Search with limit")
       }
     )
@@ -54,7 +54,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "return 400 for missing required parameter" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[String]("q")) { req =>
+      GET(p"/search" ? queryParam[String]("q")) { (req, _, _) =>
         Response.ok("Search")
       }
     )
@@ -74,7 +74,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "return 400 for invalid parameter type" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[Int]("limit")) { req =>
+      GET(p"/search" ? queryParam[Int]("limit")) { (req, _, _) =>
         Response.ok("Search with limit")
       }
     )
@@ -94,7 +94,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "handle optional parameters when present" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[Option[Int]]("page")) { req =>
+      GET(p"/search" ? queryParam[Option[Int]]("page")) { (req, _, _) =>
         Response.ok("Search with optional page")
       }
     )
@@ -113,7 +113,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "handle optional parameters when missing" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[Option[Int]]("page")) { req =>
+      GET(p"/search" ? queryParam[Option[Int]]("page")) { (req, _, _) =>
         Response.ok("Search without page")
       }
     )
@@ -132,7 +132,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "handle optional parameters with invalid value" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[Option[Int]]("page")) { req =>
+      GET(p"/search" ? queryParam[Option[Int]]("page")) { (req, _, _) =>
         Response.ok("Search with invalid page")
       }
     )
@@ -152,7 +152,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "handle multi-valued list parameters" in {
     val routes = Routes(
-      GET(p"/filter" ? queryParam[List[String]]("tags")) { req =>
+      GET(p"/filter" ? queryParam[List[String]]("tags")) { (req, _, _) =>
         Response.ok("Filter by tags")
       }
     )
@@ -171,7 +171,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "handle empty list for multi-valued parameters" in {
     val routes = Routes(
-      GET(p"/filter" ? queryParam[List[String]]("tags")) { req =>
+      GET(p"/filter" ? queryParam[List[String]]("tags")) { (req, _, _) =>
         Response.ok("Filter with no tags")
       }
     )
@@ -191,10 +191,9 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   "Combined path and query parameters" should "work together" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { query ?=> (req, id: Int) =>
-        val expand = query.get("expand")
-        if (expand) Response.ok(s"User $id (expanded)")
-        else Response.ok(s"User $id")
+      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { (req, path, query) =>
+        if (query.expand) Response.ok(s"User ${path.userId} (expanded)")
+        else Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -220,8 +219,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   it should "return 400 for invalid path parameter" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { query ?=> (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { (req, path, query) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -241,9 +240,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   it should "return 400 for invalid query parameter" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET((p"/users" / userId) ? queryParam[Int]("limit")) { query ?=> (req, id: Int) =>
-        val limit = query.get("limit")
-        Response.ok(s"User $id with limit $limit")
+      GET((p"/users" / userId) ? queryParam[Int]("limit")) { (req, path, query) =>
+        Response.ok(s"User ${path.userId} with limit ${query.limit}")
       }
     )
 
@@ -294,7 +292,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   "Routes with query parameters" should "not be stored in exactRoutes" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[String]("q")) { req =>
+      GET(p"/search" ? queryParam[String]("q")) { (req, _, _) =>
         Response.ok("Search")
       }
     )
@@ -312,7 +310,7 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
           & queryParam[Int]("age")
           & queryParam[Long]("id")
           & queryParam[Boolean]("active")
-      ) { req =>
+      ) { (req, _, _) =>
         Response.ok("API endpoint")
       }
     )
@@ -355,14 +353,13 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   }
 
   // ========================================
-  // TDD: Query Parameter Context Access Tests
+  // Query Parameter Named-Tuple Access Tests
   // ========================================
 
-  "Query parameter context" should "provide query params to handler via context function" in {
+  "Query parameter access" should "provide query params to the handler by name" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[String]("q")) { query ?=> req =>
-        val searchTerm = query.get("q")
-        Response.ok(s"Searching for: $searchTerm")
+      GET(p"/search" ? queryParam[String]("q")) { (req, _, query) =>
+        Response.ok(s"Searching for: ${query.q}")
       }
     )
 
@@ -379,12 +376,10 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
     response.body shouldBe "Searching for: scala"
   }
 
-  it should "provide multiple query params via context" in {
+  it should "provide multiple query params by name" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { query ?=> req =>
-        val searchTerm = query.get("q")
-        val limit = query.get("limit")
-        Response.ok(s"Searching for '$searchTerm' with limit $limit")
+      GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { (req, _, query) =>
+        Response.ok(s"Searching for '${query.q}' with limit ${query.limit}")
       }
     )
 
@@ -403,9 +398,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "work with optional query parameters" in {
     val routes = Routes(
-      GET(p"/search" ? queryParam[Option[Int]]("page")) { query ?=> req =>
-        val page = query.get("page")
-        page match {
+      GET(p"/search" ? queryParam[Option[Int]]("page")) { (req, _, query) =>
+        query.page match {
           case Some(p) => Response.ok(s"Page $p")
           case None    => Response.ok("First page")
         }
@@ -433,9 +427,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
 
   it should "work with list-valued query parameters" in {
     val routes = Routes(
-      GET(p"/filter" ? queryParam[List[String]]("tags")) { query ?=> req =>
-        val tags = query.get("tags")
-        Response.ok(s"Tags: ${tags.mkString(", ")}")
+      GET(p"/filter" ? queryParam[List[String]]("tags")) { (req, _, query) =>
+        Response.ok(s"Tags: ${query.tags.mkString(", ")}")
       }
     )
 
@@ -452,13 +445,12 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
     response.body shouldBe "Tags: scala, functional, tutorial"
   }
 
-  "Combined path and query parameters" should "provide both via separate mechanisms" in {
+  "Combined path and query parameters" should "provide both by name" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { query ?=> (req, id: Int) =>
-        val expand = query.get("expand")
-        if (expand) Response.ok(s"User $id (expanded)")
-        else Response.ok(s"User $id")
+      GET((p"/users" / userId) ? queryParam[Boolean]("expand")) { (req, path, query) =>
+        if (query.expand) Response.ok(s"User ${path.userId} (expanded)")
+        else Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -489,10 +481,10 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
         (p"/users" / userId / "posts" / postId) ? queryParam[String]("format") & queryParam[Boolean](
           "comments"
         )
-      ) { query ?=> (req, uid: Int, pid: Long) =>
-        val format = query.get("format")
-        val comments = query.get("comments")
-        Response.ok(s"User $uid, Post $pid, format=$format, comments=$comments")
+      ) { (req, path, query) =>
+        Response.ok(
+          s"User ${path.userId}, Post ${path.postId}, format=${query.format}, comments=${query.comments}"
+        )
       }
     )
 
@@ -508,11 +500,10 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
     response.body shouldBe "User 42, Post 999, format=json, comments=true"
   }
 
-  "Query context with all HTTP methods" should "work with POST" in {
+  "Query access with all HTTP methods" should "work with POST" in {
     val routes = Routes(
-      POST(p"/search" ? queryParam[Boolean]("async")) { query ?=> req =>
-        val async = query.get("async")
-        Response.created(s"Created (async=$async)")
+      POST(p"/search" ? queryParam[Boolean]("async")) { (req, _, query) =>
+        Response.created(s"Created (async=${query.async})")
       }
     )
 
@@ -530,9 +521,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   it should "work with PUT" in {
     val id = param[Int]("id")
     val routes = Routes(
-      PUT((p"/items" / id) ? queryParam[Boolean]("merge")) { query ?=> (req, itemId: Int) =>
-        val merge = query.get("merge")
-        Response.ok(s"PUT $itemId, merge=$merge")
+      PUT((p"/items" / id) ? queryParam[Boolean]("merge")) { (req, path, query) =>
+        Response.ok(s"PUT ${path.id}, merge=${query.merge}")
       }
     )
 
@@ -550,9 +540,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   it should "work with DELETE" in {
     val id = param[Int]("id")
     val routes = Routes(
-      DELETE((p"/items" / id) ? queryParam[Boolean]("soft")) { query ?=> (req, itemId: Int) =>
-        val soft = query.get("soft")
-        if (soft) Response.ok(s"Soft delete $itemId")
+      DELETE((p"/items" / id) ? queryParam[Boolean]("soft")) { (req, path, query) =>
+        if (query.soft) Response.ok(s"Soft delete ${path.id}")
         else Response.noContent()
       }
     )
@@ -571,9 +560,8 @@ class QueryParamIntegrationSpec extends AnyFlatSpec with Matchers {
   it should "work with PATCH" in {
     val id = param[Int]("id")
     val routes = Routes(
-      PATCH((p"/items" / id) ? queryParam[String]("field")) { query ?=> (req, itemId: Int) =>
-        val field = query.get("field")
-        Response.ok(s"PATCH $itemId, field=$field")
+      PATCH((p"/items" / id) ? queryParam[String]("field")) { (req, path, query) =>
+        Response.ok(s"PATCH ${path.id}, field=${query.field}")
       }
     )
 

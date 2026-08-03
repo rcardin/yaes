@@ -29,7 +29,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-          Async.fork("worker") {
+          Async.forkNamed("worker") {
             while (true) {
               counter.incrementAndGet()
               Async.delay(100.millis)
@@ -53,7 +53,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(500.millis)) {
-          Async.fork("long-task") {
+          Async.forkNamed("long-task") {
             Async.delay(10.seconds) // Will be cancelled by timeout
             completed.set(true)
           }
@@ -74,7 +74,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(10.seconds)) {
-          Async.fork("quick-task") {
+          Async.forkNamed("quick-task") {
             Async.delay(200.millis)
             completed.set(true)
           }
@@ -95,15 +95,15 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(10.seconds)) {
-          Async.fork("fiber1") {
+          Async.forkNamed("fiber1") {
             Async.delay(100.millis)
             results.add("fiber1")
           }
-          Async.fork("fiber2") {
+          Async.forkNamed("fiber2") {
             Async.delay(200.millis)
             results.add("fiber2")
           }
-          Async.fork("fiber3") {
+          Async.forkNamed("fiber3") {
             Async.delay(300.millis)
             results.add("fiber3")
           }
@@ -123,15 +123,15 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-          Async.fork("fiber1") {
+          Async.forkNamed("fiber1") {
             Async.delay(100.millis)
             results.add("fiber1")
           }
-          Async.fork("fiber2") {
+          Async.forkNamed("fiber2") {
             Async.delay(200.millis)
             results.add("fiber2")
           }
-          Async.fork("fiber3") {
+          Async.forkNamed("fiber3") {
             Async.delay(300.millis)
             results.add("fiber3")
           }
@@ -154,7 +154,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
 
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-          Async.fork("worker") {
+          Async.forkNamed("worker") {
             while (!Shutdown.isShuttingDown()) {
               Async.delay(100.millis)
             }
@@ -175,7 +175,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(1.second)) {
-          Async.fork("infinite-loop") {
+          Async.forkNamed("infinite-loop") {
             while (true) {
               Async.delay(100.millis)
             }
@@ -210,12 +210,12 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-          Async.fork("parent") {
-            Async.fork("child1") {
+          Async.forkNamed("parent") {
+            Async.forkNamed("child1") {
               Async.delay(100.millis)
               results.add("child1")
             }
-            Async.fork("child2") {
+            Async.forkNamed("child2") {
               Async.delay(150.millis)
               results.add("child2")
             }
@@ -240,7 +240,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
     val actualResult = Shutdown.run {
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-          Async.fork("background") {
+          Async.forkNamed("background") {
             // Fiber takes 200ms - well within the 5 second deadline
             Async.delay(200.millis)
             fiberCompleted.set(true)
@@ -284,7 +284,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
       Shutdown.run {
         Raise.run {
           Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-            Async.fork("failing-fiber") {
+            Async.forkNamed("failing-fiber") {
               Async.delay(100.millis)
               throw new RuntimeException("Fiber failed!")
             }
@@ -312,7 +312,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
 
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(5.seconds)) {
-          Async.fork("worker") {
+          Async.forkNamed("worker") {
             while (!Shutdown.isShuttingDown()) {
               Async.delay(50.millis)
             }
@@ -340,7 +340,7 @@ class AsyncWithGracefulShutdownSpec extends AnyFlatSpec with Matchers {
 
       Raise.run {
         Async.withGracefulShutdown(deadline = Deadline.after(500.millis)) {
-          Async.fork("long-task") {
+          Async.forkNamed("long-task") {
             Async.delay(10.seconds) // Will be cancelled by timeout
           }
 

@@ -91,7 +91,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -138,7 +138,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -194,7 +194,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -235,7 +235,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
                 }
               )
 
-              val serverFiber2 = Async.fork("server2") {
+              val serverFiber2 = Async.forkNamed("server2") {
                 server2.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -278,7 +278,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -318,13 +318,13 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
             Log.run(level = Log.Level.Info) {
               val userId = param[Int]("userId")
               val server = YaesServer.route(
-                GET(p"/users" / userId) { (req, id: Int) =>
-                  Response.ok(s"User ID: $id")
+                GET(p"/users" / userId) { (req, path, _) =>
+                  Response.ok(s"User ID: ${path.userId}")
                 }
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -363,16 +363,13 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
           Async.run {
             Log.run(level = Log.Level.Info) {
               val server = YaesServer.route(
-                GET(p"/search" ? queryParam[String]("q")) { req =>
-                  // Note: In the current implementation, query parameters are extracted
-                  // during routing but not yet passed to the handler. We can only verify
-                  // that the route matches correctly.
-                  Response.ok(s"Search endpoint")
+                GET(p"/search" ? queryParam[String]("q")) { (req, _, query) =>
+                  Response.ok(s"Search endpoint for ${query.q}")
                 }
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -390,7 +387,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
 
               // Verify response (route matched successfully with query parameter)
               response.statusCode() shouldBe 200
-              response.body() shouldBe "Search endpoint"
+              response.body() shouldBe "Search endpoint for scala"
 
               // Shutdown
               Shutdown.initiateShutdown()
@@ -417,7 +414,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -461,7 +458,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -505,7 +502,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -549,6 +546,42 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
     }.get
   }
 
+  it should "stop the accept loop when the server fiber is cancelled without shutdown" in {
+    val port = findFreePort()
+
+    // Logging is muted: before the fix the accept loop spun on the closed
+    // ServerSocket and flooded the output with millions of error lines.
+    val outcome = Sync.runBlocking(10.seconds) {
+      Shutdown.run {
+        Raise.run {
+          Async.run {
+            Log.run(level = Log.Level.Fatal) {
+              val server = YaesServer.route(
+                GET(p"/test") { req =>
+                  Response.ok("Test")
+                }
+              )
+
+              val serverFiber = Async.forkNamed("server") {
+                server.run(ServerConfig(port = port, deadline = testDeadline))
+              }
+
+              waitForServer(port)
+
+              // Cancel the accept loop without initiating shutdown: the
+              // interrupt closes the ServerSocket, and the loop must stop
+              // instead of spinning on "Socket is closed".
+              serverFiber.cancel()
+              serverFiber.join()
+            }
+          }
+        }
+      }
+    }
+
+    outcome.isSuccess shouldBe true
+  }
+
   // Shutdown Tests
 
   it should "complete in-flight requests during graceful shutdown" in {
@@ -568,7 +601,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -576,7 +609,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               waitForServer(port)
 
               // Start a slow request in a background fiber
-              val requestFiber = Async.fork("slow-request") {
+              val requestFiber = Async.forkNamed("slow-request") {
                 val request = HttpRequest
                   .newBuilder()
                   .uri(URI.create(s"http://localhost:$port/slow"))
@@ -621,7 +654,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -693,7 +726,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -750,7 +783,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server with small maxBodySize (1 KB) and short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, maxBodySize = 1024, deadline = testDeadline))
               }
 
@@ -797,7 +830,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server in a background fiber with short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, deadline = testDeadline))
               }
 
@@ -838,7 +871,7 @@ class YaesServerSpec extends AnyFlatSpec with Matchers {
               )
 
               // Start server with small maxHeaderSize (256 bytes) and short deadline
-              val serverFiber = Async.fork("server") {
+              val serverFiber = Async.forkNamed("server") {
                 server.run(ServerConfig(port = port, maxHeaderSize = 256, deadline = testDeadline))
               }
 

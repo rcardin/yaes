@@ -54,7 +54,7 @@ class FlowPublisher[A](
     val cancelled    = new AtomicBoolean(false)
     val terminated   = new AtomicBoolean(false)
 
-    Async.fork("flow-collector") {
+    Async.forkNamed("flow-collector") {
       try {
         Raise.ignore {
           flow.collect { value =>
@@ -75,7 +75,7 @@ class FlowPublisher[A](
       }
     }
 
-    Async.fork("subscriber-emitter") {
+    Async.forkNamed("subscriber-emitter") {
       val subscription = new Subscription {
         override def request(n: Long): Unit = {
           if (n <= 0) {

@@ -109,8 +109,8 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
   "Server routes (parameterized paths)" should "handle single parameter routes" in {
     val userId = param[Int]("userId")
     val server = YaesServer.route(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -125,8 +125,8 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
     val userId = param[Int]("userId")
     val postId = param[Long]("postId")
     val server = YaesServer.route(
-      GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
-        Response.ok(s"User $uid, Post $pid")
+      GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}, Post ${path.postId}")
       }
     )
 
@@ -140,8 +140,8 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
   it should "return 400 for invalid parameter types" in {
     val userId = param[Int]("userId")
     val server = YaesServer.route(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -166,14 +166,14 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
       GET(p"/users/admin") { req =>
         Response.ok("Admin user")
       },
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       },
-      GET(p"/users" / userId / "posts") { (req, id: Int) =>
-        Response.ok(s"Posts for user $id")
+      GET(p"/users" / userId / "posts") { (req, path, _) =>
+        Response.ok(s"Posts for user ${path.userId}")
       },
-      GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
-        Response.ok(s"User $uid, Post $pid")
+      GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}, Post ${path.postId}")
       },
       POST(p"/users") { req =>
         Response.created(s"Created: ${req.body}")
@@ -198,12 +198,12 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
   "Server routes (request access in parameterized handlers)" should "allow access to request properties" in {
     val userId = param[Int]("userId")
     val server = YaesServer.route(
-      GET(p"/users" / userId) { (req, id: Int) =>
+      GET(p"/users" / userId) { (req, path, _) =>
         val contentType = req.headers.getOrElse("Content-Type", "none")
-        Response.ok(s"User $id with content-type: $contentType")
+        Response.ok(s"User ${path.userId} with content-type: $contentType")
       },
-      POST(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id received: ${req.body}")
+      POST(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId} received: ${req.body}")
       }
     )
 
@@ -219,20 +219,20 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
   "Server routes (all HTTP methods)" should "support GET, POST, PUT, DELETE, PATCH with parameters" in {
     val userId = param[Int]("userId")
     val server = YaesServer.route(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"GET User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"GET User ${path.userId}")
       },
-      POST(p"/users" / userId) { (req, id: Int) =>
-        Response.created(s"POST User $id")
+      POST(p"/users" / userId) { (req, path, _) =>
+        Response.created(s"POST User ${path.userId}")
       },
-      PUT(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"PUT User $id")
+      PUT(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"PUT User ${path.userId}")
       },
-      DELETE(p"/users" / userId) { (req, id: Int) =>
+      DELETE(p"/users" / userId) { (req, path, _) =>
         Response.noContent()
       },
-      PATCH(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"PATCH User $id")
+      PATCH(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"PATCH User ${path.userId}")
       }
     )
 
@@ -261,8 +261,8 @@ class SimpleServerSpec extends AnyFlatSpec with Matchers {
     val postId = param[Long]("postId")
 
     val server = YaesServer.route(
-      GET(p"/orgs" / orgId / "users" / userId / "posts" / postId) { (req, oid: String, uid: Int, pid: Long) =>
-        Response.ok(s"Org $oid, User $uid, Post $pid")
+      GET(p"/orgs" / orgId / "users" / userId / "posts" / postId) { (req, path, _) =>
+        Response.ok(s"Org ${path.orgId}, User ${path.userId}, Post ${path.postId}")
       }
     )
 

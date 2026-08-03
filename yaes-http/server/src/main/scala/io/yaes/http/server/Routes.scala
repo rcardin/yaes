@@ -52,6 +52,9 @@ object Routes {
     *
     * Partitions routes into exact (no parameters) and parameterized for efficient matching.
     *
+    * When several routes are registered for the same method and path, the first declared one wins,
+    * for both exact and parameterized routes.
+    *
     * Example:
     * {{{
     * val userId = param[Int]("userId")
@@ -61,11 +64,11 @@ object Routes {
     *   GET(p"/health") { req =>
     *     Response.ok("OK")
     *   },
-    *   GET(p"/users" / userId) { (req, id: Int) =>
-    *     Response.ok(s"User $id")
+    *   GET(p"/users" / userId) { (req, path, _) =>
+    *     Response.ok(s"User ${path.userId}")
     *   },
-    *   GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
-    *     Response.ok(s"User $uid, Post $pid")
+    *   GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+    *     Response.ok(s"User ${path.userId}, Post ${path.postId}")
     *   }
     * )
     * }}}
@@ -83,34 +86,37 @@ object Routes {
     }
 
     // Build exact routes map
-    val exactMap = exact.map { route =>
-      val path = extractExactPath(route.pattern.root)
-      (route.method, path) -> ((req: Request) => {
-        // For exact routes, we know PathParams is NoParams and QueryParams is NoQueryParams
-        val handler = route.handler.asInstanceOf[RouteHandler[NoParams, NoQueryParams]]
-        handler.handle(req, NoParamValues, Query[NoQueryParams](Map.empty))
-      })
-    }.toMap
+    val exactMap = exact.foldLeft(Map.empty[(Method, String), Request => Response]) { (acc, route) =>
+      val key = (route.method, extractExactPath(route.pattern.root))
+      // First declaration wins, matching the first-match order used for paramRoutes below.
+      if (acc.contains(key)) acc
+      else
+        acc.updated(key, (req: Request) => {
+          val empty = EmptyTuple.asInstanceOf[io.yaes.http.server.params.EmptyParams]
+          val handler = route.handler.asInstanceOf[(Request, io.yaes.http.server.params.EmptyParams, io.yaes.http.server.params.EmptyParams) => Response]
+          handler(req, empty, empty)
+        })
+    }
 
     Routes(exactMap, parameterized.toList)
   }
 
   /** Check if a path segment represents an exact route (no path parameters). */
-  private def isExactRoute(segment: PathSegment[?]): Boolean = segment match {
+  private def isExactRoute(segment: PathSegment): Boolean = segment match {
     case End              => true
     case Literal(_, next) => isExactRoute(next)
     case Param(_, _, _)   => false
   }
 
   /** Check if a query spec has no query parameters. */
-  private def isNoQueryParams(spec: QueryParamSpec[?]): Boolean = spec match {
+  private def isNoQueryParams(spec: QueryParamSpec): Boolean = spec match {
     case EndOfQuery       => true
     case SingleParam(_, _, _) => false
   }
 
   /** Extract the exact path string from a literal-only route. */
-  private def extractExactPath(segment: PathSegment[?]): String = {
-    def loop(segment: PathSegment[?], acc: String): String = segment match {
+  private def extractExactPath(segment: PathSegment): String = {
+    def loop(segment: PathSegment, acc: String): String = segment match {
       case End => acc
       case Literal(value, next) => loop(next, s"$acc/$value")
       case Param(_, _, _) => throw new IllegalArgumentException("Cannot extract exact path from parameterized route")

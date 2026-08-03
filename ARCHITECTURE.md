@@ -10,6 +10,7 @@ Always prefer readability and maintainability to smartness. Keep It Simple, Stup
 | **yaes-data** | `yaes-data/src/main/scala/io/yaes/` | Data structures for use with effects (depends on yaes-core) |
 | **yaes-cats** | `yaes-cats/src/main/scala/io/yaes/` | Cats/Cats Effect integration (depends on yaes-core) |
 | **yaes-http** | `yaes-http/` | HTTP module with server subproject |
+| **yaes-migration** | `yaes-migration/rules/` | Scalafix migration rules (Scala 2.13 module); currently `MigrateV021ToV022`, which renames the `in.rcard.yaes` package to `io.yaes` |
 
 Each module has its own `CLAUDE.md` with implementation details and gotchas specific to that module.
 

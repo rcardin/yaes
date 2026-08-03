@@ -24,6 +24,8 @@ object EffectName {
 }
 ```
 
+**Documented exception: `Unscoped`.** `Unscoped` (`yaes-core/src/main/scala/io/yaes/Unscoped.scala`) has no `run` handler in its companion. Every other effect's handler contains what it grants, so a free `run` would be safe to expose. `Unscoped.spawn` is the one operation in the library whose work deliberately outlives the block that started it, so a free `Unscoped.run` would let any pure code obtain the capability and defeat the whole point. Instead, the library's own backend is obtainable only by importing `io.yaes.unsafe.allowUnscoped` (hand-rolling a `given` from the public `Unscoped.Unsafe` trait is possible, but that is a deliberate, visible act of its own), which lists every place the grant is introduced via `grep -rn "allowUnscoped"` -- not `grep -rn "io.yaes.unsafe"`, since a wildcard `import io.yaes.*` lets `unsafe.allowUnscoped` be called without that literal string ever appearing at the call site. See issue #326 for the full rationale.
+
 ### Infix Type Aliases Require Separate Imports
 
 The infix types `raises`, `reads`, and `writes` are defined at the **package level** in `io.yaes`, not inside their companion objects. Importing `Raise.*`, `Reader.*`, or `Writer.*` does **not** bring them into scope:

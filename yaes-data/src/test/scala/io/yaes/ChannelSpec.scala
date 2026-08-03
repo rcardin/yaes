@@ -2,13 +2,32 @@ package io.yaes
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.concurrent.Signaler
+import org.scalatest.concurrent.ThreadSignaler
+import org.scalatest.time.Seconds
+import org.scalatest.time.Span
 import scala.concurrent.duration._
 import io.yaes.Channel.ChannelClosed
 import io.yaes.Channel.Producer
 import io.yaes.Async.Cancelled
 import java.util.concurrent.LinkedBlockingQueue
 
-class ChannelSpec extends AnyFlatSpec with Matchers {
+class ChannelSpec extends AnyFlatSpec with Matchers with TimeLimits {
+
+  /** Interrupts the test thread when a `failAfter` limit expires.
+    *
+    * The default `Signaler` is `DoNotSignal`, which only reports the timeout once the block returns
+    * on its own. Tests that assert a parked sender gets released must interrupt the thread instead:
+    * the interrupt unwinds `Async.run`'s `join()`, whose `close()` then cancels the still-parked
+    * fiber, so a missing signal surfaces as a test failure rather than an unbounded hang.
+    */
+  private given Signaler = ThreadSignaler
+
+  /** Upper bound for the tests that would otherwise deadlock on a regression. Generous enough to
+    * absorb CI jitter, since the guarded blocks only ever sleep a few hundred milliseconds.
+    */
+  private val unblockTimeLimit: Span = Span(30, Seconds)
 
   "A Channel" should "send and receive values correctly" in {
     val channel             = Channel.unbounded[Int]()
@@ -541,7 +560,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
 
     actualResult should be(ChannelClosed)
     val events = actualQueue.toArray.toList
-    events should contain allOf("s1", "cancel", "receive-attempt")
+    events should contain allOf ("s1", "cancel", "receive-attempt")
   }
 
   "Bounded channel with DROP_OLDEST policy" should "drop oldest element when buffer is full" in {
@@ -579,7 +598,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   it should "not suspend the sender when buffer is full" in {
     import Channel.OverflowStrategy
 
-    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+    val channel   = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
     val sendTimes = new LinkedBlockingQueue[String]()
 
     Raise.run {
@@ -641,7 +660,7 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
   it should "not suspend the sender when buffer is full" in {
     import Channel.OverflowStrategy
 
-    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+    val channel   = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
     val sendTimes = new LinkedBlockingQueue[String]()
 
     Raise.run {
@@ -737,5 +756,329 @@ class ChannelSpec extends AnyFlatSpec with Matchers {
     val closed = channel.close()
 
     closed should be(true)
+  }
+
+  "An unbounded Channel tryReceive" should "return the element when one is immediately available" in {
+    val channel = Channel.unbounded[Int]()
+
+    val actualResult = Raise.either {
+      channel.send(42)
+      channel.tryReceive()
+    }
+
+    actualResult should be(Right(Some(42)))
+  }
+
+  it should "return None on an empty open channel without blocking the caller" in {
+    val channel = Channel.unbounded[Int]()
+
+    // Nothing else can ever feed this channel, so a `tryReceive` that parks would never be woken.
+    // The time limit is what turns that regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.tryReceive()
+      }
+    }
+
+    actualResult should be(Right(None))
+  }
+
+  it should "raise ChannelClosed on an empty channel that has been closed" in {
+    val channel = Channel.unbounded[Int]()
+    channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "drain the buffered elements before raising ChannelClosed on a closed channel" in {
+    val channel = Channel.unbounded[Int]()
+
+    Raise.run {
+      channel.send(1)
+      channel.send(2)
+    }
+    channel.close()
+
+    val first  = Raise.either { channel.tryReceive() }
+    val second = Raise.either { channel.tryReceive() }
+    val third  = Raise.either { channel.tryReceive() }
+
+    first should be(Right(Some(1)))
+    second should be(Right(Some(2)))
+    third should be(Left(ChannelClosed))
+  }
+
+  it should "raise ChannelClosed on a cancelled channel, discarding buffered elements" in {
+    val channel = Channel.unbounded[Int]()
+
+    Raise.run {
+      channel.send(1)
+    }
+    channel.cancel()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  "A bounded Channel tryReceive" should "return the element when one is immediately available" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    val actualResult = Raise.either {
+      channel.send(42)
+      channel.tryReceive()
+    }
+
+    actualResult should be(Right(Some(42)))
+  }
+
+  it should "return None on an empty open channel" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    // Nothing else can ever feed this channel, so a `tryReceive` that parks would never be woken.
+    // The time limit is what turns that regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.tryReceive()
+      }
+    }
+
+    actualResult should be(Right(None))
+  }
+
+  it should "raise ChannelClosed on an empty channel that has been closed" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+    channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "drain the buffered elements before raising ChannelClosed on a closed channel" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    Raise.run {
+      channel.send(1)
+      channel.send(2)
+    }
+    channel.close()
+
+    val first  = Raise.either { channel.tryReceive() }
+    val second = Raise.either { channel.tryReceive() }
+    val third  = Raise.either { channel.tryReceive() }
+
+    first should be(Right(Some(1)))
+    second should be(Right(Some(2)))
+    third should be(Left(ChannelClosed))
+  }
+
+  it should "raise ChannelClosed on a cancelled channel, discarding buffered elements" in {
+    val channel = Channel.bounded[Int](capacity = 2)
+
+    Raise.run {
+      channel.send(1)
+    }
+    channel.cancel()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "unblock a sender parked on a full buffer" in {
+    val channel   = Channel.bounded[Int](capacity = 1)
+    val sendTrace = new LinkedBlockingQueue[String]()
+
+    // Without the `notFull` signal the sender stays parked forever and `Async.run` never joins, so
+    // the time limit is what turns the regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          Async.fork {
+            channel.send(1)
+            sendTrace.put("sent1")
+            channel.send(2) // Suspends: the buffer is full
+            sendTrace.put("sent2")
+          }
+
+          Async.delay(200.millis)
+          // The sender is parked on the full buffer at this point
+          val parkedTrace = sendTrace.toArray.toList
+
+          val first = channel.tryReceive()
+
+          Async.delay(200.millis)
+          val unblockedTrace = sendTrace.toArray.toList
+          val second         = channel.tryReceive()
+
+          (parkedTrace, first, unblockedTrace, second)
+        }
+      }
+    }
+
+    actualResult should be(
+      (List("sent1"), Some(1), List("sent1", "sent2"), Some(2))
+    )
+  }
+
+  "A bounded Channel with DROP_OLDEST tryReceive" should "return the retained elements and then None" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_OLDEST)
+
+    // The third `tryReceive` sees an empty but still open channel that nothing else can feed, so a
+    // regression that parks the caller would hang the suite instead of failing it.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.send(1) // Buffer: [1]
+        channel.send(2) // Buffer: [1, 2]
+        channel.send(3) // Buffer: [2, 3] (1 dropped)
+
+        (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+      }
+    }
+
+    actualResult should be(Right((Some(2), Some(3), None)))
+  }
+
+  "A bounded Channel with DROP_LATEST tryReceive" should "return the retained elements and then None" in {
+    import Channel.OverflowStrategy
+
+    val channel = Channel.bounded[Int](capacity = 2, onOverflow = OverflowStrategy.DROP_LATEST)
+
+    // The third `tryReceive` sees an empty but still open channel that nothing else can feed, so a
+    // regression that parks the caller would hang the suite instead of failing it.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.either {
+        channel.send(1) // Buffer: [1]
+        channel.send(2) // Buffer: [1, 2]
+        channel.send(3) // Buffer: [1, 2] (3 dropped)
+
+        (channel.tryReceive(), channel.tryReceive(), channel.tryReceive())
+      }
+    }
+
+    actualResult should be(Right((Some(1), Some(2), None)))
+  }
+
+  "A rendezvous Channel tryReceive" should "return the element when a sender is already parked with an item" in {
+    val channel   = Channel.rendezvous[Int]()
+    val sendTrace = new LinkedBlockingQueue[String]()
+
+    // Without the `notFull` signal the sender never completes the handshake and `Async.run` never
+    // joins, so the time limit is what turns the regression into a failure instead of a hung suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          Async.fork {
+            channel.send(42)
+            sendTrace.put("sent")
+          }
+
+          Async.delay(200.millis)
+          // The sender is parked with the item ready at this point
+          val parkedTrace = sendTrace.toArray.toList
+
+          val received = channel.tryReceive()
+
+          Async.delay(200.millis)
+          // The handshake completed, so the sender resumed
+          val resumedTrace = sendTrace.toArray.toList
+
+          (parkedTrace, received, resumedTrace)
+        }
+      }
+    }
+
+    actualResult should be((List.empty, Some(42), List("sent")))
+  }
+
+  it should "return None when no sender is waiting and not initiate a handshake" in {
+    val channel = Channel.rendezvous[Int]()
+
+    // The first `tryReceive` runs before any sender is forked, so a `tryReceive` that parks would
+    // never be woken. The time limit is what turns that regression into a failure instead of a hung
+    // suite.
+    val actualResult = failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          // No sender yet: tryReceive must not park nor register a pending receiver
+          val empty = channel.tryReceive()
+
+          Async.fork {
+            channel.send(42)
+          }
+
+          val delivered = channel.receive()
+
+          (empty, delivered)
+        }
+      }
+    }
+
+    actualResult should be((None, 42))
+  }
+
+  it should "raise ChannelClosed when the channel is closed and no item is pending" in {
+    val channel = Channel.rendezvous[Int]()
+    channel.close()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
+  }
+
+  it should "drain the item left by a parked sender before raising ChannelClosed" in {
+    val channel     = Channel.rendezvous[Int]()
+    val sendOutcome = new LinkedBlockingQueue[Either[ChannelClosed, Unit]]()
+
+    // The sender deposits its item and then parks waiting for a receiver. Closing the channel wakes
+    // it up, and it unwinds with ChannelClosed leaving the deposited item behind. The time limit is
+    // what turns a missing wake-up into a failure instead of a hung suite.
+    failAfter(unblockTimeLimit) {
+      Raise.run {
+        Async.run {
+          Async.fork {
+            sendOutcome.put(Raise.either { channel.send(42) })
+          }
+
+          // The sender is parked with the item ready at this point
+          Async.delay(200.millis)
+          channel.close()
+        }
+      }
+    }
+
+    sendOutcome.toArray.toList should be(List(Left(ChannelClosed)))
+
+    val drained   = Raise.either { channel.tryReceive() }
+    val exhausted = Raise.either { channel.tryReceive() }
+
+    drained should be(Right(Some(42)))
+    exhausted should be(Left(ChannelClosed))
+  }
+
+  it should "raise ChannelClosed on a cancelled channel" in {
+    val channel = Channel.rendezvous[Int]()
+    channel.cancel()
+
+    val actualResult = Raise.either {
+      channel.tryReceive()
+    }
+
+    actualResult should be(Left(ChannelClosed))
   }
 }

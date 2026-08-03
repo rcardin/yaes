@@ -3,30 +3,31 @@ package io.yaes.http.server.routing
 import io.yaes.*
 import io.yaes.http.server.{Request, Response}
 import io.yaes.http.core.Method
-import io.yaes.http.server.params.path.{PathParams, NoParams, ::, PathParamError}
-import io.yaes.http.server.params.query.{QueryParams, NoQueryParams, Query, QueryParamError}
+import io.yaes.http.server.params.path.PathParamError
+import io.yaes.http.server.params.query.QueryParamError
+import scala.NamedTuple.AnyNamedTuple
 
 /** Type-safe HTTP route.
   *
   * Combines an HTTP method, a typed path pattern, and a handler function. The type parameters
-  * ensure compile-time verification that the handler receives exactly the parameters declared
-  * in the pattern.
+  * ensure compile-time verification that the handler receives exactly the parameters declared in
+  * the pattern, as named tuples.
   *
   * @param method
   *   The HTTP method (GET, POST, etc.)
   * @param pattern
-  *   The path pattern with type-level parameter encoding
+  *   The path pattern with named-tuple parameter encoding
   * @param handler
-  *   The request handler with matching parameter signature
+  *   The request handler; receives the request and the extracted path and query named tuples
   * @tparam PathP
-  *   The type-level encoding of path parameters
+  *   The named-tuple encoding of path parameters
   * @tparam QueryP
-  *   The type-level encoding of query parameters
+  *   The named-tuple encoding of query parameters
   */
-case class Route[PathP <: PathParams, QueryP <: QueryParams](
+case class Route[PathP <: AnyNamedTuple, QueryP <: AnyNamedTuple](
     method: Method,
     pattern: PathPattern[PathP, QueryP],
-    handler: RouteHandler[PathP, QueryP]
+    handler: (Request, PathP, QueryP) => Response
 ) {
 
   /** Attempt to match and handle a request.
@@ -45,9 +46,9 @@ case class Route[PathP <: PathParams, QueryP <: QueryParams](
       // Attempt to extract parameters with automatic error handling
       Raise.fold {
         pattern.extract(request) match {
-          case Some((pathParams, query)) =>
+          case Some((pathParams, queryParams)) =>
             // Path and query params matched, invoke handler
-            Some(handler.handle(request, pathParams, query))
+            Some(handler(request, pathParams, queryParams))
           case None =>
             // Path structure didn't match
             None

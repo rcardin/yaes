@@ -38,16 +38,16 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val results     = new ConcurrentLinkedQueue[String]()
     val raiseResult = Raise.run {
       Async.run {
-        val fb1 = Async.fork("fb1") {
+        val fb1 = Async.forkNamed("fb1") {
           Async.delay(1.second)
           results.add("fb1")
         }
-        val fb2 = Async.fork("fb2") {
+        val fb2 = Async.forkNamed("fb2") {
           Async.delay(500.millis)
           results.add("fb2")
           Raise.raise("Error")
         }
-        val fb3 = Async.fork("fb3") {
+        val fb3 = Async.forkNamed("fb3") {
           Async.delay(100.millis)
           results.add("fb3")
         }
@@ -212,9 +212,9 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
   it should "cancel children fibers" in {
     val actualQueue = Async.run {
       val queue = new ConcurrentLinkedQueue[String]()
-      val fb1   = Async.fork("fb1") {
-        Async.fork("inner-fb") {
-          Async.fork("inner-inner-fb") {
+      val fb1   = Async.forkNamed("fb1") {
+        Async.forkNamed("inner-fb") {
+          Async.forkNamed("inner-inner-fb") {
             Async.delay(6.seconds)
             queue.add("inner-inner-fb")
           }
@@ -225,7 +225,7 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
         Async.delay(1.second)
         queue.add("fb1")
       }
-      Async.fork("fb2") {
+      Async.forkNamed("fb2") {
         Async.delay(500.millis)
         fb1.cancel()
         queue.add("fb2")
@@ -564,12 +564,12 @@ class AsyncSpec extends AnyFlatSpec with Matchers {
     val threadNames = new ConcurrentLinkedQueue[String]()
 
     Async.run {
-      val fb1 = Async.fork("custom-fiber-1") {
+      val fb1 = Async.forkNamed("custom-fiber-1") {
         Async.delay(50.millis)
         threadNames.add(Thread.currentThread().getName())
       }
 
-      val fb2 = Async.fork("custom-fiber-2") {
+      val fb2 = Async.forkNamed("custom-fiber-2") {
         Async.delay(100.millis)
         threadNames.add(Thread.currentThread().getName())
       }

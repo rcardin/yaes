@@ -14,7 +14,7 @@ Type-safe HTTP/1.1 server built on YAES effects and virtual threads.
 Add the dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.yaes" %% "yaes-http-server" % "0.21.0"
+libraryDependencies += "io.yaes" %% "yaes-http-server" % "0.23.0"
 ```
 
 ## Overview
@@ -84,24 +84,28 @@ val postId = param[Long]("postId")
 val username = param[String]("username")
 
 val routes = Routes(
-  // Single parameter
-  GET(p"/users" / userId) { (req, id: Int) =>
-    Response.ok(s"User $id")
+  // Single parameter — read it by name from the `path` named tuple
+  GET(p"/users" / userId) { (req, path, _) =>
+    Response.ok(s"User ${path.userId}")
   },
 
   // Multiple parameters
-  GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
-    Response.ok(s"User $uid, Post $pid")
+  GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+    Response.ok(s"User ${path.userId}, Post ${path.postId}")
   },
 
   // String parameters
-  GET(p"/hello" / username) { (req, name: String) =>
-    Response.ok(s"Hello, $name!")
+  GET(p"/hello" / username) { (req, path, _) =>
+    Response.ok(s"Hello, ${path.username}!")
   }
 )
 ```
 
-**Supported types:** `String`, `Int`, `Long`, `Boolean`, `Double`
+Handlers receive `(request, path, query)`, where `path` and `query` are named tuples. Parameters
+are read by name (`path.userId`), so access is order-independent and self-documenting. The unused
+tuple can be ignored with `_`.
+
+**Supported types:** `String`, `Int`, `Long` (provide a `given PathParamParser[T]` for other types)
 
 Path parameters are automatically URL-decoded (e.g., `/users/john%20doe` → `"john doe"`).
 
@@ -111,22 +115,19 @@ Define typed query parameters using `queryParam[Type]("name")`:
 
 ```scala
 val routes = Routes(
-  // Single query parameter
-  GET(p"/search" ? queryParam[String]("q")) { req =>
-    val query = req.queryParam("q").get
-    Response.ok(s"Searching for: $query")
+  // Single query parameter — read it by name from the `query` named tuple
+  GET(p"/search" ? queryParam[String]("q")) { (req, _, query) =>
+    Response.ok(s"Searching for: ${query.q}")
   },
 
   // Multiple query parameters
-  GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { req =>
-    val query = req.queryParam("q").get
-    val limit = req.queryParam("limit").map(_.toInt).getOrElse(10)
-    Response.ok(s"Searching for: $query (limit: $limit)")
+  GET(p"/search" ? queryParam[String]("q") & queryParam[Int]("limit")) { (req, _, query) =>
+    Response.ok(s"Searching for: ${query.q} (limit: ${query.limit})")
   },
 
-  // Optional query parameters
-  GET(p"/search" ? queryParam[Option[Int]]("page")) { req =>
-    val page = req.queryParam("page").flatMap(_.toIntOption).getOrElse(1)
+  // Optional query parameters — Option/List ride in the element type
+  GET(p"/search" ? queryParam[Option[Int]]("page")) { (req, _, query) =>
+    val page = query.page.getOrElse(1)
     Response.ok(s"Page $page")
   }
 )
@@ -142,9 +143,8 @@ Combine path and query parameters in a single route:
 val userId = param[Int]("userId")
 
 val routes = Routes(
-  GET(p"/users" / userId ? queryParam[String]("include")) { (req, id: Int) =>
-    val include = req.queryParam("include").getOrElse("basic")
-    Response.ok(s"User $id with $include data")
+  GET(p"/users" / userId ? queryParam[String]("include")) { (req, path, query) =>
+    Response.ok(s"User ${path.userId} with ${query.include} data")
   }
 )
 ```
@@ -157,9 +157,9 @@ Supported methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`
 val routes = Routes(
   GET(p"/users") { req => Response.ok("List users") },
   POST(p"/users") { req => Response.created("User created") },
-  PUT(p"/users" / userId) { (req, id: Int) => Response.ok(s"Updated user $id") },
-  DELETE(p"/users" / userId) { (req, id: Int) => Response.ok(s"Deleted user $id") },
-  PATCH(p"/users" / userId) { (req, id: Int) => Response.ok(s"Patched user $id") }
+  PUT(p"/users" / userId) { (req, path, _) => Response.ok(s"Updated user ${path.userId}") },
+  DELETE(p"/users" / userId) { (req, path, _) => Response.ok(s"Deleted user ${path.userId}") },
+  PATCH(p"/users" / userId) { (req, path, _) => Response.ok(s"Patched user ${path.userId}") }
 )
 ```
 
@@ -189,7 +189,7 @@ case class Request(
 req.method          // Method.GET, Method.POST, etc.
 req.path            // "/users/123"
 req.header("content-type")  // Case-insensitive: Option[String]
-req.queryParam("q") // Option[String]
+req.queryString.get("q")    // Raw query values: Option[List[String]]
 req.body            // Request body as String
 ```
 
@@ -289,7 +289,7 @@ Sync.runBlocking(Duration.Inf) {
       )
 
       // Start server in background fiber
-      val serverFiber = Async.fork("server") {
+      val serverFiber = Async.forkNamed("server") {
         server.run(port = 8080)
       }
 
@@ -402,8 +402,8 @@ given BodyDecoder[User] with {
 }
 
 // Use in routes
-GET(p"/users" / userId) { (req, id: Int) =>
-  val user = User(id, "Alice")
+GET(p"/users" / userId) { (req, path, _) =>
+  val user = User(path.userId, "Alice")
   Response.ok(user)  // Requires BodyEncoder[User]; sets Content-Type: application/json
 }
 
@@ -450,16 +450,15 @@ def main(): Unit = {
           },
 
           // Get user by ID
-          GET(p"/users" / userId) { (req, id: Int) =>
-            Response.ok(s"""{"id": $id, "name": "User $id"}""",
+          GET(p"/users" / userId) { (req, path, _) =>
+            Response.ok(s"""{"id": ${path.userId}, "name": "User ${path.userId}"}""",
               extraHeaders = Map("content-type" -> "application/json")
             )
           },
 
           // Search with query parameter
-          GET(p"/search" ? queryParam[String]("q")) { req =>
-            val query = Query.queryParam("q")
-            Response.ok(s"Searching for: $query")
+          GET(p"/search" ? queryParam[String]("q")) { (req, _, query) =>
+            Response.ok(s"Searching for: ${query.q}")
           },
 
           // Create user

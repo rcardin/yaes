@@ -83,6 +83,38 @@ val queue = Async.run {
 }
 ```
 
+### Unsupervised Scopes
+
+`Async.unsupervised` is an alternative handler for blocks that fork fibers nobody waits on — daemon loops, fire-and-forget background work. When the block returns, any fiber still running is cancelled through cooperative interruption:
+
+```scala
+import io.yaes.Async.*
+import scala.concurrent.duration.*
+
+Async.run {
+  Async.unsupervised {
+    // Never joined: cancelled as soon as the block returns
+    Async.fork {
+      Async.delay(10.seconds)
+      neverReached()
+    }
+    42
+  } // returns 42 promptly, then cancels the forked fiber
+}
+```
+
+How it differs from `Async.run`:
+
+- **No waiting**: the handler returns as soon as the block does, then cancels the leftover fibers. It returns only once cancellation has propagated.
+- **No fail-fast**: a fiber that throws and is never joined does not propagate its exception to the enclosing scope, and its siblings keep running. To observe a fiber's failure, join it explicitly with `join()` or `value`.
+- **Same exception transparency**: an exception thrown from the main body of the block still propagates to the caller.
+
+Supervision is a property of the scope, not of the fork. There is no separate "unsupervised fork" operation — `Async.fork` and `Async.forkNamed` work unchanged inside the block. Like `Async.run`, `Async.unsupervised` is a standalone handler providing its own `Async` capability, so it can be used on its own or nested in an existing scope. When nested, the enclosing scope is saved and restored, and is left untouched.
+
+:::note
+Looking for background work that outlives its spawning scope entirely? That is intentionally **not** an `Async` operation — see [Escaping Structured Concurrency with Unscoped](/advanced/unscoped-effect/).
+:::
+
 ### Concurrency Primitives
 
 **Parallel Execution** — run two computations in parallel:
@@ -126,11 +158,42 @@ Key properties of `parTraverse`:
 - If any fiber fails, all remaining fibers are cancelled
 - Works with an empty collection (returns an empty `Seq`)
 
+**Bounded Parallel Traversal**: like `parTraverse`, but capping how many invocations of `f` run at the same time:
+
+```scala
+import io.yaes.Async.*
+
+val profiles: Seq[UserProfile] = Async.run {
+  // At most 3 calls to fetchUserProfile run at the same time.
+  Async.parTraverseLimit(List(1, 2, 3, 4, 5), concurrency = 3)(fetchUserProfile)
+}
+```
+
+Unlike `parTraverse`, `parTraverseLimit` does not fork one fiber per element. It forks at most `concurrency` worker fibers, capped at the number of elements, and each worker repeatedly claims the next unclaimed element and runs `f` on it. This keeps both the number of invocations in flight and the number of fibers created bounded by `concurrency`, no matter how large the input collection is, which makes it a good fit when `f` calls something with limited capacity, such as a connection pool or a rate limited API, and running every element at once would overwhelm it, or simply when the collection itself can be large.
+
+Key properties of `parTraverseLimit`:
+- At most `concurrency` invocations of `f`, and at most `concurrency` worker fibers, exist at the same time
+- Results are returned in the same order as the input, regardless of completion or claim order
+- If any invocation fails, every worker is cancelled; the failing worker flags the failure before its exception unwinds, so once that failure has been observed no worker invokes `f` on an element it had not already started, though an element a worker had already started still runs to completion
+- A `concurrency` of `items.size` or greater produces the same result as `parTraverse`, but does not guarantee that every element runs on its own fiber, since workers still claim indices from a shared counter; computations that need every element running at the same time, such as a rendezvous or a barrier, must use `parTraverse` instead
+- A non-positive `concurrency` is clamped to `1`, running fully sequentially, instead of throwing
+- If the traversal is cancelled before every element is computed, it fails with `java.util.concurrent.CancellationException` rather than returning a partial result, mirroring `parTraverse`
+
 **Racing** — get the first result and cancel the other:
 
 ```scala
 val winner = Async.race(computation1, computation2)
 ```
+
+`race` returns whichever branch completes first, success or failure — a fast failure beats a slow success.
+
+**Racing for success** — like `race`, but ignore failures unless every branch fails:
+
+```scala
+val winner = Async.raceSuccess(computation1, computation2)
+```
+
+Unlike `race`, `raceSuccess` keeps waiting on the surviving branch when one of them fails, instead of letting a fast failure win. It only fails if *both* branches fail, surfacing the failure of whichever branch finished second. As soon as one branch succeeds, the other is cancelled, exactly like `race` does.
 
 **Race with Pairs** — get the first result and the remaining fiber:
 
@@ -138,12 +201,33 @@ val winner = Async.race(computation1, computation2)
 val (winner, remaining) = Async.racePair(computation1, computation2)
 ```
 
+**Never Completing**: a computation that blocks forever on its own:
+
+```scala
+import io.yaes.Async.*
+import scala.concurrent.duration.*
+
+val result: Int = Async.run {
+  Async.race(
+    Async.never, // never completes on its own
+    {
+      Async.delay(1.second)
+      42
+    }
+  )
+}
+// result == 42; the never branch is cancelled once the other one wins
+```
+
+`Async.never` parks the fiber efficiently, without busy-waiting, until it is cancelled. It is useful for a computation that must run until cancelled, or for a branch of `race`, `raceSuccess`, or `timeout` that should never complete on its own. It must always be forked, directly with `fork`/`attemptFork` or indirectly through a combinator such as `race` that forks its branches for you, and that fork must itself be cancelled, raced away, or wrapped in `timeout`. A bare `Async.run { Async.never }` with no fork in between hangs forever, and so does a forked `never` left un-cancelled and un-raced directly inside `run`, since `run` waits for every forked fiber to finish, joined or not. `Async.unsupervised` does not have that problem: it cancels any fiber still running as soon as its block returns. `par` and `parTraverse` wait for every branch to finish before returning, so pairing either of them with `never` deadlocks unconditionally.
+
 ### Key Features
 
 - **Structured Concurrency**: All fibers are properly managed and cleaned up
 - **Cooperative Cancellation**: Based on JVM interruption
 - **Parent-Child Relationships**: Cancelling a parent cancels all children
 - **Exception Transparency**: Exceptions propagate naturally
+- **Unsupervised Scopes**: `Async.unsupervised` opts out of waiting and fail-fast when needed
 
 ---
 
@@ -313,7 +397,7 @@ import scala.concurrent.duration.*
 Shutdown.run {
   Raise.either {
     Async.withGracefulShutdown(Deadline.after(30.seconds)) {
-      val serverFiber = Async.fork("server") {
+      val serverFiber = Async.forkNamed("server") {
         while (!Shutdown.isShuttingDown()) {
           // Process work
           Async.delay(100.millis)
@@ -348,7 +432,7 @@ val result: Either[ShutdownTimedOut, Unit] = Shutdown.run {
   Output.run {
     Raise.either {
       Async.withGracefulShutdown(Deadline.after(3.seconds)) {
-        val slowFiber = Async.fork("slow-work") {
+        val slowFiber = Async.forkNamed("slow-work") {
           Async.delay(10.seconds) // Takes longer than deadline
           Output.printLn("Slow work completed") // Won't print
         }

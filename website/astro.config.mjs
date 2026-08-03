@@ -30,6 +30,13 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Advanced',
+					collapsed: true,
+					items: [
+						{ label: 'Unscoped Effect', slug: 'advanced/unscoped-effect' },
+					],
+				},
+				{
 					label: 'HTTP Module',
 					collapsed: true,
 					items: [

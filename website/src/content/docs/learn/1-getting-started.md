@@ -19,16 +19,16 @@ The library is available on Maven Central. Add the following dependencies to you
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.yaes" %% "yaes-core"                  % "0.21.0",
-  "io.yaes" %% "yaes-data"                  % "0.21.0", // Optional: Flow and data structures
-  "io.yaes" %% "yaes-cats"                  % "0.21.0", // Optional: Cats Effect integration
-  "io.yaes" %% "yaes-slf4j"                 % "0.21.0", // Optional: SLF4J logging backend
-  "io.yaes" %% "yaes-http-server"           % "0.21.0", // Optional: HTTP server
-  "io.yaes" %% "yaes-http-client"           % "0.21.0", // Optional: HTTP client
-  "io.yaes" %% "yaes-http-circe"            % "0.21.0", // Optional: Circe JSON for HTTP
-  "io.yaes" %% "yaes-http-jsoniter"         % "0.21.0", // Optional: Jsoniter JSON for HTTP
-  "io.yaes" %% "yaes-core-test-scalatest"   % "0.21.0" % Test, // Optional: ScalaTest helpers for core effects
-  "io.yaes" %% "yaes-http-test-scalatest"   % "0.21.0" % Test  // Optional: ScalaTest helpers for HTTP
+  "io.yaes" %% "yaes-core"                  % "0.23.0",
+  "io.yaes" %% "yaes-data"                  % "0.23.0", // Optional: Flow and data structures
+  "io.yaes" %% "yaes-cats"                  % "0.23.0", // Optional: Cats Effect integration
+  "io.yaes" %% "yaes-slf4j"                 % "0.23.0", // Optional: SLF4J logging backend
+  "io.yaes" %% "yaes-http-server"           % "0.23.0", // Optional: HTTP server
+  "io.yaes" %% "yaes-http-client"           % "0.23.0", // Optional: HTTP client
+  "io.yaes" %% "yaes-http-circe"            % "0.23.0", // Optional: Circe JSON for HTTP
+  "io.yaes" %% "yaes-http-jsoniter"         % "0.23.0", // Optional: Jsoniter JSON for HTTP
+  "io.yaes" %% "yaes-core-test-scalatest"   % "0.23.0" % Test, // Optional: ScalaTest helpers for core effects
+  "io.yaes" %% "yaes-http-test-scalatest"   % "0.23.0" % Test  // Optional: ScalaTest helpers for HTTP
 )
 ```
 

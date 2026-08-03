@@ -408,6 +408,51 @@ object Channel {
       */
     def receive()(using Raise[ChannelClosed]): T
 
+    /** Receives an element from the channel without ever suspending the caller.
+      *
+      * This is the non-blocking counterpart of [[receive]]. It inspects the channel state once and
+      * returns immediately:
+      *   - `Some(value)` if an element is immediately available; the element is removed from the
+      *     channel exactly as [[receive]] would have removed it
+      *   - `None` if the channel is empty but still open
+      *   - raises [[ChannelClosed]] if the channel is empty and closed (fully drained), or cancelled
+      *
+      * Buffered elements are drained before closure is signalled: on a closed channel that still
+      * holds elements, `tryReceive` keeps returning `Some` until the buffer is empty and only then
+      * raises [[ChannelClosed]].
+      *
+      * '''Rendezvous caveat''': a rendezvous channel has no buffer, so `tryReceive` returns
+      * `Some(value)` only when a sender is ''already'' parked with an item ready at the moment of
+      * the call. Otherwise it returns `None` without initiating a handshake, which means a sender
+      * that arrives immediately afterwards is not served by this call.
+      *
+      * Example:
+      * {{{
+      * val channel = Channel.unbounded[Int]()
+      *
+      * Raise.run {
+      *   channel.send(42)
+      *
+      *   channel.tryReceive() // Some(42)
+      *   channel.tryReceive() // None: empty but still open
+      *
+      *   channel.close()
+      *   channel.tryReceive() // Raises ChannelClosed
+      * }
+      * }}}
+      *
+      * @param raise
+      *   the raise context for handling [[ChannelClosed]] errors
+      * @return
+      *   `Some(element)` if an element is immediately available, `None` if the channel is empty and
+      *   still open
+      * @throws ChannelClosed
+      *   if the channel is empty and closed, or if it was cancelled
+      * @see
+      *   [[receive]] for the suspending variant
+      */
+    def tryReceive()(using Raise[ChannelClosed]): Option[T]
+
     /** Cancels the channel, clearing all buffered elements.
       *
       * After cancellation, all buffered elements are discarded, and ongoing operations are
@@ -600,6 +645,25 @@ object Channel {
       }
     }
 
+    override def tryReceive()(using Raise[ChannelClosed]): Option[T] = {
+      lock.lock()
+      try {
+        if (cancelled) {
+          Raise.raise(ChannelClosed)
+        }
+        if (queue.isEmpty) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          None
+        } else {
+          Some(queue.poll())
+        }
+      } finally {
+        lock.unlock()
+      }
+    }
+
     override def send(value: T)(using Raise[ChannelClosed]): Unit = {
       lock.lock()
       try {
@@ -654,6 +718,29 @@ object Channel {
         hasItem = false
         notFull.signal()
         value
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def tryReceive()(using Raise[ChannelClosed]): Option[T] = {
+      lock.lock()
+      try {
+        if (cancelled) {
+          Raise.raise(ChannelClosed)
+        }
+        if (!hasItem) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          None
+        } else {
+          val value = item
+          item = null.asInstanceOf[T]
+          hasItem = false
+          notFull.signal()
+          Some(value)
+        }
       } finally {
         lock.unlock()
       }
@@ -745,6 +832,29 @@ object Channel {
           notFull.signal()
         }
         value
+      } finally {
+        lock.unlock()
+      }
+    }
+
+    override def tryReceive()(using Raise[ChannelClosed]): Option[T] = {
+      lock.lock()
+      try {
+        if (cancelled) {
+          Raise.raise(ChannelClosed)
+        }
+        if (queue.isEmpty) {
+          if (closed) {
+            Raise.raise(ChannelClosed)
+          }
+          None
+        } else {
+          val value = queue.poll()
+          if (onOverflow == OverflowStrategy.SUSPEND) {
+            notFull.signal()
+          }
+          Some(value)
+        }
       } finally {
         lock.unlock()
       }

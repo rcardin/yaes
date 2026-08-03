@@ -20,7 +20,7 @@ Both are part of the `yaes-data` module and integrate seamlessly with λÆS effe
 Add the following dependency to your `build.sbt`:
 
 ```scala
-libraryDependencies += "io.yaes" %% "yaes-data" % "0.21.0"
+libraryDependencies += "io.yaes" %% "yaes-data" % "0.23.0"
 ```
 
 ---
@@ -1327,6 +1327,7 @@ trait SendChannel[T] {
 
 trait ReceiveChannel[T] {
   def receive()(using Raise[ChannelClosed]): T
+  def tryReceive()(using Raise[ChannelClosed]): Option[T]
   def cancel(): Unit
 }
 ```
@@ -1334,6 +1335,7 @@ trait ReceiveChannel[T] {
 - **send**: Sends an element, suspending if necessary. Raises `ChannelClosed` if the channel is closed.
 - **close**: Closes the channel, preventing further sends. Receivers can still consume buffered elements.
 - **receive**: Receives an element, suspending if the channel is empty. Raises `ChannelClosed` when the channel is closed and empty.
+- **tryReceive**: The non-blocking counterpart of `receive`. Returns `Some(element)` if an element is immediately available, `None` if the channel is empty but still open, and raises `ChannelClosed` when the channel is drained and closed, or cancelled. On a rendezvous channel it returns `Some` only when a sender is already parked with an item, and otherwise returns `None` without starting a handshake.
 - **cancel**: Cancels the channel, clearing all buffered elements.
 
 ### Using Channels Without Async Context

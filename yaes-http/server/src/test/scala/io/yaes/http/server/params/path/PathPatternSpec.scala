@@ -4,8 +4,6 @@ import io.yaes.*
 import io.yaes.http.core.Method
 import io.yaes.http.server.*
 import io.yaes.http.server.params.path.PathParamError
-import io.yaes.http.server.routing.NoParamValues
-import io.yaes.http.server.routing.ParamValueCons
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -20,7 +18,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
       pattern.extract(req("/users/admin"))
     }
 
-    result.map(_.map(_._1)) shouldBe Right(Some(NoParamValues))
+    result.map(_.map(_._1)) shouldBe Right(Some(EmptyTuple))
   }
 
   it should "not match different paths" in {
@@ -54,7 +52,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
       pattern.extract(req("/"))
     }
 
-    result.map(_.map(_._1)) shouldBe Right(Some(NoParamValues))
+    result.map(_.map(_._1)) shouldBe Right(Some(EmptyTuple))
   }
 
   "PathPattern (single parameter)" should "extract Int parameter" in {
@@ -66,10 +64,10 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(id: Int, NoParamValues), _))) =>
-        id shouldBe 123
+      case Right(Some((path, _))) =>
+        path.userId shouldBe 123
       case other =>
-        fail(s"Expected Right(Some(ParamValueCons(123, NoParamValues))), got $other")
+        fail(s"Expected Right(Some((userId = 123), _)), got $other")
     }
   }
 
@@ -82,8 +80,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(id: Long, NoParamValues), _))) =>
-        id shouldBe 987654321L
+      case Right(Some((path, _))) =>
+        path.itemId shouldBe 987654321L
       case other =>
         fail(s"Expected Long parameter, got $other")
     }
@@ -98,8 +96,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(name: String, NoParamValues), _))) =>
-        name shouldBe "alice"
+      case Right(Some((path, _))) =>
+        path.username shouldBe "alice"
       case other =>
         fail(s"Expected String parameter, got $other")
     }
@@ -154,9 +152,9 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(uid: Int, ParamValueCons(pid: Int, NoParamValues)), _))) =>
-        uid shouldBe 42
-        pid shouldBe 99
+      case Right(Some((path, _))) =>
+        path.userId shouldBe 42
+        path.postId shouldBe 99
       case other =>
         fail(s"Expected two Int parameters, got $other")
     }
@@ -172,9 +170,9 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(uid: Int, ParamValueCons(pid: Long, NoParamValues)), _))) =>
-        uid shouldBe 42
-        pid shouldBe 999999999L
+      case Right(Some((path, _))) =>
+        path.userId shouldBe 42
+        path.postId shouldBe 999999999L
       case other =>
         fail(s"Expected Int and Long parameters, got $other")
     }
@@ -191,20 +189,10 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(
-            Some(
-              (
-                ParamValueCons(
-                  oid: Int,
-                  ParamValueCons(uid: Int, ParamValueCons(pid: Long, NoParamValues))
-                ),
-                _
-              )
-            )
-          ) =>
-        oid shouldBe 1
-        uid shouldBe 42
-        pid shouldBe 123L
+      case Right(Some((path, _))) =>
+        path.orgId shouldBe 1
+        path.userId shouldBe 42
+        path.postId shouldBe 123L
       case other =>
         fail(s"Expected three parameters, got $other")
     }
@@ -265,7 +253,7 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
       pattern.extract(req("/api/v1/users"))
     }
 
-    result.map(_.map(_._1)) shouldBe Right(Some(NoParamValues))
+    result.map(_.map(_._1)) shouldBe Right(Some(EmptyTuple))
   }
 
   it should "build mixed literal and parameter patterns" in {
@@ -277,8 +265,8 @@ class PathPatternSpec extends AnyFlatSpec with Matchers {
     }
 
     result match {
-      case Right(Some((ParamValueCons(userId: Int, NoParamValues), _))) =>
-        userId shouldBe 123
+      case Right(Some((path, _))) =>
+        path.id shouldBe 123
       case other =>
         fail(s"Expected Int parameter, got $other")
     }

@@ -7,25 +7,28 @@ HTTP server implementation for λÆS.
 ```scala
 import io.yaes.http.server.*
 
-// Simple route
-val route1 = GET / "users" -> { req => Response.ok("Users") }
+// Simple route (no params) — handler receives just the request
+val route1 = GET(p"/users") { req => Response.ok("Users") }
 
-// Route with path parameters (use *: for type-safe extraction)
-val route2 = GET / "users" / *:[Int] -> { (req, userId) =>
-  Response.ok(s"User $userId")
+// Path parameters — declared with param[Type]("name"), read by name from the path named tuple
+val userId = param[Int]("userId")
+val route2 = GET(p"/users" / userId) { (req, path, _) =>
+  Response.ok(s"User ${path.userId}")
 }
 
-// Route with query parameters
-val route3 = GET / "search" ? "q" *: StringParam -> { (req, query) =>
-  Response.ok(s"Searching for: $query")
+// Query parameters — declared with queryParam[Type]("name"), read by name from the query named tuple
+val route3 = GET(p"/search" ? queryParam[String]("q")) { (req, _, query) =>
+  Response.ok(s"Searching for: ${query.q}")
 }
 
-// Combine routes and run server
-val routes = Routes(route1, route2, route3)
-val server = YaesServer(routes)
-  .onShutdown(() => println("Cleanup"))
-  .run(port = 8080)
+// Combine routes and run the server (run requires an effect context, e.g. Log.run/Async.run)
+val server = YaesServer.route(route1, route2, route3)
+server.run(port = 8080)
 ```
+
+Path/query parameters are encoded as `scala.NamedTuple`s. Handlers receive `(request, path, query)`
+and access params by name (`path.userId`, `query.q`); ignore an unused tuple with `_`. A route with
+no path and no query parameters uses the ergonomic single-argument form `{ req => ... }`.
 
 **Route Matching Order:**
 - Exact routes (no parameters) are checked first via map lookup (O(1))

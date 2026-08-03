@@ -86,8 +86,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   "Routes (parameterized routes)" should "extract and pass Int parameter" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -101,8 +101,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "extract and pass Long parameter" in {
     val itemId = param[Long]("itemId")
     val routes = Routes(
-      GET(p"/items" / itemId) { (req, id: Long) =>
-        Response.ok(s"Item $id")
+      GET(p"/items" / itemId) { (req, path, _) =>
+        Response.ok(s"Item ${path.itemId}")
       }
     )
 
@@ -116,8 +116,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "extract and pass String parameter" in {
     val username = param[String]("username")
     val routes = Routes(
-      GET(p"/users" / username) { (req, name: String) =>
-        Response.ok(s"Hello $name")
+      GET(p"/users" / username) { (req, path, _) =>
+        Response.ok(s"Hello ${path.username}")
       }
     )
 
@@ -132,8 +132,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
     val userId = param[Int]("userId")
     val postId = param[Int]("postId")
     val routes = Routes(
-      GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Int) =>
-        Response.ok(s"User $uid, Post $pid")
+      GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}, Post ${path.postId}")
       }
     )
 
@@ -149,8 +149,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
     val userId = param[Int]("userId")
     val postId = param[Long]("postId")
     val routes = Routes(
-      GET(p"/orgs" / orgId / "users" / userId / "posts" / postId) { (req, oid: Int, uid: Int, pid: Long) =>
-        Response.ok(s"Org $oid, User $uid, Post $pid")
+      GET(p"/orgs" / orgId / "users" / userId / "posts" / postId) { (req, path, _) =>
+        Response.ok(s"Org ${path.orgId}, User ${path.userId}, Post ${path.postId}")
       }
     )
 
@@ -164,8 +164,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "return 400 for invalid Int parameter" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -180,8 +180,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "return 400 for invalid Long parameter" in {
     val itemId = param[Long]("itemId")
     val routes = Routes(
-      GET(p"/items" / itemId) { (req, id: Long) =>
-        Response.ok(s"Item $id")
+      GET(p"/items" / itemId) { (req, path, _) =>
+        Response.ok(s"Item ${path.itemId}")
       }
     )
 
@@ -196,8 +196,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "return 404 for mismatched path structure" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -214,8 +214,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       GET(p"/users/admin") { req =>
         Response.ok("Admin user")
       },
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       }
     )
 
@@ -236,14 +236,14 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
       GET(p"/users") { req =>
         Response.ok("All users")
       },
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}")
       },
-      GET(p"/users" / userId / "posts") { (req, id: Int) =>
-        Response.ok(s"Posts for user $id")
+      GET(p"/users" / userId / "posts") { (req, path, _) =>
+        Response.ok(s"Posts for user ${path.userId}")
       },
-      GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
-        Response.ok(s"User $uid, Post $pid")
+      GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
+        Response.ok(s"User ${path.userId}, Post ${path.postId}")
       },
       POST(p"/users") { req =>
         Response.created("User created")
@@ -261,20 +261,20 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   "Routes (method-based routing)" should "support all HTTP methods" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"GET User $id")
+      GET(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"GET User ${path.userId}")
       },
-      POST(p"/users" / userId) { (req, id: Int) =>
-        Response.created(s"POST User $id")
+      POST(p"/users" / userId) { (req, path, _) =>
+        Response.created(s"POST User ${path.userId}")
       },
-      PUT(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"PUT User $id")
+      PUT(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"PUT User ${path.userId}")
       },
-      DELETE(p"/users" / userId) { (req, id: Int) =>
+      DELETE(p"/users" / userId) { (req, path, _) =>
         Response.noContent()
       },
-      PATCH(p"/users" / userId) { (req, id: Int) =>
-        Response.ok(s"PATCH User $id")
+      PATCH(p"/users" / userId) { (req, path, _) =>
+        Response.ok(s"PATCH User ${path.userId}")
       }
     )
 
@@ -288,10 +288,10 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   "Routes (first match wins)" should "use first matching parameterized route" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET(p"/users" / userId) { (req, id: Int) =>
+      GET(p"/users" / userId) { (req, path, _) =>
         Response.ok("First route")
       },
-      GET(p"/users" / userId) { (req, id: Int) =>
+      GET(p"/users" / userId) { (req, path, _) =>
         Response.ok("Second route")
       }
     )
@@ -323,9 +323,9 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "allow parameterized handlers to access request" in {
     val userId = param[Int]("userId")
     val routes = Routes(
-      GET(p"/users" / userId) { (req, id: Int) =>
+      GET(p"/users" / userId) { (req, path, _) =>
         val contentType = req.headers.getOrElse("Content-Type", "none")
-        Response.ok(s"User $id with content-type: $contentType")
+        Response.ok(s"User ${path.userId} with content-type: $contentType")
       }
     )
 
@@ -361,8 +361,8 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
   it should "handle paths with special characters in parameters" in {
     val name = param[String]("name")
     val routes = Routes(
-      GET(p"/users" / name) { (req, n: String) =>
-        Response.ok(s"User $n")
+      GET(p"/users" / name) { (req, path, _) =>
+        Response.ok(s"User ${path.name}")
       }
     )
 
@@ -380,10 +380,10 @@ class RoutesSpec extends AnyFlatSpec with Matchers {
     val route1 = GET(p"/health") { req => Response.ok("") }
     route1.toPattern shouldBe "GET /health"
 
-    val route2 = GET(p"/users" / userId) { (req, id: Int) => Response.ok("") }
+    val route2 = GET(p"/users" / userId) { (req, path, _) => Response.ok("") }
     route2.toPattern shouldBe "GET /users/:userId"
 
-    val route3 = GET(p"/users" / userId / "posts" / postId) { (req, uid: Int, pid: Long) =>
+    val route3 = GET(p"/users" / userId / "posts" / postId) { (req, path, _) =>
       Response.ok("")
     }
     route3.toPattern shouldBe "GET /users/:userId/posts/:postId"
